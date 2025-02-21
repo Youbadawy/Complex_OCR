@@ -366,12 +366,6 @@ def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[s
                 if captured:
                     fields[field] = captured
 
-        for field, pattern in section_mappings.items():
-            if field in missing_fields:
-                if match := re.search(pattern, text, re.IGNORECASE | re.DOTALL):
-                    fields[field] = match.group(2 if field == 'document_date' else 1).strip()
-                    if field == 'exam_type':
-                        fields[field] = fields[field].upper()
     
     return fields, []
 
