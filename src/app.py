@@ -75,14 +75,20 @@ def process_single_page(image, page_num, uploaded_file):
         # Standardized data structure
         data = {
             'patient_name': structured_data.get('patient_info', [{}])[0].get('value', 'Unknown'),
-            'exam_date': structured_data.get('dates', [{}])[0].get('value', 'Unknown'),
-            'birads_score': structured_data.get('birads_scores', [{}])[0].get('value', 'Unknown'),
-            'document_type': structured_data.get('procedures', [{}])[0].get('value', 'Unknown'),
-            'additional_information': structured_data.get('additional_information', ''),
+            'document_date': structured_data.get('dates', [{}])[0].get('value', 'Unknown'),
+            'exam_type': structured_data.get('procedures', [{}])[0].get('value', 'Unknown'),
+            'exam_date': structured_data.get('dates', [{}])[1].get('value', 'Unknown') if len(structured_data.get('dates', [])) > 1 else 'Unknown',
+            'clinical_history': structured_data.get('additional_information', ''),
+            'birads_right': structured_data.get('birads_scores', [{}])[0].get('value', 'Unknown'),
+            'birads_left': structured_data.get('birads_scores', [{}])[1].get('value', 'Unknown') if len(structured_data.get('birads_scores', [])) > 1 else 'Unknown',
+            'impressions': structured_data.get('findings', [{}])[0].get('value', 'Unknown'),
+            'findings': structured_data.get('findings', [{}])[1].get('value', 'Unknown') if len(structured_data.get('findings', [])) > 1 else 'Unknown',
+            'follow-up_recommendation': structured_data.get('recommendations', [{}])[0].get('value', 'Unknown'),
             'source_pdf': uploaded_file.name,
             'page_number': page_num + 1,
             'warnings': ', '.join(warnings) if warnings else 'None',
-            'processing_confidence': structured_data.get('confidence_scores', {}).get('ocr', 0.0)
+            'processing_confidence': structured_data.get('confidence_scores', {}).get('ocr', 0.0),
+            'raw_ocr_text': ' '.join(ocr_data['text'])
         }
         
         return data
@@ -287,22 +293,9 @@ with tab1:
         structured_data = ocr_utils.convert_to_structured_json(st.session_state['df'].iloc[0])  # Show first result
         st.json(structured_data)
         
-        # Display editable table with dynamic columns
+        # Display full dataframe with all fields
         st.subheader("Full Extracted Data")
-        available_columns = [
-            col for col in [
-                'patient_name', 'document_date', 'birads_score',
-                'exam_date', 'document_type', 'testing_provider',
-                'mammogram_results', 'additional_information'
-            ] if col in st.session_state['df'].columns
-        ]
-        
-        if available_columns:
-            df_display = st.session_state['df'][available_columns]
-            st.dataframe(df_display, use_container_width=True)
-        else:
-            st.warning("No standard fields found in extracted data")
-            st.write("Raw extracted columns:", st.session_state['df'].columns.tolist())
+        st.dataframe(st.session_state['df'], use_container_width=True)
         
         # Enhanced CSV download
         csv = st.session_state['df'].to_csv(index=False).encode('utf-8')
