@@ -72,22 +72,22 @@ def process_single_page(image, page_num, uploaded_file):
         extracted_text = ocr_utils.parse_extracted_text(ocr_data)
         structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
 
-        # Standardized data structure
+        # Standardized data structure with safe field access
         data = {
-            'patient_name': structured_data.get('patient_info', [{}])[0].get('value', 'Unknown'),
-            'document_date': structured_data.get('dates', [{}])[0].get('value', 'Unknown'),
-            'exam_type': structured_data.get('procedures', [{}])[0].get('value', 'Unknown'),
-            'exam_date': structured_data.get('dates', [{}])[1].get('value', 'Unknown') if len(structured_data.get('dates', [])) > 1 else 'Unknown',
-            'clinical_history': structured_data.get('additional_information', ''),
-            'birads_right': structured_data.get('birads_scores', [{}])[0].get('value', 'Unknown'),
-            'birads_left': structured_data.get('birads_scores', [{}])[1].get('value', 'Unknown') if len(structured_data.get('birads_scores', [])) > 1 else 'Unknown',
-            'impressions': structured_data.get('findings', [{}])[0].get('value', 'Unknown'),
-            'findings': structured_data.get('findings', [{}])[1].get('value', 'Unknown') if len(structured_data.get('findings', [])) > 1 else 'Unknown',
-            'follow-up_recommendation': structured_data.get('recommendations', [{}])[0].get('value', 'Unknown'),
+            'patient_name': structured_data.get('patient_name', 'Unknown'),
+            'document_date': structured_data.get('document_date', 'Unknown'),
+            'exam_type': structured_data.get('exam_type', 'Unknown'),
+            'exam_date': structured_data.get('exam_date', 'Unknown'),
+            'clinical_history': structured_data.get('clinical_history', ''),
+            'birads_right': structured_data.get('birads_right', 'Unknown'),
+            'birads_left': structured_data.get('birads_left', 'Unknown'),
+            'impressions': structured_data.get('impressions', 'Unknown'),
+            'findings': structured_data.get('findings', 'Unknown'),
+            'follow-up_recommendation': structured_data.get('follow-up_recommendation', 'Unknown'),
             'source_pdf': uploaded_file.name,
             'page_number': page_num + 1,
             'warnings': ', '.join(warnings) if warnings else 'None',
-            'processing_confidence': structured_data.get('confidence_scores', {}).get('ocr', 0.0),
+            'processing_confidence': 0.0,  # Temporarily disabled confidence scoring
             'raw_ocr_text': ' '.join(ocr_data['text'])
         }
         
@@ -155,10 +155,9 @@ def load_models():
             st.error(f"Model loading failed: {str(e)}")
             raise
 
-# Load all models at once
+# Load only needed models
 models = load_models()
-medical_nlp = models["biobert"]
-diagnosis_pipeline = models["radbert"] 
+diagnosis_pipeline = models["radbert"]
 chatbot_pipeline = models["chatbot"]
 
 # Create main tabs
