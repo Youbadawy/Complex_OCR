@@ -60,24 +60,27 @@ logging.basicConfig(
 
 def process_single_page(image, page_num, uploaded_file):
     try:
+        # Enhanced OCR processing with preprocessing
         img_array = np.array(image)
         processed_image = ocr_utils.preprocess_image(img_array)
         
-        # OCR processing
+        # Extract and parse text
         ocr_data = ocr_utils.extract_text_tesseract(processed_image)
         extracted_text = ocr_utils.parse_extracted_text(ocr_data)
-        data, warnings = ocr_utils.extract_fields_from_text(extracted_text, medical_nlp, img_array)
-        
-        # Add metadata
-        data.update({
-            'source pdf': uploaded_file.name,
-            'page number': page_num + 1,
-            'raw ocr text': extracted_text,
-            'warnings': warnings,
-            'patient_name': data.get('patient_name'),
-            'document_date': data.get('document_date'),
-            # Add all other extracted fields...
-        })
+        structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text, medical_nlp, img_array)
+
+        # Standardized data structure
+        data = {
+            'patient_name': structured_data.get('patient_info', [{}])[0].get('value', 'Unknown'),
+            'exam_date': structured_data.get('dates', [{}])[0].get('value', 'Unknown'),
+            'birads_score': structured_data.get('birads_scores', [{}])[0].get('value', 'Unknown'),
+            'document_type': structured_data.get('procedures', [{}])[0].get('value', 'Unknown'),
+            'additional_information': structured_data.get('additional_information', ''),
+            'source_pdf': uploaded_file.name,
+            'page_number': page_num + 1,
+            'warnings': ', '.join(warnings) if warnings else 'None',
+            'processing_confidence': structured_data.get('confidence_scores', {}).get('ocr', 0.0)
+        }
         
         return data
     
