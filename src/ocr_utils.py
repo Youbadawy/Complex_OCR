@@ -60,7 +60,7 @@ def extract_text_tesseract(image):
             image,
             output_type=Output.DICT,
             lang='fra+eng',
-            timeout=30  # Set 30 second timeout per PSM
+            timeout=30,  # Set 30 second timeout per PSM
             config=f'--psm {psm} '
                    '-c tessedit_char_whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-:.()%éèàçêâôûùîÉÈÀÇÊÂÔÛÙÎ" '
                    '--oem 3'
