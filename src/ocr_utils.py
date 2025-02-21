@@ -109,7 +109,7 @@ def select_best_ocr_result(results):
                 chosen_idx = int(llm_response['structured_data']['choice']) - 1
                 return results[chosen_idx]
             
-        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+        except (TimeoutError, ConnectionError) as e:
             logging.warning(f"LLM selection timeout: {str(e)}")
         except KeyError as e:
             logging.warning(f"Invalid LLM response format: {str(e)}")
