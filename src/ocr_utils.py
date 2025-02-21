@@ -205,50 +205,54 @@ from groq import Groq
 
 def parse_text_with_llm(text: str) -> Dict[str, Any]:
     """Extract structured fields from OCR text using Groq's LLM API"""
-    try:
-        dotenv.load_dotenv()
-        api_key = os.getenv("GROQ_API_KEY")
-        if not api_key:
-            logging.error("Groq API key not found in .env file")
-            raise OCRError("API configuration error")
+    dotenv.load_dotenv()
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        logging.error("Groq API key not found in .env file")
+        raise OCRError("API configuration error")
 
-        client = Groq(api_key=api_key)
-        
-        prompt = f"""Extract the following information from this mammogram report text:
-- Patient name (title case)
-- Exam date (YYYY-MM-DD format)
+    client = Groq(api_key=api_key)
+    
+    prompt = f"""You are an expert in medical document processing, specializing in mammogram reports. Extract the following fields:
+- Patient name (title case, correct fused words like 'PatientName' to 'Patient Name')
+- Exam date (YYYY-MM-DD, correct formats like '23Dec2021')
 - BIRADS score for the right breast (0-6)
 - BIRADS score for the left breast (0-6)
 - Clinical impressions
-- Key findings
+- Key findings (include measurements and locations)
 - Follow-up recommendations
 
-Correct OCR errors like fused words (e.g. "PatientName" -> "Patient Name"). 
-Return valid JSON with keys: patient_name, exam_date, birads_right, 
-birads_left, impressions, findings, follow_up_recommendation.
+Correct OCR errors, prioritize medical terminology, and handle varied labels. For each field, provide a confidence score (0-1). Return valid JSON with keys: 
+patient_name, exam_date, birads_right, birads_left, impressions, findings, 
+follow_up_recommendation, and a 'confidence' sub-object with scores for each field.
 
 Text:
-{text[:3000]}"""  # Truncate to stay under token limits
+{text[:3000]}"""
 
-        response = client.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}],
-            model="mixtral-8x7b-32768",
-            temperature=0.3,
-            max_tokens=1000,
-            response_format={"type": "json_object"}
-        )
-        
-        # Parse and validate response
-        result = json.loads(response.choices[0].message.content)
-        required_fields = ['patient_name', 'exam_date', 'birads_right', 
-                          'birads_left', 'impressions', 'findings',
-                          'follow_up_recommendation']
-        
-        if not all(field in result for field in required_fields):
-            logging.warning("LLM response missing required fields")
-            raise ValueError("Incomplete JSON response from LLM")
+    for attempt in range(3):
+        try:
+            response = client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="mixtral-8x7b-32768",
+                temperature=0.2,
+                max_tokens=2000,
+                response_format={"type": "json_object"}
+            )
+            result = json.loads(response.choices[0].message.content)
             
-        return result
+            # Validate response structure
+            required = ['patient_name', 'exam_date', 'birads_right', 'birads_left',
+                       'impressions', 'findings', 'follow_up_recommendation', 'confidence']
+            if all(k in result for k in required) and isinstance(result['confidence'], dict):
+                return result
+                
+            logging.warning(f"Attempt {attempt+1}: Invalid response structure")
+        except (json.JSONDecodeError, KeyError) as e:
+            logging.error(f"Attempt {attempt+1} parsing failed: {str(e)}")
+        except Exception as e:
+            logging.error(f"Attempt {attempt+1} API error: {str(e)}")
+            
+    raise OCRError("Failed to extract fields after 3 attempts")
         
     except json.JSONDecodeError as e:
         logging.error(f"Failed to parse LLM response: {str(e)}")
