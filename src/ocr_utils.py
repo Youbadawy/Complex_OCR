@@ -14,27 +14,10 @@ from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
 
 def preprocess_image(image):
-    # Convert to grayscale
+    """Preprocess image array using Otsu's thresholding"""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Reduce noise with Gaussian blur
-    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-    
-    # Adaptive thresholding for varied lighting conditions
-    thresholded = cv2.adaptiveThreshold(
-        blurred,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        11,
-        2
-    )
-    
-    # Morphological opening to remove small artifacts
-    kernel = np.ones((2,2), np.uint8)
-    processed = cv2.morphologyEx(thresholded, cv2.MORPH_OPEN, kernel)
-    
-    return processed
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return binary
 
 def extract_text_tesseract(image):
     data = pytesseract.image_to_data(
@@ -128,145 +111,62 @@ def load_templates():
 
 TEMPLATES = load_templates()
 
-def extract_fields_from_text(text, nlp_pipeline, image, max_length=510):
-    """Always returns (structured_data, warnings) tuple"""
-    structured_data = default_structured_output()
-    warnings = []
+def extract_fields_from_text(text):
+    """Extract key fields using regex patterns"""
+    fields = {
+        'patient_name': "unknown",
+        'document_date': "unknown",
+        'exam_type': "unknown",
+        'exam_date': "unknown",
+        'clinical_history': "unknown",
+        'birads_right': "unknown",
+        'birads_left': "unknown",
+        'impressions': "unknown",
+        'findings': "unknown",
+        'follow-up_recommendation': "unknown"
+    }
     
-    try:
-        # Clean and validate input text
-        clean_text = ' '.join(str(text).strip().split())[:max_length]
-        if not clean_text or len(clean_text) < 10:
-            return structured_data, warnings
-        
-        # Detect language with fallback to English
-        try:
-            lang = detect(clean_text)
-        except LangDetectException:
-            lang = 'en'
-        
-        # Load translation pipeline if needed
-        if lang == 'fr':
-            translator = tf_pipeline(
-                "translation_fr_to_en",
-                model="Helsinki-NLP/opus-mt-fr-en",
-                device=0 if torch.cuda.is_available() else -1
-            )
-            translated = translator(clean_text, max_length=512)[0]['translation_text']
-            clean_text = translated
-
-        # Process with medical NLP
-        entities = nlp_pipeline(clean_text)
-        
-        # Structure entities into medical categories
-        structured_data = {
-            "patient_info": [],
-            "dates": [],
-            "procedures": [],
-            "findings": [],
-            "birads_scores": [],
-            "recommendations": []
-        }
-
-        current_procedure = None
-        for entity in entities:
-            ent_text = entity['word']
-            ent_type = entity['entity']
-            
-            # Map entity types to medical categories
-            if ent_type in ['B-PER', 'I-PER']:
-                structured_data["patient_info"].append({
-                    "type": "patient_name",
-                    "value": ent_text,
-                    "confidence": entity['score']
-                })
-            elif ent_type in ['B-DATE', 'I-DATE']:
-                structured_data["dates"].append({
-                    "type": "exam_date",
-                    "value": ent_text,
-                    "confidence": entity['score']
-                })
-            elif "PROCEDURE" in ent_type:
-                current_procedure = ent_text
-                structured_data["procedures"].append({
-                    "type": "imaging_type",
-                    "value": ent_text,
-                    "confidence": entity['score']
-                })
-            elif "FINDING" in ent_type and current_procedure:
-                structured_data["findings"].append({
-                    "procedure": current_procedure,
-                    "description": ent_text,
-                    "confidence": entity['score']
-                })
-            elif "BIRADS" in ent_text.upper():
-                structured_data["birads_scores"].append({
-                    "type": "birads",
-                    "value": ent_text,
-                    "confidence": entity['score']
-                })
-            elif "RECOMMEND" in ent_type:
-                structured_data["recommendations"].append({
-                    "type": "follow_up",
-                    "value": ent_text,
-                    "confidence": entity['score']
-                })
-
-        # Post-process with regex patterns
-        date_matches = re.findall(r'\b\d{4}-\d{2}-\d{2}\b', clean_text)
-        structured_data["dates"].extend([{
-            "type": "regex_date",
-            "value": date,
-            "confidence": 1.0
-        } for date in date_matches])
-
-        # Get OCR data with confidence scores
-        ocr_data = extract_text_tesseract(image)
-        ocr_words = ocr_data['text']
-        ocr_confs = [c/100 for c in ocr_data['confidence'] if c != -1]
-        
-        # Calculate field confidence from OCR
-        field_confidences = {}
-        for idx, entity in enumerate(entities):
-            field_type = entity['entity'].split('-')[-1]
-            word = entity['word']
-            
-            # Find matching OCR words with confidence
-            matches = [ocr_confs[i] for i, w in enumerate(ocr_words) 
-                      if similar(w, word, threshold=0.7)]
-            
-            if matches:
-                field_conf = sum(matches)/len(matches)
-                field_confidences.setdefault(field_type, []).append(field_conf)
-        
-        # Check for low confidence fields
-        low_conf_fields = [
-            field for field, confs in field_confidences.items() 
-            if sum(confs)/len(confs) < 0.5
-        ]
-        
-        # Fallback to template matching for low confidence fields
-        if low_conf_fields:
-            template_results, template_warnings = extract_with_template_matching(image)
-            structured_data = merge_results(
-                structured_data, 
-                template_results,
-                priority_fields=low_conf_fields
-            )
-            warnings.extend(template_warnings)
-        
-        # Add additional information from remaining text
-        structured_data['additional_information'] = extract_additional_info(
-            clean_text, 
-            structured_data
-        )
-        
-        # Return both data and warnings
-        return structured_data, warnings
+    text = text.lower()
     
-    except Exception as e:
-        logging.error(f"Field extraction failed: {str(e)}")
-        return structured_data, ["Field extraction failed - using template fallback"]
+    # Patient name
+    if match := re.search(r'patient name[:\s]+([a-z\s]+)', text, re.IGNORECASE):
+        fields['patient_name'] = match.group(1).strip().title()
+        
+    # Dates
+    for date_type, pattern in [('document_date', r'(document date|date of exam)[:\s]+(\d{4}-\d{2}-\d{2})'),
+                              ('exam_date', r'exam date[:\s]+(\d{4}-\d{2}-\d{2})')]:
+        if match := re.search(pattern, text, re.IGNORECASE):
+            fields[date_type] = match.group(2)
+    
+    # Exam type
+    if match := re.search(r'exam type[:\s]+([a-z\s]+)', text, re.IGNORECASE):
+        fields['exam_type'] = match.group(1).strip().upper()
+        
+    # Clinical history
+    if match := re.search(r'clinical history[:\s]+(.*?)\s+(impressions|findings|recommendation)', 
+                         text, re.IGNORECASE | re.DOTALL):
+        fields['clinical_history'] = match.group(1).strip()
+        
+    # BIRADS scores
+    for side in ('right', 'left'):
+        if match := re.search(fr'birads {side}[:\s]+([0-6])', text, re.IGNORECASE):
+            fields[f'birads_{side}'] = match.group(1)
+    
+    # Impressions and findings
+    if match := re.search(r'(impressions|conclusion)[:\s]+(.*?)\s+(findings|recommendation)', 
+                         text, re.IGNORECASE | re.DOTALL):
+        fields['impressions'] = match.group(2).strip()
+        
+    if match := re.search(r'findings[:\s]+(.*?)\s+(recommendation|follow-up)', 
+                         text, re.IGNORECASE | re.DOTALL):
+        fields['findings'] = match.group(1).strip()
+        
+    # Follow-up recommendation
+    if match := re.search(r'(follow-up|recommendation)[:\s]+(.*?)\s+(signed|printed|end of document)', 
+                         text, re.IGNORECASE | re.DOTALL):
+        fields['follow-up_recommendation'] = match.group(2).strip()
+    
+    return fields, []
 
 def similar(a, b, threshold=0.7):
     """Fuzzy string matching for OCR corrections"""
