@@ -111,8 +111,9 @@ def load_templates():
 
 TEMPLATES = load_templates()
 
-def extract_fields_from_text(text):
+def extract_fields_from_text(text, *_):
     """Extract key fields using regex patterns"""
+    # The *_ parameter accepts and ignores any extra arguments
     fields = {
         'patient_name': "unknown",
         'document_date': "unknown",

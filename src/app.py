@@ -70,7 +70,7 @@ def process_single_page(image, page_num, uploaded_file):
         # Extract and parse text
         ocr_data = ocr_utils.extract_text_tesseract(processed_image)
         extracted_text = ocr_utils.parse_extracted_text(ocr_data)
-        structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text, medical_nlp, img_array)
+        structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
 
         # Standardized data structure
         data = {
@@ -288,10 +288,13 @@ with tab1:
     if 'df' in st.session_state:
         st.subheader("Processed Results")
         
-        # Display structured data
+        # Display structured data only if we have results
         st.subheader("Structured Medical Data")
-        structured_data = ocr_utils.convert_to_structured_json(st.session_state['df'].iloc[0])  # Show first result
-        st.json(structured_data)
+        if not st.session_state['df'].empty:
+            structured_data = ocr_utils.convert_to_structured_json(st.session_state['df'].iloc[0].to_dict())  # Show first result
+            st.json(structured_data)
+        else:
+            st.warning("No structured data available - DataFrame is empty")
         
         # Display full dataframe with all fields
         st.subheader("Full Extracted Data")
