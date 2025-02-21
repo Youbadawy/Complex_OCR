@@ -315,33 +315,56 @@ def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[s
     # Regex fallback for any missing critical fields
     missing_fields = [k for k, v in fields.items() if v is None]
     if missing_fields:
-        # Patient name fallback
-        if 'patient_name' in missing_fields:
-            if match := re.search(r'patient name[:\s]+([a-z\s]+)', text, re.IGNORECASE):
-                fields['patient_name'] = match.group(1).strip().title()
-        
-        # Exam date fallback
-        if 'exam_date' in missing_fields:
-            if match := re.search(r'exam date[:\s]+([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}/[0-9]{2}/[0-9]{4})', text, re.IGNORECASE):
-                fields['exam_date'] = match.group(1).strip()
-        
-        # BIRADS scores fallback
-        if 'birads_right' in missing_fields:
-            if match := re.search(r'birads right[:\s]+([0-6])', text, re.IGNORECASE):
-                fields['birads_right'] = match.group(1)
-        if 'birads_left' in missing_fields:
-            if match := re.search(r'birads left[:\s]+([0-6])', text, re.IGNORECASE):
-                fields['birads_left'] = match.group(1)
-
-        # Clinical sections fallback
-        section_mappings = {
-            'impressions': r'(impressions|conclusion)[:\s]+(.*?)\s+(findings|recommendation)',
-            'findings': r'findings[:\s]+(.*?)\s+(recommendation|follow-up)',
-            'follow-up_recommendation': r'(follow-up|recommendation)[:\s]+(.*?)\s+(signed|printed|end of document)',
-            'clinical_history': r'clinical history[:\s]+(.*?)\s+(impressions|findings|recommendation)',
-            'exam_type': r'exam type[:\s]+([a-z\s]+)',
-            'document_date': r'(document date|date of exam)[:\s]+([0-9]{4}-[0-9]{2}-[0-9]{2})'
+        # Enhanced regex patterns with multi-line support and medical context
+        patterns = {
+            'patient_name': (
+                r'(?i)(?:patient|name)(?:\s*(?:name|ID)\b)?[:\s\-*]+'
+                r'((?:[A-ZÀ-ÿ][a-zà-ÿ]*-?)+\s*(?:[A-ZÀ-ÿ][a-zà-ÿ]*(?:\s+[A-ZÀ-ÿ][a-zà-ÿ]*)*)'
+            ),
+            'exam_date': (
+                r'(?i)(?:date\s*(?:of\s*)?(?:exam|study)|exam\s*date)[:\s\-*]+'
+                r'(\b(?:20\d{2}[-/](?:0[1-9]|1[0-2])[-/](?:0[1-9]|[12][0-9]|3[01])|'
+                r'(?:0[1-9]|1[0-2])[-/](?:0[1-9]|[12][0-9]|3[01])[-/]20\d{2})\b)'
+            ),
+            'birads_right': (
+                r'(?i)(?:bi-rads|birads|breast\s+imaging\s+reporting\s+.*?)\s*'
+                r'(?:right|rt\.?)\b[\s:\-]*(\d)'
+            ),
+            'birads_left': (
+                r'(?i)(?:bi-rads|birads|breast\s+imaging\s+reporting\s+.*?)\s*'
+                r'(?:left|lt\.?)\b[\s:\-]*(\d)'
+            ),
+            'impressions': (
+                r'(?i)(?:impressions?|conclusions?)\b[:\s]*'
+                r'((?:.*?(?:\n\s*.*?)*?)(?=\n\s*(?:recommendations?|findings|follow-?up|$))'
+            ),
+            'clinical_history': (
+                r'(?i)(?:clinical\s+history|patient\s+history)\b[:\s]*'
+                r'((?:.*?(?:\n\s*.*?)*?)(?=\n\s*(?:exam|findings|impressions|$))'
+            ),
+            'findings': (
+                r'(?i)(?:findings|results)\b[:\s]*'
+                r'((?:.*?(?:\n\s*.*?)*?)(?=\n\s*(?:impressions|recommendations?|$))'
+            ),
+            'follow-up_recommendation': (
+                r'(?i)(?:recommendations?|follow-?up)\b[:\s]*'
+                r'((?:.*?(?:\n\s*.*?)*?)(?=\n\s*(?:end\s+of\s+report|$))'
+            )
         }
+
+        for field, pattern in patterns.items():
+            if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
+                captured = match.group(1).strip()
+                # Post-process based on field type
+                if field == 'patient_name':
+                    captured = re.sub(r'\s+', ' ', captured).title()
+                elif field in ('birads_right', 'birads_left'):
+                    captured = min(max(int(captured), 6) if captured.isdigit() else None
+                elif field == 'exam_date':
+                    captured = re.sub(r'[/]', '-', captured)
+                
+                if captured:
+                    fields[field] = captured
 
         for field, pattern in section_mappings.items():
             if field in missing_fields:
