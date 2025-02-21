@@ -223,42 +223,52 @@ def parse_text_with_llm(text: str) -> Dict[str, Any]:
     
     Text: {text[:3000]}..."""  # Truncate to stay under token limits
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    
-    payload = {
-        "model": "mixtral-8x7b-32768",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.1,
-        "max_tokens": 1000
-    }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": "mixtral-8x7b-32768",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.1,
+            "max_tokens": 1000
+        }
 
-    try:
-        try:
-            response = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=15  # Increased timeout
-            )
-            response.raise_for_status()
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=15
+        )
+        response.raise_for_status()
+
+        # Validate response structure
+        response_json = response.json()
+        if not all(key in response_json for key in ['choices', 'usage']):
+            raise ValueError("Invalid API response structure")
             
-        except requests.exceptions.Timeout:
-            logging.error("LLM API timeout")
-            raise OCRError("AI processing timed out")
-        except requests.exceptions.HTTPError as e:
-            logging.error(f"LLM API error: {e.response.status_code}")
-            raise OCRError("AI service unavailable")
+        content = response_json['choices'][0]['message']['content']
+        result = json.loads(content)
         
-        # Extract JSON from response
-        result = json.loads(response.json()['choices'][0]['message']['content'])
-        return result.get("structured_data", {})
+        if 'structured_data' not in result:
+            logging.warning("LLM response missing structured_data field")
+            return {}
+            
+        return result['structured_data']
         
-    except (requests.exceptions.RequestException, json.JSONDecodeError, KeyError) as e:
-        logging.warning(f"LLM API error: {str(e)}")
+    except requests.exceptions.Timeout:
+        logging.error("LLM API timeout")
+        raise OCRError("AI processing timed out")
+    except requests.exceptions.HTTPError as e:
+        logging.error(f"LLM API error: {e.response.status_code}")
+        raise OCRError(f"AI service error: {e.response.status_code}")
+    except (json.JSONDecodeError, KeyError, ValueError) as e:
+        logging.warning(f"Response parsing error: {str(e)}")
         return {}
+    except Exception as e:
+        logging.error(f"Unexpected error during LLM processing: {str(e)}")
+        raise OCRError("Failed to process with LLM")
 
 def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[str, Any]:
     """Extract fields using LLM first, with regex fallback for missing fields"""
