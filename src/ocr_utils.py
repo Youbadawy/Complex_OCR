@@ -17,16 +17,22 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
 
-def preprocess_image(image):
-    """Preprocess image with deskewing and adaptive thresholding"""
-    # Convert to grayscale and blur
+def preprocess_image(image, apply_sharpen=True):
+    """Preprocess image with adaptive noise handling and enhancement"""
+    # Convert to grayscale and measure contrast
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    contrast = cv2.Laplacian(gray, cv2.CV_64F).var()
+    
+    # Adaptive noise reduction for low-contrast images
+    if contrast < 50:  # Indicates noisy/poor quality image
+        gray = cv2.bilateralFilter(gray, 9, 75, 75)
+    
     blur = cv2.GaussianBlur(gray, (3, 3), 0)
     
     # Deskewing logic
     height, width = blur.shape
     edges = cv2.Canny(blur, 50, 150)
-    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100, 
+    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100,
                           minLineLength=100, maxLineGap=10)
     
     angles = []
@@ -47,6 +53,12 @@ def preprocess_image(image):
     binary = cv2.adaptiveThreshold(deskewed, 255, 
                                   cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                                   cv2.THRESH_BINARY, 11, 2)
+    
+    # Optional sharpening for faded text
+    if apply_sharpen:
+        kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+        binary = cv2.filter2D(binary, -1, kernel)
+        
     return binary
 
 def extract_text_tesseract(image):
