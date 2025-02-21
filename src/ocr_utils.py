@@ -106,30 +106,41 @@ def extract_text_tesseract(image):
     }
 
 def select_best_ocr_result(results):
-    """Select best OCR result using LLM or confidence scores"""
-    try:
-        # Try LLM selection first
-        try:
-            text_options = "\n\n".join([f"Option {i+1} (PSM {r['psm']}): {' '.join(r['text'])}" 
-                                      for i, r in enumerate(results)])
-            
-            llm_response = parse_text_with_llm(
-            f"Which OCR option is most coherent? Return only the number:\n{text_options}"
-            )
-            
-            if 'structured_data' in llm_response and 'choice' in llm_response['structured_data']:
-                chosen_idx = int(llm_response['structured_data']['choice']) - 1
-                return results[chosen_idx]
-            
-        except (TimeoutError, ConnectionError) as e:
-            logging.warning(f"LLM selection timeout: {str(e)}")
-        except KeyError as e:
-            logging.warning(f"Invalid LLM response format: {str(e)}")
-    except Exception as e:
-        logging.warning(f"LLM selection failed: {str(e)}")
+    """Select best OCR result using hybrid scoring (70% LLM coherence, 30% confidence)"""
+    text_options = [f"Option {i+1} (PSM {r['psm']}): {' '.join(r['text'])}" 
+                   for i, r in enumerate(results)]
     
-    # Fallback to highest average confidence
-    return max(results, key=lambda x: x['avg_conf'])
+    try:
+        # Get LLM scores for each option
+        llm_response = parse_text_with_llm(
+            f"Score each OCR option (1-10) for coherence and medical field presence. "
+            f"Return JSON with 'scores': [int, ...].\n\n{'\n\n'.join(text_options)}"
+        )
+        llm_scores = llm_response.get('scores', [5] * len(results))  # Default to mid-score if missing
+        
+        # Calculate hybrid scores (LLM 70% + Confidence 30%)
+        hybrid_scores = [
+            (0.7 * (llm / 10) + 0.3 * (r['avg_conf'] / 100),  # Normalize both to 0-1 scale
+            i
+            for i, (llm, r) in enumerate(zip(llm_scores, results))
+        ]
+        
+        # Get best index from hybrid scores
+        best_idx = max(hybrid_scores, key=lambda x: x[0])[1]
+        best_result = results[best_idx]
+        
+        # Verify minimum field presence
+        text = ' '.join(best_result['text']).lower()
+        required_terms = r'(patient|date|birads)'
+        if not re.search(required_terms, text):
+            logging.warning("Best OCR result lacks required fields, using confidence fallback")
+            return max(results, key=lambda x: x['avg_conf'])
+            
+        return best_result
+        
+    except Exception as e:
+        logging.warning(f"Hybrid selection failed: {str(e)}")
+        return max(results, key=lambda x: x['avg_conf'])
 
 def parse_extracted_text(ocr_result):
     raw_text = ' '.join([t for t, c in zip(ocr_result['text'], ocr_result['confidence']) if c != -1])
