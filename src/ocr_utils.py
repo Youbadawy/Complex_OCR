@@ -359,7 +359,7 @@ def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[s
                 if field == 'patient_name':
                     captured = re.sub(r'\s+', ' ', captured).title()
                 elif field in ('birads_right', 'birads_left'):
-                    captured = min(max(int(captured), 6) if captured.isdigit() else None
+                    captured = max(0, min(int(captured), 6)) if captured.isdigit() else None
                 elif field == 'exam_date':
                     captured = re.sub(r'[/]', '-', captured)
                 
