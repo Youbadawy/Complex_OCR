@@ -65,12 +65,23 @@ def process_single_page(image, page_num, uploaded_file):
     try:
         # Enhanced OCR processing with preprocessing
         img_array = np.array(image)
-        processed_image = ocr_utils.preprocess_image(img_array)
+        try:
+            processed_image = ocr_utils.preprocess_image(img_array)
+        except Exception as e:
+            logging.error(f"Image preprocessing failed: {str(e)}")
+            raise RuntimeError("Image processing failed - invalid image format")
         
-        # Extract and parse text
-        ocr_data = ocr_utils.extract_text_tesseract(processed_image)
-        extracted_text = ocr_utils.parse_extracted_text(ocr_data)
-        structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
+        # Extract and parse text with error handling
+        try:
+            ocr_data = ocr_utils.extract_text_tesseract(processed_image)
+            extracted_text = ocr_utils.parse_extracted_text(ocr_data)
+            structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
+        except pytesseract.TesseractError as e:
+            logging.error(f"Tesseract OCR failed: {str(e)}")
+            raise RuntimeError("OCR processing failed - check document quality")
+        except ocr_utils.OCRError as e:
+            logging.error(f"Text extraction failed: {str(e)}")
+            raise RuntimeError("Data extraction failed - unexpected document format")
 
         # Standardized data structure with safe field access
         data = {

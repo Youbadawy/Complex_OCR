@@ -55,14 +55,26 @@ def extract_text_tesseract(image):
     all_results = []
     
     for psm in psms:
-        data = pytesseract.image_to_data(
+        try:
+            data = pytesseract.image_to_data(
             image,
             output_type=Output.DICT,
             lang='fra+eng',
+            timeout=30  # Set 30 second timeout per PSM
             config=f'--psm {psm} '
                    '-c tessedit_char_whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-:.()%éèàçêâôûùîÉÈÀÇÊÂÔÛÙÎ" '
                    '--oem 3'
         )
+        except pytesseract.TesseractError as e:
+            logging.warning(f"Tesseract PSM {psm} failed: {str(e)}")
+            all_results.append({
+                'text': [],
+                'confidence': [],
+                'psm': psm,
+                'avg_conf': 0
+            })
+            continue
+            
         # Calculate average confidence for this PSM
         valid_confs = [c for c in data['conf'] if c != -1]
         avg_conf = sum(valid_confs)/len(valid_confs) if valid_confs else 0
@@ -85,16 +97,22 @@ def select_best_ocr_result(results):
     """Select best OCR result using LLM or confidence scores"""
     try:
         # Try LLM selection first
-        text_options = "\n\n".join([f"Option {i+1} (PSM {r['psm']}): {' '.join(r['text'])}" 
-                                  for i, r in enumerate(results)])
-        
-        llm_response = parse_text_with_llm(
+        try:
+            text_options = "\n\n".join([f"Option {i+1} (PSM {r['psm']}): {' '.join(r['text'])}" 
+                                      for i, r in enumerate(results)])
+            
+            llm_response = parse_text_with_llm(
             f"Which OCR option is most coherent? Return only the number:\n{text_options}"
-        )
-        
-        if 'structured_data' in llm_response and 'choice' in llm_response['structured_data']:
-            chosen_idx = int(llm_response['structured_data']['choice']) - 1
-            return results[chosen_idx]
+            )
+            
+            if 'structured_data' in llm_response and 'choice' in llm_response['structured_data']:
+                chosen_idx = int(llm_response['structured_data']['choice']) - 1
+                return results[chosen_idx]
+            
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            logging.warning(f"LLM selection timeout: {str(e)}")
+        except KeyError as e:
+            logging.warning(f"Invalid LLM response format: {str(e)}")
     except Exception as e:
         logging.warning(f"LLM selection failed: {str(e)}")
     
@@ -179,13 +197,18 @@ def load_templates():
 
 TEMPLATES = load_templates()
 
+class OCRError(Exception):
+    """Custom exception for OCR processing errors"""
+    pass
+
 def parse_text_with_llm(text: str) -> Dict[str, Any]:
     """Enhance OCR text parsing using Groq's LLM API"""
-    dotenv.load_dotenv()
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        logging.warning("Groq API key not found in .env file")
-        return {}
+    try:
+        dotenv.load_dotenv()
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            logging.error("Groq API key not found in .env file")
+            raise OCRError("API configuration error")
 
     prompt = f"""Analyze this medical report text and extract structured data. 
     Correct any OCR errors, especially fused words. Return JSON with these fields:
@@ -213,13 +236,21 @@ def parse_text_with_llm(text: str) -> Dict[str, Any]:
     }
 
     try:
-        response = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=10
-        )
-        response.raise_for_status()
+        try:
+            response = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=15  # Increased timeout
+            )
+            response.raise_for_status()
+            
+        except requests.exceptions.Timeout:
+            logging.error("LLM API timeout")
+            raise OCRError("AI processing timed out")
+        except requests.exceptions.HTTPError as e:
+            logging.error(f"LLM API error: {e.response.status_code}")
+            raise OCRError("AI service unavailable")
         
         # Extract JSON from response
         result = json.loads(response.json()['choices'][0]['message']['content'])
