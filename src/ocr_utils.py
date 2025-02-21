@@ -253,13 +253,6 @@ Text:
             logging.error(f"Attempt {attempt+1} API error: {str(e)}")
             
     raise OCRError("Failed to extract fields after 3 attempts")
-        
-    except json.JSONDecodeError as e:
-        logging.error(f"Failed to parse LLM response: {str(e)}")
-        raise OCRError("AI response format error")
-    except Exception as e:
-        logging.error(f"LLM processing failed: {str(e)}")
-        raise OCRError("AI analysis failed") from e
 
 def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[str, Any]:
     """Extract fields using LLM first, with regex fallback for missing fields"""
