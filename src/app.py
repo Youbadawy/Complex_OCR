@@ -268,8 +268,8 @@ with tab1:
                 
                 if extracted_data:
                     try:
-                        # Create dataframe from successful results
-                        df = pd.DataFrame([item for sublist in extracted_data for item in sublist])
+                        # Create dataframe directly from extracted data
+                        df = pd.DataFrame(extracted_data)
                         st.session_state['df'] = df
                         st.success(f"Processed {len(extracted_data)} pages successfully")
                         
