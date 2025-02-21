@@ -50,18 +50,56 @@ def preprocess_image(image):
     return binary
 
 def extract_text_tesseract(image):
-    data = pytesseract.image_to_data(
-        image,
-        output_type=Output.DICT,
-        lang='fra+eng',
-        config=f'--psm {os.getenv("TESS_PSM", "6")} '
-               '-c tessedit_char_whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-:.()%éèàçêâôûùîÉÈÀÇÊÂÔÛÙÎ" '
-               '--oem 3'
-    )
+    """Run Tesseract with multiple page segmentation modes and select best result"""
+    psms = ['3', '6', '11']  # Auto, Single Block, Sparse Text
+    all_results = []
+    
+    for psm in psms:
+        data = pytesseract.image_to_data(
+            image,
+            output_type=Output.DICT,
+            lang='fra+eng',
+            config=f'--psm {psm} '
+                   '-c tessedit_char_whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-:.()%éèàçêâôûùîÉÈÀÇÊÂÔÛÙÎ" '
+                   '--oem 3'
+        )
+        # Calculate average confidence for this PSM
+        valid_confs = [c for c in data['conf'] if c != -1]
+        avg_conf = sum(valid_confs)/len(valid_confs) if valid_confs else 0
+        all_results.append({
+            'text': data['text'],
+            'confidence': data['conf'],
+            'psm': psm,
+            'avg_conf': avg_conf
+        })
+    
+    # Select best result using LLM or confidence
+    best_result = select_best_ocr_result(all_results)
     return {
-        'text': data['text'],
-        'confidence': data['conf']
+        'text': best_result['text'],
+        'confidence': best_result['confidence'],
+        'psm': best_result['psm']
     }
+
+def select_best_ocr_result(results):
+    """Select best OCR result using LLM or confidence scores"""
+    try:
+        # Try LLM selection first
+        text_options = "\n\n".join([f"Option {i+1} (PSM {r['psm']}): {' '.join(r['text'])}" 
+                                  for i, r in enumerate(results)])
+        
+        llm_response = parse_text_with_llm(
+            f"Which OCR option is most coherent? Return only the number:\n{text_options}"
+        )
+        
+        if 'structured_data' in llm_response and 'choice' in llm_response['structured_data']:
+            chosen_idx = int(llm_response['structured_data']['choice']) - 1
+            return results[chosen_idx]
+    except Exception as e:
+        logging.warning(f"LLM selection failed: {str(e)}")
+    
+    # Fallback to highest average confidence
+    return max(results, key=lambda x: x['avg_conf'])
 
 def parse_extracted_text(ocr_result):
     raw_text = ' '.join([t for t, c in zip(ocr_result['text'], ocr_result['confidence']) if c != -1])
