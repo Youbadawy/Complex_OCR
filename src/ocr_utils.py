@@ -6,9 +6,9 @@ from pytesseract import Output
 import os
 import numpy as np
 import dotenv
-import requests
 import json
 from typing import Dict, Any
+from groq import Groq
 from langdetect import detect, LangDetectException
 from transformers import MarianMTModel, MarianTokenizer, pipeline as tf_pipeline
 import torch
@@ -201,8 +201,10 @@ class OCRError(Exception):
     """Custom exception for OCR processing errors"""
     pass
 
+from groq import Groq
+
 def parse_text_with_llm(text: str) -> Dict[str, Any]:
-    """Enhance OCR text parsing using Groq's LLM API"""
+    """Extract structured fields from OCR text using Groq's LLM API"""
     try:
         dotenv.load_dotenv()
         api_key = os.getenv("GROQ_API_KEY")
@@ -210,65 +212,50 @@ def parse_text_with_llm(text: str) -> Dict[str, Any]:
             logging.error("Groq API key not found in .env file")
             raise OCRError("API configuration error")
 
-        prompt = f"""Analyze this medical report text and extract structured data. 
-    Correct any OCR errors, especially fused words. Return JSON with these fields:
-    - patient_name (title case)
-    - exam_date (YYYY-MM-DD)
-    - exam_type (uppercase)
-    - birads_right (0-6)
-    - birads_left (0-6)
-    - clinical_history (concise summary)
-    - findings (key observations)
-    - follow_up_recommendation (action items)
-    
-    Text: {text[:3000]}..."""  # Truncate to stay under token limits
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
+        client = Groq(api_key=api_key)
         
-        payload = {
-            "model": "mixtral-8x7b-32768",
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.1,
-            "max_tokens": 1000
-        }
+        prompt = f"""Extract the following information from this mammogram report text:
+- Patient name (title case)
+- Exam date (YYYY-MM-DD format)
+- BIRADS score for the right breast (0-6)
+- BIRADS score for the left breast (0-6)
+- Clinical impressions
+- Key findings
+- Follow-up recommendations
 
-        response = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=15
+Correct OCR errors like fused words (e.g. "PatientName" -> "Patient Name"). 
+Return valid JSON with keys: patient_name, exam_date, birads_right, 
+birads_left, impressions, findings, follow_up_recommendation.
+
+Text:
+{text[:3000]}"""  # Truncate to stay under token limits
+
+        response = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="mixtral-8x7b-32768",
+            temperature=0.3,
+            max_tokens=1000,
+            response_format={"type": "json_object"}
         )
-        response.raise_for_status()
-
-        # Validate response structure
-        response_json = response.json()
-        if not all(key in response_json for key in ['choices', 'usage']):
-            raise ValueError("Invalid API response structure")
-            
-        content = response_json['choices'][0]['message']['content']
-        result = json.loads(content)
         
-        if 'structured_data' not in result:
-            logging.warning("LLM response missing structured_data field")
-            return {}
-            
-        return result['structured_data']
+        # Parse and validate response
+        result = json.loads(response.choices[0].message.content)
+        required_fields = ['patient_name', 'exam_date', 'birads_right', 
+                          'birads_left', 'impressions', 'findings',
+                          'follow_up_recommendation']
         
-    except requests.exceptions.Timeout:
-        logging.error("LLM API timeout")
-        raise OCRError("AI processing timed out")
-    except requests.exceptions.HTTPError as e:
-        logging.error(f"LLM API error: {e.response.status_code}")
-        raise OCRError(f"AI service error: {e.response.status_code}")
-    except (json.JSONDecodeError, KeyError, ValueError) as e:
-        logging.warning(f"Response parsing error: {str(e)}")
-        return {}
+        if not all(field in result for field in required_fields):
+            logging.warning("LLM response missing required fields")
+            raise ValueError("Incomplete JSON response from LLM")
+            
+        return result
+        
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to parse LLM response: {str(e)}")
+        raise OCRError("AI response format error")
     except Exception as e:
-        logging.error(f"Unexpected error during LLM processing: {str(e)}")
-        raise OCRError("Failed to process with LLM")
+        logging.error(f"LLM processing failed: {str(e)}")
+        raise OCRError("AI analysis failed") from e
 
 def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[str, Any]:
     """Extract fields using LLM first, with regex fallback for missing fields"""
