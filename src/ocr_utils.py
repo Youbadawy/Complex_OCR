@@ -5,6 +5,10 @@ import pandas as pd
 from pytesseract import Output
 import os
 import numpy as np
+import dotenv
+import requests
+import json
+from typing import Dict, Any
 from langdetect import detect, LangDetectException
 from transformers import MarianMTModel, MarianTokenizer, pipeline as tf_pipeline
 import torch
@@ -137,8 +141,58 @@ def load_templates():
 
 TEMPLATES = load_templates()
 
-def extract_fields_from_text(text, *_):
-    """Extract key fields from OCR text using structured regex patterns"""
+def parse_text_with_llm(text: str) -> Dict[str, Any]:
+    """Enhance OCR text parsing using Groq's LLM API"""
+    dotenv.load_dotenv()
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        logging.warning("Groq API key not found in .env file")
+        return {}
+
+    prompt = f"""Analyze this medical report text and extract structured data. 
+    Correct any OCR errors, especially fused words. Return JSON with these fields:
+    - patient_name (title case)
+    - exam_date (YYYY-MM-DD)
+    - exam_type (uppercase)
+    - birads_right (0-6)
+    - birads_left (0-6)
+    - clinical_history (concise summary)
+    - findings (key observations)
+    - follow_up_recommendation (action items)
+    
+    Text: {text[:3000]}..."""  # Truncate to stay under token limits
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "model": "mixtral-8x7b-32768",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.1,
+        "max_tokens": 1000
+    }
+
+    try:
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=10
+        )
+        response.raise_for_status()
+        
+        # Extract JSON from response
+        result = json.loads(response.json()['choices'][0]['message']['content'])
+        return result.get("structured_data", {})
+        
+    except (requests.exceptions.RequestException, json.JSONDecodeError, KeyError) as e:
+        logging.warning(f"LLM API error: {str(e)}")
+        return {}
+
+def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[str, Any]:
+    """Extract fields with regex first, then LLM fallback"""
     fields = {
         'patient_name': None,
         'document_date': None,
@@ -201,7 +255,21 @@ def extract_fields_from_text(text, *_):
     ):
         fields['follow-up_recommendation'] = match.group(2).strip()
 
-    return fields, []
+    # First try regex parsing
+    regex_fields = fields.copy()
+    
+    # If critical fields missing, try LLM fallback
+    if use_llm_fallback and (not regex_fields.get('patient_name') or not regex_fields.get('exam_date')):
+        try:
+            llm_fields = parse_text_with_llm(text)
+            # Merge results favoring regex but filling missing fields from LLM
+            for key in fields:
+                if not regex_fields[key] and llm_fields.get(key):
+                    regex_fields[key] = llm_fields[key]
+        except Exception as e:
+            logging.warning(f"LLM fallback failed: {str(e)}")
+    
+    return regex_fields, []
 
 def similar(a, b, threshold=0.7):
     """Fuzzy string matching for OCR corrections"""
