@@ -17,5 +17,8 @@ def parse_extracted_text(ocr_result):
 
 def extract_fields_from_text(text, medical_nlp):
     doc = medical_nlp(text)
-    # ... rest of original function logic remains same ...
+    fields = []  # Initialize empty list for fields
+    # TODO: Implement field extraction logic using doc
+    # Example structure:
+    # fields = [{'type': 'diagnosis', 'value': entity.text} for entity in doc.ents]
     return pd.DataFrame(fields)
