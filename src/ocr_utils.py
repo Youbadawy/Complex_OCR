@@ -138,61 +138,69 @@ def load_templates():
 TEMPLATES = load_templates()
 
 def extract_fields_from_text(text, *_):
-    """Extract key fields using regex patterns"""
-    # The *_ parameter accepts and ignores any extra arguments
+    """Extract key fields from OCR text using structured regex patterns"""
     fields = {
-        'patient_name': "unknown",
-        'document_date': "unknown",
-        'exam_type': "unknown",
-        'exam_date': "unknown",
-        'clinical_history': "unknown",
-        'birads_right': "unknown",
-        'birads_left': "unknown",
-        'impressions': "unknown",
-        'findings': "unknown",
-        'follow-up_recommendation': "unknown"
+        'patient_name': None,
+        'document_date': None,
+        'exam_type': None,
+        'exam_date': None,
+        'clinical_history': None,
+        'birads_right': None,
+        'birads_left': None,
+        'impressions': None,
+        'findings': None,
+        'follow-up_recommendation': None
     }
-    
-    text = text.lower()
-    
-    # Patient name
+
+    # Patient name extraction with title case normalization
     if match := re.search(r'patient name[:\s]+([a-z\s]+)', text, re.IGNORECASE):
         fields['patient_name'] = match.group(1).strip().title()
-        
-    # Dates
-    for date_type, pattern in [('document_date', r'(document date|date of exam)[:\s]+(\d{4}-\d{2}-\d{2})'),
-                              ('exam_date', r'exam date[:\s]+(\d{4}-\d{2}-\d{2})')]:
-        if match := re.search(pattern, text, re.IGNORECASE):
-            fields[date_type] = match.group(2)
-    
-    # Exam type
+
+    # Date extraction with multiple format support
+    if match := re.search(
+        r'exam date[:\s]+([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}/[0-9]{2}/[0-9]{4})', 
+        text, re.IGNORECASE
+    ):
+        fields['exam_date'] = match.group(1).strip()
+
+    # Exam type with uppercase normalization
     if match := re.search(r'exam type[:\s]+([a-z\s]+)', text, re.IGNORECASE):
         fields['exam_type'] = match.group(1).strip().upper()
-        
-    # Clinical history
-    if match := re.search(r'clinical history[:\s]+(.*?)\s+(impressions|findings|recommendation)', 
-                         text, re.IGNORECASE | re.DOTALL):
+
+    # Clinical history section extraction
+    if match := re.search(
+        r'clinical history[:\s]+(.*?)\s+(impressions|findings|recommendation)',
+        text, re.IGNORECASE | re.DOTALL
+    ):
         fields['clinical_history'] = match.group(1).strip()
-        
-    # BIRADS scores
-    for side in ('right', 'left'):
-        if match := re.search(fr'birads {side}[:\s]+([0-6])', text, re.IGNORECASE):
-            fields[f'birads_{side}'] = match.group(1)
-    
-    # Impressions and findings
-    if match := re.search(r'(impressions|conclusion)[:\s]+(.*?)\s+(findings|recommendation)', 
-                         text, re.IGNORECASE | re.DOTALL):
+
+    # BIRADS scores extraction
+    if match := re.search(r'birads right[:\s]+([0-6])', text, re.IGNORECASE):
+        fields['birads_right'] = match.group(1)
+    if match := re.search(r'birads left[:\s]+([0-6])', text, re.IGNORECASE):
+        fields['birads_left'] = match.group(1)
+
+    # Impressions section extraction
+    if match := re.search(
+        r'(impressions|conclusion)[:\s]+(.*?)\s+(findings|recommendation)',
+        text, re.IGNORECASE | re.DOTALL
+    ):
         fields['impressions'] = match.group(2).strip()
-        
-    if match := re.search(r'findings[:\s]+(.*?)\s+(recommendation|follow-up)', 
-                         text, re.IGNORECASE | re.DOTALL):
+
+    # Findings section extraction
+    if match := re.search(
+        r'findings[:\s]+(.*?)\s+(recommendation|follow-up)',
+        text, re.IGNORECASE | re.DOTALL
+    ):
         fields['findings'] = match.group(1).strip()
-        
-    # Follow-up recommendation
-    if match := re.search(r'(follow-up|recommendation)[:\s]+(.*?)\s+(signed|printed|end of document)', 
-                         text, re.IGNORECASE | re.DOTALL):
+
+    # Follow-up recommendations extraction
+    if match := re.search(
+        r'(follow-up|recommendation)[:\s]+(.*?)\s+(signed|printed|end of document)',
+        text, re.IGNORECASE | re.DOTALL
+    ):
         fields['follow-up_recommendation'] = match.group(2).strip()
-    
+
     return fields, []
 
 def similar(a, b, threshold=0.7):
