@@ -265,7 +265,7 @@ def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[s
                     if field == 'exam_type':
                         fields[field] = fields[field].upper()
     
-    return regex_fields, []
+    return fields, []
 
 def similar(a, b, threshold=0.7):
     """Fuzzy string matching for OCR corrections"""
