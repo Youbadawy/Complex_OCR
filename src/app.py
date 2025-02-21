@@ -318,31 +318,48 @@ with tab2:
             st.bar_chart(exam_dist.set_index('Exam Type'))
 
         # BIRADS analysis
-        if {'birads right', 'birads left'}.issubset(df.columns):
+        if {'birads_score', 'exam_date'}.issubset(df.columns):
             st.subheader("BIRADS Analysis")
             
-            # Extract numeric BIRADS scores
-            birads_right = df['birads right'].str.extract(r'(\d)')[0].fillna('unknown')
-            birads_left = df['birads left'].str.extract(r'(\d)')[0].fillna('unknown')
+            # Interactive BIRADS score filter
+            selected_scores = st.multiselect(
+                "Select BIRADS scores to filter:",
+                options=['0', '1', '2', '3', '4', '5'],
+                default=['4', '5'],
+                help="Filter cases by BIRADS score"
+            )
             
-            # High-risk cases
-            high_risk_mask = birads_right.isin(['4', '5']) | birads_left.isin(['4', '5'])
-            high_risk_df = df[high_risk_mask][['patient name', 'birads right', 'birads left', 'exam date']]
+            # Filter dataframe
+            filtered_df = df[df['birads_score'].isin(selected_scores)]
             
-            if not high_risk_df.empty:
-                st.warning("High-Risk Cases Requiring Follow-Up (BIRADS 4/5)")
-                st.dataframe(high_risk_df, use_container_width=True)
+            if not filtered_df.empty:
+                # Display filtered cases
+                st.write(f"Showing {len(filtered_df)} cases with BIRADS {', '.join(selected_scores)}")
+                st.dataframe(filtered_df[['patient_name', 'birads_score', 'exam_date']], use_container_width=True)
+                
+                # Correlation heatmap
+                st.subheader("Feature Correlations")
+                try:
+                    numeric_cols = df.select_dtypes(include=['number']).columns
+                    if len(numeric_cols) > 1:
+                        corr_matrix = df[numeric_cols].corr()
+                        fig = px.imshow(
+                            corr_matrix,
+                            labels=dict(x="Features", y="Features", color="Correlation"),
+                            x=numeric_cols,
+                            y=numeric_cols,
+                            color_continuous_scale='RdBu',
+                            zmin=-1,
+                            zmax=1
+                        )
+                        fig.update_layout(title="Correlation Heatmap of Numeric Features")
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning("Not enough numeric columns for correlation analysis")
+                except Exception as e:
+                    st.warning(f"Could not generate heatmap: {str(e)}")
             else:
-                st.info("No high-risk BIRADS cases found")
-
-            # BIRADS distributions
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write("Right Breast Distribution")
-                st.bar_chart(birads_right.value_counts())
-            with col2:
-                st.write("Left Breast Distribution")
-                st.bar_chart(birads_left.value_counts())
+                st.info("No cases found with selected BIRADS scores")
 
         # Findings analysis
         if 'findings' in df.columns:
@@ -354,32 +371,78 @@ with tab2:
             else:
                 st.write("No findings data available")
 
-        # Exam trends over time
-        if 'exam date' in df.columns:
+        # Interactive exam trends over time
+        if 'exam_date' in df.columns:
             st.subheader("Exam Trends Over Time")
             try:
-                df['exam date'] = pd.to_datetime(df['exam date'])
-                trend = df.groupby(df['exam date'].dt.to_period('M')).size().reset_index(name='count')
-                trend['exam date'] = trend['exam date'].dt.to_timestamp()
-                fig = px.line(trend, x='exam date', y='count', title='Exams Over Time')
-                st.plotly_chart(fig)
+                df['exam_date'] = pd.to_datetime(df['exam_date'])
+                df['year'] = df['exam_date'].dt.year
+                
+                # Year selection slider
+                years = sorted(df['year'].unique())
+                selected_year = st.slider(
+                    "Select Year Range",
+                    min_value=min(years),
+                    max_value=max(years),
+                    value=(min(years), max(years))
+                )
+                
+                # Filter data
+                filtered = df[(df['year'] >= selected_year[0]) & (df['year'] <= selected_year[1])]
+                monthly_counts = filtered.resample('M', on='exam_date').size().reset_index(name='count')
+                
+                # Create interactive plot
+                fig = px.line(
+                    monthly_counts,
+                    x='exam_date',
+                    y='count',
+                    title=f"Exam Trends {selected_year[0]}-{selected_year[1]}",
+                    labels={'exam_date': 'Date', 'count': 'Number of Exams'},
+                    markers=True
+                )
+                fig.update_layout(
+                    hovermode="x unified",
+                    xaxis=dict(showgrid=True),
+                    yaxis=dict(showgrid=True)
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
             except Exception as e:
-                st.error(f"Could not analyze trends: {str(e)}")
+                st.warning(f"Could not analyze trends: {str(e)}")
 
-        # BIRADS Score Distribution
+        # Interactive BIRADS Score Distribution
         st.subheader("BIRADS Score Distribution")
         if 'birads_score' in df.columns:
             try:
                 birads_counts = df['birads_score'].value_counts().reset_index()
                 birads_counts.columns = ['BIRADS Score', 'Count']
-                fig = px.pie(birads_counts, 
-                           values='Count', 
-                           names='BIRADS Score',
-                           title='BIRADS Score Distribution')
-                st.plotly_chart(fig)
+                
+                fig = px.bar(
+                    birads_counts,
+                    x='BIRADS Score',
+                    y='Count',
+                    color='BIRADS Score',
+                    title='BIRADS Score Distribution',
+                    labels={'Count': 'Number of Cases'},
+                    color_discrete_sequence=px.colors.sequential.Plasma
+                )
+                fig.update_layout(
+                    xaxis={'categoryorder':'total descending'},
+                    hovermode='closest'
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Add summary statistics
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Total Cases", len(df))
+                col2.metric("Most Common Score", birads_counts.iloc[0]['BIRADS Score'])
+                col3.metric("Highest Risk Cases", len(df[df['birads_score'].isin(['4', '5'])]))
+                
             except Exception as e:
-                st.error(f"Could not analyze BIRADS scores: {str(e)}")
-        
+                st.warning(f"Could not analyze BIRADS scores: {str(e)}")
+        else:
+            st.warning("BIRADS score data not available for visualization")
+
         # Additional Information Analysis
         st.subheader("Findings Analysis")
         if 'additional_information' in df.columns:
