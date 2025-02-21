@@ -120,8 +120,7 @@ def select_best_ocr_result(results):
         
         # Calculate hybrid scores (LLM 70% + Confidence 30%)
         hybrid_scores = [
-            (0.7 * (llm / 10) + 0.3 * (r['avg_conf'] / 100),  # Normalize both to 0-1 scale
-            i
+            (0.7 * (llm / 10) + 0.3 * (r['avg_conf'] / 100), i)  # Normalize both to 0-1 scale
             for i, (llm, r) in enumerate(zip(llm_scores, results))
         ]
         
