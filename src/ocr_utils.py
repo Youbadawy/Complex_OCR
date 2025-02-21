@@ -14,9 +14,35 @@ from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
 
 def preprocess_image(image):
-    """Preprocess image array using Otsu's thresholding"""
+    """Preprocess image with deskewing and adaptive thresholding"""
+    # Convert to grayscale and blur
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    blur = cv2.GaussianBlur(gray, (3, 3), 0)
+    
+    # Deskewing logic
+    height, width = blur.shape
+    edges = cv2.Canny(blur, 50, 150)
+    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100, 
+                          minLineLength=100, maxLineGap=10)
+    
+    angles = []
+    if lines is not None:
+        for line in lines:
+            x1, y1, x2, y2 = line[0]
+            angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
+            angles.append(angle)
+            
+        median_angle = np.median(angles)
+        rotation_matrix = cv2.getRotationMatrix2D((width/2, height/2), median_angle, 1)
+        deskewed = cv2.warpAffine(blur, rotation_matrix, (width, height),
+                                 borderMode=cv2.BORDER_REPLICATE)
+    else:
+        deskewed = blur
+    
+    # Adaptive thresholding
+    binary = cv2.adaptiveThreshold(deskewed, 255, 
+                                  cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                  cv2.THRESH_BINARY, 11, 2)
     return binary
 
 def extract_text_tesseract(image):
