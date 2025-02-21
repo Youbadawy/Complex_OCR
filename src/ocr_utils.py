@@ -210,7 +210,7 @@ def parse_text_with_llm(text: str) -> Dict[str, Any]:
             logging.error("Groq API key not found in .env file")
             raise OCRError("API configuration error")
 
-    prompt = f"""Analyze this medical report text and extract structured data. 
+        prompt = f"""Analyze this medical report text and extract structured data. 
     Correct any OCR errors, especially fused words. Return JSON with these fields:
     - patient_name (title case)
     - exam_date (YYYY-MM-DD)
