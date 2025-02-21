@@ -253,6 +253,14 @@ def convert_to_structured_json(df):
 
 def extract_with_template_matching(image):
     """Multi-scale template matching with parallel processing"""
+    # Map field names to template filenames
+    field_template_map = {
+        'document_date': 'date_template',
+        'exam_type': 'exam_type_template', 
+        'birads_score': 'birads_template',
+        'patient_name': 'patient_template',
+        'impressions': 'impressions_template'
+    }
     results = {k: "Unknown" for k in field_template_map.keys()}
     results['additional_information'] = ""
     warnings = []
