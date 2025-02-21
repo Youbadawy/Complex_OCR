@@ -192,82 +192,78 @@ def parse_text_with_llm(text: str) -> Dict[str, Any]:
         return {}
 
 def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[str, Any]:
-    """Extract fields with regex first, then LLM fallback"""
+    """Extract fields using LLM first, with regex fallback for missing fields"""
     fields = {
         'patient_name': None,
-        'document_date': None,
-        'exam_type': None,
         'exam_date': None,
-        'clinical_history': None,
         'birads_right': None,
         'birads_left': None,
         'impressions': None,
         'findings': None,
-        'follow-up_recommendation': None
+        'follow-up_recommendation': None,
+        'document_date': None,
+        'exam_type': None,
+        'clinical_history': None
     }
 
-    # Patient name extraction with title case normalization
-    if match := re.search(r'patient name[:\s]+([a-z\s]+)', text, re.IGNORECASE):
-        fields['patient_name'] = match.group(1).strip().title()
-
-    # Date extraction with multiple format support
-    if match := re.search(
-        r'exam date[:\s]+([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}/[0-9]{2}/[0-9]{4})', 
-        text, re.IGNORECASE
-    ):
-        fields['exam_date'] = match.group(1).strip()
-
-    # Exam type with uppercase normalization
-    if match := re.search(r'exam type[:\s]+([a-z\s]+)', text, re.IGNORECASE):
-        fields['exam_type'] = match.group(1).strip().upper()
-
-    # Clinical history section extraction
-    if match := re.search(
-        r'clinical history[:\s]+(.*?)\s+(impressions|findings|recommendation)',
-        text, re.IGNORECASE | re.DOTALL
-    ):
-        fields['clinical_history'] = match.group(1).strip()
-
-    # BIRADS scores extraction
-    if match := re.search(r'birads right[:\s]+([0-6])', text, re.IGNORECASE):
-        fields['birads_right'] = match.group(1)
-    if match := re.search(r'birads left[:\s]+([0-6])', text, re.IGNORECASE):
-        fields['birads_left'] = match.group(1)
-
-    # Impressions section extraction
-    if match := re.search(
-        r'(impressions|conclusion)[:\s]+(.*?)\s+(findings|recommendation)',
-        text, re.IGNORECASE | re.DOTALL
-    ):
-        fields['impressions'] = match.group(2).strip()
-
-    # Findings section extraction
-    if match := re.search(
-        r'findings[:\s]+(.*?)\s+(recommendation|follow-up)',
-        text, re.IGNORECASE | re.DOTALL
-    ):
-        fields['findings'] = match.group(1).strip()
-
-    # Follow-up recommendations extraction
-    if match := re.search(
-        r'(follow-up|recommendation)[:\s]+(.*?)\s+(signed|printed|end of document)',
-        text, re.IGNORECASE | re.DOTALL
-    ):
-        fields['follow-up_recommendation'] = match.group(2).strip()
-
-    # First try regex parsing
-    regex_fields = fields.copy()
-    
-    # If critical fields missing, try LLM fallback
-    if use_llm_fallback and (not regex_fields.get('patient_name') or not regex_fields.get('exam_date')):
+    # First try LLM extraction
+    llm_fields = {}
+    if use_llm_fallback:
         try:
             llm_fields = parse_text_with_llm(text)
-            # Merge results favoring regex but filling missing fields from LLM
-            for key in fields:
-                if not regex_fields[key] and llm_fields.get(key):
-                    regex_fields[key] = llm_fields[key]
+            # Map LLM fields to our schema
+            fields.update({
+                'patient_name': llm_fields.get('patient_name'),
+                'exam_date': llm_fields.get('exam_date'),
+                'birads_right': llm_fields.get('birads_right'),
+                'birads_left': llm_fields.get('birads_left'),
+                'impressions': llm_fields.get('impressions'),
+                'findings': llm_fields.get('findings'),
+                'follow-up_recommendation': llm_fields.get('follow_up_recommendation'),
+                'document_date': llm_fields.get('document_date'),
+                'exam_type': llm_fields.get('exam_type'),
+                'clinical_history': llm_fields.get('clinical_history')
+            })
         except Exception as e:
-            logging.warning(f"LLM fallback failed: {str(e)}")
+            logging.warning(f"LLM extraction failed: {str(e)}")
+
+    # Regex fallback for any missing critical fields
+    missing_fields = [k for k, v in fields.items() if v is None]
+    if missing_fields:
+        # Patient name fallback
+        if 'patient_name' in missing_fields:
+            if match := re.search(r'patient name[:\s]+([a-z\s]+)', text, re.IGNORECASE):
+                fields['patient_name'] = match.group(1).strip().title()
+        
+        # Exam date fallback
+        if 'exam_date' in missing_fields:
+            if match := re.search(r'exam date[:\s]+([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}/[0-9]{2}/[0-9]{4})', text, re.IGNORECASE):
+                fields['exam_date'] = match.group(1).strip()
+        
+        # BIRADS scores fallback
+        if 'birads_right' in missing_fields:
+            if match := re.search(r'birads right[:\s]+([0-6])', text, re.IGNORECASE):
+                fields['birads_right'] = match.group(1)
+        if 'birads_left' in missing_fields:
+            if match := re.search(r'birads left[:\s]+([0-6])', text, re.IGNORECASE):
+                fields['birads_left'] = match.group(1)
+
+        # Clinical sections fallback
+        section_mappings = {
+            'impressions': r'(impressions|conclusion)[:\s]+(.*?)\s+(findings|recommendation)',
+            'findings': r'findings[:\s]+(.*?)\s+(recommendation|follow-up)',
+            'follow-up_recommendation': r'(follow-up|recommendation)[:\s]+(.*?)\s+(signed|printed|end of document)',
+            'clinical_history': r'clinical history[:\s]+(.*?)\s+(impressions|findings|recommendation)',
+            'exam_type': r'exam type[:\s]+([a-z\s]+)',
+            'document_date': r'(document date|date of exam)[:\s]+([0-9]{4}-[0-9]{2}-[0-9]{2})'
+        }
+
+        for field, pattern in section_mappings.items():
+            if field in missing_fields:
+                if match := re.search(pattern, text, re.IGNORECASE | re.DOTALL):
+                    fields[field] = match.group(2 if field == 'document_date' else 1).strip()
+                    if field == 'exam_type':
+                        fields[field] = fields[field].upper()
     
     return regex_fields, []
 
