@@ -42,6 +42,9 @@ STOP_WORDS = set(stopwords.words('english')).union({
     'mammogram', 'birads', 'assessment', 'clinical'
 })
 
+# Import OCR functions from utilities
+import ocr_utils
+
 login(token="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")
 
 # Add this after imports but before OCR processing
