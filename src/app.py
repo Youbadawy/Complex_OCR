@@ -241,12 +241,8 @@ with tab1:
                             if 'error' in result:
                                 error_messages.append(result['error'])
                             else:
-                                # Append directly to session state dataframe
-                                new_row = pd.DataFrame([result])
-                                st.session_state['df'] = pd.concat(
-                                    [st.session_state['df'], new_row],
-                                    ignore_index=True
-                                )
+                                # Collect extracted data
+                                extracted_data.append(result)
                                 template_warnings.extend(result.get('template_warnings', []))
                         except Exception as e:
                             error_msg = f"Processing failed: {str(e)}"
@@ -271,12 +267,12 @@ with tab1:
                         st.write(f"- {msg}")
                     st.info("Check mammo_ai.log for full details")
                 
+                # Create final dataframe after processing all pages
                 if extracted_data:
                     try:
-                        # Create dataframe directly from extracted data
-                        df = pd.DataFrame(extracted_data)
-                        st.session_state['df'] = df
+                        st.session_state['df'] = pd.DataFrame(extracted_data)
                         st.success(f"Processed {len(extracted_data)} pages successfully")
+                        st.dataframe(st.session_state['df'])  # Display full dataframe immediately
                         
                     except Exception as e:
                         error_msg = f"Data formatting failed: {str(e)}"
