@@ -34,6 +34,13 @@ import re
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 from concurrent.futures import ThreadPoolExecutor
+from nltk.corpus import stopwords
+
+# Define common medical stopwords to exclude
+STOP_WORDS = set(stopwords.words('english')).union({
+    'patient', 'exam', 'result', 'findings', 'breast', 
+    'mammogram', 'birads', 'assessment', 'clinical'
+})
 
 login(token="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")
 
