@@ -198,30 +198,55 @@ with tab1:
                 progress_bar = st.progress(0)
                 total_files = len(uploaded_files)
                 
-                for file_idx, uploaded_file in enumerate(uploaded_files):
-                    template_status.info("🔄 Using image templates for low-confidence fields...")
+                # Initialize dataframe in session state if not exists
+                if 'df' not in st.session_state:
+                    st.session_state['df'] = pd.DataFrame()
+
+                # Process all files in parallel
+                with ThreadPoolExecutor(max_workers=os.cpu_count()*2) as file_executor:
+                    # Create futures for all files and pages
+                    futures = []
+                    for uploaded_file in uploaded_files:
+                        try:
+                            images = convert_from_bytes(uploaded_file.read(), dpi=300)
+                            for page_num, image in enumerate(images):
+                                future = file_executor.submit(
+                                    process_single_page,
+                                    image=image,
+                                    page_num=page_num,
+                                    uploaded_file=uploaded_file
+                                )
+                                futures.append(future)
+                        except Exception as e:
+                            error_msg = f"Failed to process {uploaded_file.name}: {str(e)}"
+                            logging.error(error_msg, exc_info=True)
+                            error_messages.append(error_msg)
+
+                    # Process results as they complete
+                    total_pages = len(futures)
+                    processed_pages = 0
                     
-                    try:
-                        images = convert_from_bytes(uploaded_file.read(), dpi=300)
+                    for future in concurrent.futures.as_completed(futures):
+                        processed_pages += 1
+                        progress = processed_pages / total_pages
+                        progress_bar.progress(min(progress, 1.0))
                         
-                        with ThreadPoolExecutor() as executor:
-                            process_page = partial(process_single_page, uploaded_file=uploaded_file)
-                            results = list(executor.map(process_page, images, range(len(images)), chunksize=10))
-                        
-                        for result in results:
+                        try:
+                            result = future.result()
                             if 'error' in result:
                                 error_messages.append(result['error'])
                             else:
-                                extracted_data.append(result)
+                                # Append directly to session state dataframe
+                                new_row = pd.DataFrame([result])
+                                st.session_state['df'] = pd.concat(
+                                    [st.session_state['df'], new_row],
+                                    ignore_index=True
+                                )
                                 template_warnings.extend(result.get('template_warnings', []))
-                    
-                    except Exception as e:
-                        error_msg = f"Failed to process {uploaded_file.name}: {str(e)}"
-                        logging.error(error_msg, exc_info=True)
-                        error_messages.append(error_msg)
-                    
-                    progress = (file_idx + 1) / total_files
-                    progress_bar.progress(progress)
+                        except Exception as e:
+                            error_msg = f"Processing failed: {str(e)}"
+                            logging.error(error_msg, exc_info=True)
+                            error_messages.append(error_msg)
                 
                 template_status.empty()
                 
