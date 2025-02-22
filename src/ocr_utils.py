@@ -286,7 +286,9 @@ Text:
             
         raise ValueError("Invalid response structure from LLM")
             
-    raise OCRError("Failed to extract fields after 3 attempts")
+    except Exception as e:
+        logging.error(f"LLM extraction failed: {str(e)}")
+        raise OCRError("Failed to extract fields after 3 attempts") from e
 
 def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[str, Any]:
     """Extract fields using LLM first, with regex fallback for missing fields"""
