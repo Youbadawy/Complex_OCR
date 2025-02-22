@@ -74,7 +74,10 @@ def init_paddle():
         lang='en',
         det_model_dir=os.path.join('models', 'en_PP-OCRv4_det_infer'),
         rec_model_dir=os.path.join('models', 'en_PP-OCRv4_rec_infer'),
-        show_log=False
+        cls_model_dir=os.path.join('models', 'en_PP-OCRv4_cls_infer'),
+        use_angle_cls=True,
+        show_log=False,
+        drop_score=0.5  # Adjust confidence threshold
     )
 
 # Add this after imports but before OCR processing
