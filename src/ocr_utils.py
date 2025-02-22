@@ -253,6 +253,7 @@ follow_up_recommendation, and a 'confidence' sub-object with scores for each fie
 Text:
 {text[:3000]}"""
 
+    import time
     for attempt in range(3):
         try:
             response = client.chat.completions.create(
@@ -262,6 +263,15 @@ Text:
                 max_tokens=2000,
                 response_format={"type": "json_object"}
             )
+            # If successful, break out of retry loop
+            break
+        except Exception as e:
+            if "rate_limit_exceeded" in str(e).lower() and attempt < 2:
+                wait_time = (2 ** attempt) * 10  # Exponential backoff: 10, 20, 40 seconds
+                logging.warning(f"Rate limited. Waiting {wait_time} seconds before retry...")
+                time.sleep(wait_time)
+                continue
+            raise
             result = json.loads(response.choices[0].message.content)
             
             # Validate response structure
