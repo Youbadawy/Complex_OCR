@@ -69,14 +69,16 @@ def extract_text_tesseract(image):
     for psm in psms:
         try:
             data = pytesseract.image_to_data(
-            image,
-            output_type=Output.DICT,
-            lang='fra+eng',
-            timeout=30,  # Set 30 second timeout per PSM
-            config=f'--psm {psm} '
-                   '-c tessedit_char_whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-:.()%éèàçêâôûùîÉÈÀÇÊÂÔÛÙÎ" '
-                   '--oem 3'
-        )
+                image,
+                output_type=Output.DICT,
+                lang='fra+eng',
+                timeout=30,  # Set 30 second timeout per PSM
+                config=(
+                    f'--psm {psm} '
+                    '-c tessedit_char_whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-:.()%éèàçêâôûùîÉÈÀÇÊÂÔÛÙÎ" '
+                    '--oem 3'
+                )
+            )
         except pytesseract.TesseractError as e:
             logging.warning(f"Tesseract PSM {psm} failed: {str(e)}")
             all_results.append({
