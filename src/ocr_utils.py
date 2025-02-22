@@ -274,7 +274,10 @@ Text:
             max_tokens=2000,
             response_format={"type": "json_object"}
         )
-        response.raise_for_status()
+        
+        # Validate Groq API response structure
+        if not response.choices or not hasattr(response.choices[0].message, 'content'):
+            raise ValueError("Invalid Groq API response format")
         
         result = json.loads(response.choices[0].message.content)
         
