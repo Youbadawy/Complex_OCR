@@ -65,6 +65,19 @@ else:
         st.error(f"Authentication failed: {str(e)}")
         st.stop()
 
+# Initialize PaddleOCR models
+@st.cache_resource
+def init_paddle_ocr():
+    from paddleocr import PaddleOCR
+    return PaddleOCR(
+        lang='en',
+        use_angle_cls=True,
+        det_model_dir='en_PP-OCRv4_det_infer',
+        rec_model_dir='en_PP-OCRv4_rec_infer', 
+        cls_model_dir='ch_ppocr_mobile_v2.0_cls_infer',
+        show_log=False
+    )
+
 # Add this after imports but before OCR processing
 if platform.system() == "Windows":
     pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
@@ -91,9 +104,59 @@ def process_single_page(image, page_num, uploaded_file):
         
         # Extract and parse text with error handling
         try:
-            ocr_data = ocr_utils.extract_text_tesseract(processed_image)
-            extracted_text = ocr_utils.parse_extracted_text(ocr_data)
-            structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
+            # Hybrid PaddleOCR + Mixtral pipeline
+            from paddleocr import PaddleOCR
+            import json
+            
+            # Initialize PaddleOCR with medical document presets
+            paddle_ocr = PaddleOCR(
+                lang='en',
+                use_angle_cls=True,
+                det_model_dir='en_PP-OCRv4_det_infer',
+                rec_model_dir='en_PP-OCRv4_rec_infer',
+                cls_model_dir='ch_ppocr_mobile_v2.0_cls_infer',
+                show_log=False
+            )
+            
+            # Extract text and layout with PaddleOCR
+            result = paddle_ocr.ocr(np.array(image), cls=True)
+            ocr_data = {
+                'raw_text': '\n'.join([line[1][0] for line in result[0]]),
+                'layout': [(line[0], line[1][0]) for line in result[0]],
+                'confidence_scores': [line[1][1] for line in result[0]]
+            }
+            
+            # Context correction with Mixtral 8x7B
+            groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+            prompt = f"""Correct and structure this medical OCR extract:
+            {ocr_data['raw_text'][:3000]}
+
+            1. Fix spacing/segmentation errors
+            2. Identify sections (History, Findings, etc)
+            3. Extract structured JSON with:
+               - patient_info
+               - clinical_history  
+               - exam_details
+               - birads_scores
+               - recommendations
+            4. Maintain original medical terminology"""
+
+            try:
+                response = groq_client.chat.completions.create(
+                    messages=[{"role": "user", "content": prompt}],
+                    model="mixtral-8x7b-32768",
+                    temperature=0.1,
+                    max_tokens=2000,
+                    response_format={"type": "json_object"}
+                )
+                
+                structured_data = json.loads(response.choices[0].message.content)
+                warnings = [] if 'confidence' in structured_data else ['Low confidence flags']
+                
+            except Exception as e:
+                logging.error(f"Mixtral processing failed: {str(e)}")
+                structured_data = ocr_utils.default_structured_output()
+                warnings = ['AI processing failed - using raw OCR']
         except pytesseract.TesseractError as e:
             logging.error(f"Tesseract OCR failed: {str(e)}")
             raise RuntimeError("OCR processing failed - check document quality")
