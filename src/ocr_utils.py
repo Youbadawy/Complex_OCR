@@ -226,8 +226,20 @@ class OCRError(Exception):
     """Custom exception for OCR processing errors"""
     pass
 
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from groq import Groq
 
+@retry(
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=5, min=5, max=60),
+    retry=retry_if_exception_type((
+        requests.exceptions.HTTPError,
+        json.JSONDecodeError,
+        KeyError,
+        Exception
+    )),
+    before_sleep=lambda _: logging.warning("Rate limited, retrying...")
+)
 def parse_text_with_llm(text: str) -> Dict[str, Any]:
     """Extract structured fields from OCR text using Groq's LLM API"""
     dotenv.load_dotenv()
@@ -254,45 +266,25 @@ follow_up_recommendation, and a 'confidence' sub-object with scores for each fie
 Text:
 {text[:3000]}"""
 
-    import time
-    for attempt in range(3):
-        try:
-            response = client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
-                model="mixtral-8x7b-32768",
-                temperature=0.2,
-                max_tokens=2000,
-                response_format={"type": "json_object"}
-            )
-            response.raise_for_status()  # Check for HTTP errors
+    try:
+        response = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="mixtral-8x7b-32768",
+            temperature=0.2,
+            max_tokens=2000,
+            response_format={"type": "json_object"}
+        )
+        response.raise_for_status()
+        
+        result = json.loads(response.choices[0].message.content)
+        
+        # Validate response structure
+        required = ['patient_name', 'exam_date', 'birads_right', 'birads_left',
+                   'impressions', 'findings', 'follow_up_recommendation', 'confidence']
+        if all(k in result for k in required) and isinstance(result['confidence'], dict):
+            return result
             
-            result = json.loads(response.choices[0].message.content)
-            
-            # Validate response structure
-            required = ['patient_name', 'exam_date', 'birads_right', 'birads_left',
-                       'impressions', 'findings', 'follow_up_recommendation', 'confidence']
-            if all(k in result for k in required) and isinstance(result['confidence'], dict):
-                return result
-                
-            logging.warning(f"Attempt {attempt+1}: Invalid response structure")
-            continue
-
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 429:
-                retry_after = int(e.response.headers.get('Retry-After', 10))
-                logging.warning(f"Rate limited. Waiting {retry_after} seconds...")
-                time.sleep(retry_after)
-                continue
-            logging.error(f"HTTP error: {str(e)}")
-        except (json.JSONDecodeError, KeyError) as e:
-            logging.error(f"Parsing failed: {str(e)}")
-        except Exception as e:
-            logging.error(f"API error: {str(e)}")
-            
-        if attempt < 2:
-            wait_time = (2 ** attempt) * 15  # More conservative backoff
-            logging.warning(f"Waiting {wait_time} seconds before retry...")
-            time.sleep(wait_time)
+        raise ValueError("Invalid response structure from LLM")
             
     raise OCRError("Failed to extract fields after 3 attempts")
 
