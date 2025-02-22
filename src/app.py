@@ -45,7 +45,11 @@ STOP_WORDS = set(stopwords.words('english')).union({
 # Import OCR functions from utilities
 import ocr_utils
 
-login(token="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")
+# Get Hugging Face token from environment variables
+HF_TOKEN = os.getenv("HF_API_KEY")
+if not HF_TOKEN:
+    st.error("Hugging Face API key not found in environment variables")
+login(token=HF_TOKEN)
 
 # Add this after imports but before OCR processing
 if platform.system() == "Windows":

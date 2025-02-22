@@ -116,7 +116,7 @@ def select_best_ocr_result(results):
         # Get LLM scores for each option
         llm_response = parse_text_with_llm(
             f"Score each OCR option (1-10) for coherence and medical field presence. "
-            f"Return JSON with 'scores': [int, ...].\n\n{'\n\n'.join(text_options)}"
+            f"Return JSON with 'scores': [int, ...].\n\n" + '\n\n'.join(text_options)
         )
         llm_scores = llm_response.get('scores', [5] * len(results))  # Default to mid-score if missing
         
@@ -321,7 +321,7 @@ def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[s
         patterns = {
             'patient_name': (
                 r'(?i)(?:patient|name)(?:\s*(?:name|ID)\b)?[:\s\-*]+'
-                r'((?:[A-ZÀ-ÿ][a-zà-ÿ]*-?)+\s*(?:[A-ZÀ-ÿ][a-zà-ÿ]*(?:\s+[A-ZÀ-ÿ][a-zà-ÿ]*)*)'
+                r'((?:[A-ZÀ-ÿ][a-zà-ÿ]*-?)+\s*(?:[A-ZÀ-ÿ][a-zà-ÿ]*(?:\s+[A-ZÀ-ÿ][a-zà-ÿ]*)*))'
             ),
             'exam_date': (
                 r'(?i)(?:date\s*(?:of\s*)?(?:exam|study)|exam\s*date)[:\s\-*]+'
