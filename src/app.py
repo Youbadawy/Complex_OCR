@@ -46,6 +46,8 @@ STOP_WORDS = set(stopwords.words('english')).union({
 import ocr_utils
 
 # Handle Hugging Face authentication
+import dotenv
+dotenv.load_dotenv()  # Load .env file first
 HF_TOKEN = os.getenv("HF_API_KEY")
 if not HF_TOKEN:
     st.error(
