@@ -7,6 +7,7 @@ import os
 import numpy as np
 import dotenv
 import json
+import requests
 from typing import Dict, Any
 from groq import Groq
 from langdetect import detect, LangDetectException
