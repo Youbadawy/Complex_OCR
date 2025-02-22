@@ -35,6 +35,7 @@ from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 from concurrent.futures import ThreadPoolExecutor
 from nltk.corpus import stopwords
+from groq import Groq
 
 # Define common medical stopwords to exclude
 STOP_WORDS = set(stopwords.words('english')).union({
@@ -67,14 +68,12 @@ else:
 
 # Initialize PaddleOCR models
 @st.cache_resource
-def init_paddle_ocr():
+def init_paddle():
     from paddleocr import PaddleOCR
     return PaddleOCR(
         lang='en',
-        use_angle_cls=True,
-        det_model_dir='en_PP-OCRv4_det_infer',
-        rec_model_dir='en_PP-OCRv4_rec_infer', 
-        cls_model_dir='ch_ppocr_mobile_v2.0_cls_infer',
+        det_model_dir=os.path.join('models', 'en_PP-OCRv4_det_infer'),
+        rec_model_dir=os.path.join('models', 'en_PP-OCRv4_rec_infer'),
         show_log=False
     )
 
@@ -109,14 +108,7 @@ def process_single_page(image, page_num, uploaded_file):
             import json
             
             # Initialize PaddleOCR with medical document presets
-            paddle_ocr = PaddleOCR(
-                lang='en',
-                use_angle_cls=True,
-                det_model_dir='en_PP-OCRv4_det_infer',
-                rec_model_dir='en_PP-OCRv4_rec_infer',
-                cls_model_dir='ch_ppocr_mobile_v2.0_cls_infer',
-                show_log=False
-            )
+            paddle_ocr = init_paddle()
             
             # Extract text and layout with PaddleOCR
             result = paddle_ocr.ocr(np.array(image), cls=True)
