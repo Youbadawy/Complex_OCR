@@ -263,15 +263,8 @@ Text:
                 max_tokens=2000,
                 response_format={"type": "json_object"}
             )
-            # If successful, break out of retry loop
-            break
-        except Exception as e:
-            if "rate_limit_exceeded" in str(e).lower() and attempt < 2:
-                wait_time = (2 ** attempt) * 10  # Exponential backoff: 10, 20, 40 seconds
-                logging.warning(f"Rate limited. Waiting {wait_time} seconds before retry...")
-                time.sleep(wait_time)
-                continue
-            raise
+            response.raise_for_status()  # Check for HTTP errors
+            
             result = json.loads(response.choices[0].message.content)
             
             # Validate response structure
@@ -281,10 +274,24 @@ Text:
                 return result
                 
             logging.warning(f"Attempt {attempt+1}: Invalid response structure")
+            continue
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                retry_after = int(e.response.headers.get('Retry-After', 10))
+                logging.warning(f"Rate limited. Waiting {retry_after} seconds...")
+                time.sleep(retry_after)
+                continue
+            logging.error(f"HTTP error: {str(e)}")
         except (json.JSONDecodeError, KeyError) as e:
-            logging.error(f"Attempt {attempt+1} parsing failed: {str(e)}")
+            logging.error(f"Parsing failed: {str(e)}")
         except Exception as e:
-            logging.error(f"Attempt {attempt+1} API error: {str(e)}")
+            logging.error(f"API error: {str(e)}")
+            
+        if attempt < 2:
+            wait_time = (2 ** attempt) * 15  # More conservative backoff
+            logging.warning(f"Waiting {wait_time} seconds before retry...")
+            time.sleep(wait_time)
             
     raise OCRError("Failed to extract fields after 3 attempts")
 
@@ -360,7 +367,7 @@ def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[s
             ),
             'follow-up_recommendation': (
                 r'(?i)(?:recommendations?|follow-?up)\b[:\s]*'
-                r'((?:.*?(?:\n\s*.*?)*?)(?=\n\s*(?:end\s+of\s+report|$))'
+                r'((?:.*?(?:\n\s*.*?)*?)(?=\n\s*(?:end\s+of\s+report|$)))'
             )
         }
 
