@@ -267,6 +267,10 @@ Text:
 {text[:3000]}"""
 
     try:
+        # Log the full prompt and input text
+        logging.info(f"LLM Prompt:\n{prompt}")
+        logging.debug(f"Full Input Text:\n{text[:3000]}")  # Truncated to 3000 chars
+        
         response = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model="mixtral-8x7b-32768",
@@ -279,7 +283,11 @@ Text:
         if not response.choices or not hasattr(response.choices[0].message, 'content'):
             raise ValueError("Invalid Groq API response format")
         
-        result = json.loads(response.choices[0].message.content)
+        # Log the raw API response
+        raw_response = response.choices[0].message.content
+        logging.info(f"Raw API Response:\n{raw_response}")
+        
+        result = json.loads(raw_response)
         
         # Validate response structure
         required = ['patient_name', 'exam_date', 'birads_right', 'birads_left',
