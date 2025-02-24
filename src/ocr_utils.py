@@ -26,10 +26,39 @@ PRE_COMPILED_PATTERNS = {
     'medical_terms': re.compile(r'\b(' + '|'.join(MEDICAL_TERMS) + r')\b', re.IGNORECASE)
 }
 
+# Create default medical dictionaries if missing
+from pathlib import Path
+
+# Create default medical dictionaries if missing
+MEDICAL_TERMS_PATH = Path(__file__).parent / "medical_terms.txt"
+FRENCH_MEDICAL_TERMS_PATH = Path(__file__).parent / "french_medical_terms.txt"
+
+# Create English medical terms file if missing
+if not MEDICAL_TERMS_PATH.exists():
+    default_terms = [
+        "birads", "mammogram", "ultrasound", "impression", "lesion",
+        "calcification", "density", "asymmetry", "biopsy", "benign",
+        "malignant", "screening", "diagnostic", "sonography", "palpable"
+    ]
+    MEDICAL_TERMS_PATH.write_text("\n".join(default_terms))
+
+# Create French medical terms file if missing  
+if not FRENCH_MEDICAL_TERMS_PATH.exists():
+    default_fr_terms = [
+        "mammographie", "échographie", "biopsie", "bénin", "malin",
+        "lésion", "calcification", "asymétrie", "dépistage", "diagnostic",
+        "palpable", "classification", "rapport", "sein", "nodule"
+    ]
+    FRENCH_MEDICAL_TERMS_PATH.write_text("\n".join(default_fr_terms))
+
 # Preload medical dictionary for spell checking
 MEDICAL_DICT = SpellChecker(language=None)
-MEDICAL_DICT.word_frequency.load_text_file('medical_terms.txt')
-MEDICAL_DICT.word_frequency.load_text_file('french_medical_terms.txt')
+MEDICAL_DICT.word_frequency.load_text_file(str(MEDICAL_TERMS_PATH))
+if FRENCH_MEDICAL_TERMS_PATH.exists():
+    MEDICAL_DICT.word_frequency.load_text_file(str(FRENCH_MEDICAL_TERMS_PATH))
+else:
+    logging.warning("French medical terms file not found, using English only")
+
 import aiohttp
 from tenacity import AsyncRetrying
 import json
