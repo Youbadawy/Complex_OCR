@@ -26,7 +26,7 @@ import pytesseract
 import ocr_utils, chatbot_utils
 from huggingface_hub import login
 import plotly.express as px
-from transformers import MarianTokenizer, MarianMTModel
+from transformers import MarianTokenizer, MarianMTModel, AutoModel, AutoProcessor, VisionEncoderDecoderModel, DonutProcessor
 import concurrent.futures
 import logging
 from functools import partial
@@ -94,70 +94,103 @@ logging.basicConfig(
     force=True
 )
 
+# Initialize Donut model
+@st.cache_resource
+def init_donut():
+    processor = DonutProcessor.from_pretrained(
+        "naver-clova-ix/donut-base-finetuned-docvqa",
+        device_map="cuda" if torch.cuda.is_available() else "cpu"
+    )
+    model = VisionEncoderDecoderModel.from_pretrained(
+        "naver-clova-ix/donut-base-finetuned-docvqa",
+        device_map="cuda" if torch.cuda.is_available() else "cpu"
+    )
+    return processor, model
+
 def process_single_page(image, page_num, uploaded_file):
     try:
-        # Enhanced OCR processing with preprocessing
         img_array = np.array(image)
-        try:
-            processed_image = ocr_utils.preprocess_image(img_array)
-        except Exception as e:
-            logging.error(f"Image preprocessing failed: {str(e)}")
-            raise RuntimeError("Image processing failed - invalid image format")
+        processor, donut_model = init_donut()
         
-        # Extract and parse text with error handling
+        # Donut layout analysis
         try:
-            # Hybrid PaddleOCR + Mixtral pipeline
-            from paddleocr import PaddleOCR
-            import json
+            # Prepare image for Donut
+            donut_image = processor(
+                image.convert("RGB"), 
+                return_tensors="pt"
+            ).pixel_values
             
-            # Initialize PaddleOCR with medical document presets
-            paddle_ocr = init_paddle()
-            
-            # Extract text and layout with PaddleOCR
-            result = paddle_ocr.ocr(np.array(image), cls=True)
-            ocr_data = {
-                'raw_text': '\n'.join([line[1][0] for line in result[0]]),
-                'layout': [(line[0], line[1][0]) for line in result[0]],
-                'confidence_scores': [line[1][1] for line in result[0]]
+            # Generate layout parse
+            donut_output = donut_model.generate(
+                donut_image.to(donut_model.device),
+                max_length=512,
+                early_stopping=True
+            )
+            layout_info = processor.batch_decode(donut_output)[0]
+            layout_json = processor.token2json(layout_info)
+        except Exception as e:
+            logging.warning(f"Donut layout analysis failed: {str(e)}")
+            layout_json = {"sections": [], "tables": []}
+
+        # Existing PaddleOCR processing
+        paddle_ocr = init_paddle()
+        result = paddle_ocr.ocr(np.array(image), cls=True)
+        
+        # Enhanced OCR data with layout context
+        ocr_data = {
+            'raw_text': '\n'.join([line[1][0] for line in result[0]]) if result and result[0] else '',
+            'layout': [(line[0], line[1][0]) for line in result[0]] if result and result[0] else [],
+            'document_structure': layout_json,
+            'confidence_scores': [line[1][1] for line in result[0]] if result and result[0] else []
+        }
+
+        # Add error handling for empty OCR results
+        if not ocr_data['raw_text']:
+            logging.warning(f"No text extracted from page {page_num}")
+            structured_data = ocr_utils.default_structured_output()
+            warnings = ['OCR failed - no text detected']
+            return {
+                **structured_data,
+                'source_pdf': uploaded_file.name,
+                'page_number': page_num + 1,
+                'warnings': warnings
             }
+
+        # Enhanced Mixtral prompt with layout context
+        prompt = f"""Medical Document Analysis Task:
+        Document Structure: {layout_json.get('sections', [])}
+        Raw OCR Text: {ocr_data['raw_text'][:3000]}
+        
+        Perform:
+        1. Validate and correct using section boundaries
+        2. Extract tables from {layout_json.get('tables', [])} 
+        3. Structure as JSON with:
+           - patient_info
+           - clinical_history
+           - imaging_findings
+           - birads_assessment
+           - recommendations
+           - identified_tables
+        4. Maintain original medical terminology"""
+        
+        # Context correction with Mixtral 8x7B
+        groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        try:
+            response = groq_client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="mixtral-8x7b-32768",
+                temperature=0.1,
+                max_tokens=2000,
+                response_format={"type": "json_object"}
+            )
             
-            # Context correction with Mixtral 8x7B
-            groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-            prompt = f"""Correct and structure this medical OCR extract:
-            {ocr_data['raw_text'][:3000]}
-
-            1. Fix spacing/segmentation errors
-            2. Identify sections (History, Findings, etc)
-            3. Extract structured JSON with:
-               - patient_info
-               - clinical_history  
-               - exam_details
-               - birads_scores
-               - recommendations
-            4. Maintain original medical terminology"""
-
-            try:
-                response = groq_client.chat.completions.create(
-                    messages=[{"role": "user", "content": prompt}],
-                    model="mixtral-8x7b-32768",
-                    temperature=0.1,
-                    max_tokens=2000,
-                    response_format={"type": "json_object"}
-                )
-                
-                structured_data = json.loads(response.choices[0].message.content)
-                warnings = [] if 'confidence' in structured_data else ['Low confidence flags']
-                
-            except Exception as e:
-                logging.error(f"Mixtral processing failed: {str(e)}")
-                structured_data = ocr_utils.default_structured_output()
-                warnings = ['AI processing failed - using raw OCR']
-        except pytesseract.TesseractError as e:
-            logging.error(f"Tesseract OCR failed: {str(e)}")
-            raise RuntimeError("OCR processing failed - check document quality")
-        except ocr_utils.OCRError as e:
-            logging.error(f"Text extraction failed: {str(e)}")
-            raise RuntimeError("Data extraction failed - unexpected document format")
+            structured_data = json.loads(response.choices[0].message.content)
+            warnings = [] if 'confidence' in structured_data else ['Low confidence flags']
+            
+        except Exception as e:
+            logging.error(f"Mixtral processing failed: {str(e)}")
+            structured_data = ocr_utils.default_structured_output()
+            warnings = ['AI processing failed - using raw OCR']
 
         # Standardized data structure with safe field access
         data = {
@@ -174,8 +207,8 @@ def process_single_page(image, page_num, uploaded_file):
             'source_pdf': uploaded_file.name,
             'page_number': page_num + 1,
             'warnings': ', '.join(warnings) if warnings else 'None',
-            'processing_confidence': 0.0,  # Temporarily disabled confidence scoring
-            'raw_ocr_text': ' '.join(ocr_data['text'])
+            'processing_confidence': 0.0,
+            'raw_ocr_text': ocr_data.get('raw_text', '')  # Safe access
         }
         
         return data

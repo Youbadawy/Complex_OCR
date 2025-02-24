@@ -17,6 +17,7 @@ from spellchecker import SpellChecker
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 def preprocess_image(image, apply_sharpen=True):
     """Preprocess image with adaptive noise handling and enhancement"""
@@ -62,6 +63,7 @@ def preprocess_image(image, apply_sharpen=True):
         
     return binary
 
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def extract_text_tesseract(image):
     """Run Tesseract with multiple page segmentation modes and select best result"""
     psms = ['3', '6', '11']  # Auto, Single Block, Sparse Text
@@ -100,8 +102,16 @@ def extract_text_tesseract(image):
             'avg_conf': avg_conf
         })
     
-    # Select best result using LLM or confidence
-    best_result = select_best_ocr_result(all_results)
+    # Add validation for empty results
+    if not all_results or all(r['avg_conf'] == 0 for r in all_results):
+        logging.error("All Tesseract PSMs failed")
+        return {'text': [], 'confidence': [], 'psm': '0'}
+    
+    # Select best result with confidence check
+    best_result = max(all_results, key=lambda x: x['avg_conf'])
+    if best_result['avg_conf'] < 20:  # Minimum confidence threshold
+        raise OCRError("Low confidence OCR result")
+    
     return {
         'text': best_result['text'],
         'confidence': best_result['confidence'],
