@@ -569,6 +569,64 @@ with tab2:
              pd.read_excel(uploaded_file) if uploaded_file and uploaded_file.name.endswith('.xlsx') else None
 
     if df is not None:
+        # Data Validation Section
+        st.subheader("Data Quality Check")
+        
+        # Validate dates
+        invalid_dates = []
+        if 'exam_date' in df.columns:
+            for idx, date_str in df['exam_date'].items():
+                try:
+                    pd.to_datetime(date_str)
+                except:
+                    invalid_dates.append((idx, date_str))
+                    df.at[idx, 'exam_date'] = "Not Available"
+        
+        # Validate BI-RADS scores
+        invalid_birads = []
+        birads_pattern = re.compile(r'BIRADS[\s-]*([0-6])', re.IGNORECASE)
+        if 'birads_score' in df.columns:
+            for idx, score in df['birads_score'].items():
+                if not birads_pattern.match(str(score)):
+                    invalid_birads.append((idx, score))
+                    df.at[idx, 'birads_score'] = "Not Available"
+
+        # Show validation results
+        col1, col2 = st.columns(2)
+        with col1:
+            if invalid_dates:
+                st.error(f"⚠️ Found {len(invalid_dates)} invalid dates")
+                if st.checkbox("Show invalid date details"):
+                    st.write(pd.DataFrame(invalid_dates, columns=["Row", "Invalid Date"]))
+        
+        with col2:
+            if invalid_birads:
+                st.error(f"⚠️ Found {len(invalid_birads)} invalid BI-RADS scores")
+                if st.checkbox("Show invalid BI-RADS details"):
+                    st.write(pd.DataFrame(invalid_birads, columns=["Row", "Invalid Score"]))
+
+        # Enhanced Visualization
+        st.subheader("Clinical Findings Analysis")
+        tab1, tab2, tab3 = st.tabs(["BI-RADS Distribution", "Findings Analysis", "Temporal Trends"])
+        
+        with tab1:
+            if 'birads_score' in df.columns:
+                plot_birads_distribution(df)
+            else:
+                st.warning("BI-RADS data not available for visualization")
+
+        with tab2:
+            if 'findings' in df.columns:
+                plot_findings_analysis(df)
+            else:
+                st.warning("Findings data not available for visualization")
+
+        with tab3:
+            if 'exam_date' in df.columns:
+                plot_temporal_trends(df)
+            else:
+                st.warning("Date data not available for temporal analysis")
+
         # Basic statistics
         st.subheader("Basic Statistics")
         col1, col2, col3 = st.columns(3)
@@ -898,6 +956,72 @@ def load_translation_model():
         model="Helsinki-NLP/opus-mt-fr-en",
         device=0 if torch.cuda.is_available() else -1
     )
+
+def plot_birads_distribution(df):
+    """Interactive BI-RADS distribution visualization"""
+    birads_counts = df['birads_score'].value_counts().reset_index()
+    birads_counts.columns = ['BI-RADS Category', 'Count']
+    
+    fig = px.bar(
+        birads_counts,
+        x='BI-RADS Category',
+        y='Count',
+        color='BI-RADS Category',
+        title="BI-RADS Category Distribution",
+        labels={'Count': 'Number of Cases'},
+        color_discrete_sequence=px.colors.qualitative.Pastel
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_findings_analysis(df):
+    """Interactive findings analysis visualization"""
+    findings_text = ' '.join(df['findings'].dropna())
+    word_freq = pd.Series(findings_text.lower().split()).value_counts().reset_index()
+    word_freq.columns = ['Term', 'Count']
+    word_freq = word_freq[~word_freq['Term'].isin(STOP_WORDS)]
+    
+    fig = px.pie(
+        word_freq.head(10),
+        names='Term',
+        values='Count',
+        title="Top 10 Clinical Findings Terms",
+        hole=0.3
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_temporal_trends(df):
+    """Interactive temporal trends visualization"""
+    df['exam_date'] = pd.to_datetime(df['exam_date'])
+    df['year'] = df['exam_date'].dt.year
+    
+    # Year selection slider
+    years = sorted(df['year'].unique())
+    selected_year = st.slider(
+        "Select Year Range",
+        min_value=min(years),
+        max_value=max(years),
+        value=(min(years), max(years))
+    )
+    
+    # Filter data
+    filtered = df[(df['year'] >= selected_year[0]) & (df['year'] <= selected_year[1])]
+    monthly_counts = filtered.resample('M', on='exam_date').size().reset_index(name='count')
+    
+    # Create interactive plot
+    fig = px.line(
+        monthly_counts,
+        x='exam_date',
+        y='count',
+        title=f"Exam Trends {selected_year[0]}-{selected_year[1]}",
+        labels={'exam_date': 'Date', 'count': 'Number of Exams'},
+        markers=True
+    )
+    fig.update_layout(
+        hovermode="x unified",
+        xaxis=dict(showgrid=True),
+        yaxis=dict(showgrid=True)
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 if __name__ == "__main__":
     st.write("Medical AI Assistant is running...") 
