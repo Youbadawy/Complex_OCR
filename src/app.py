@@ -1,8 +1,9 @@
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, message=".*missing ScriptRunContext.*")
 warnings.filterwarnings("ignore", category=UserWarning, message=".*device_map.*")
+warnings.filterwarnings("ignore", category=UserWarning)  # Suppress all UserWarnings
 
-# Import Streamlit first 
+# Import Streamlit first
 import streamlit as st
 import time
 import platform
@@ -274,11 +275,10 @@ def process_single_page(image, page_num, uploaded_file):
         if 'IMPRESSION' not in ocr_text and 'BIRADS' not in ocr_text:
             logging.warning(f"Low medical content on page {page_num+1}")
             
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            processor, donut_model = init_donut()
-        
         # Initialize Donut with null checks
+        processor, donut_model = init_donut()
+        
+        if processor is None or donut_model is None:
         processor, donut_model = init_donut()
         if processor is None or donut_model is None:
             raise RuntimeError("Document analysis model failed to initialize")
