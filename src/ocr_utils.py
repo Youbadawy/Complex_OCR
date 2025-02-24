@@ -572,22 +572,46 @@ def validate_llm_results(data: Dict[str, Any]) -> bool:
     return True
 
 def extract_fields_from_text(text: str) -> Dict[str, Any]:
-    """Extract structured fields from OCR text using combined approaches"""
-    # First attempt LLM extraction
-    try:
-        llm_data = parse_text_with_llm(text)
-        if validate_llm_results(llm_data):
-            return llm_data
-    except Exception as e:
-        logging.warning(f"LLM extraction failed: {str(e)}")
-
-    # Regex fallback for critical fields
-    fields = {
-        'patient_name': extract_with_regex(r'(?i)patient(?: name)?:\s*([A-Za-z ,.-]+)', text),
-        'exam_date': extract_with_regex(r'\b\d{4}-\d{2}-\d{2}\b', text),
-        'birads_right': extract_with_regex(r'(?i)right.*?birads.*?(\d)', text),
-        'birads_left': extract_with_regex(r'(?i)left.*?birads.*?(\d)', text)
+    """Extract structured fields with improved error handling"""
+    # Enhanced regex patterns
+    patterns = {
+        'patient_name': (
+            r'(?i)(?:patient|name|nom)\s*[:.]?\s*((?:Dr\.\s)?[A-ZÀ-ÿ][a-zà-ÿ]+(?:\s[A-ZÀ-ÿ][a-zà-ÿ]+){1,3})'
+        ),
+        'exam_date': (
+            r'(?i)(?:date\s+of\s+exam|exam\s+date|date)\s*[:.]?\s*(\d{4}[-/]\d{2}[-/]\d{2})'
+        ),
+        'birads_right': (
+            r'(?i)(?:right\s+breast|sein\s+droit).*?(bi-rads|birads|categorie)\s*[:-]*\s*(\d)'
+        ),
+        'birads_left': (
+            r'(?i)(?:left\s+breast|sein\s+gauche).*?(bi-rads|birads|categorie)\s*[:-]*\s*(\d)'
+        )
     }
+
+    fields = {}
+    for field, pattern in patterns.items():
+        try:
+            match = re.search(pattern, text)
+            fields[field] = match.group(1).strip() if match else None
+        except Exception as e:
+            logging.warning(f"Regex extraction failed for {field}: {str(e)}")
+            fields[field] = None
+
+    # Fallback to LLM for missing critical fields
+    required_fields = ['patient_name', 'exam_date']
+    if any(fields[f] is None for f in required_fields):
+        try:
+            llm_data = parse_text_with_llm(text)
+            if validate_llm_results(llm_data):
+                fields.update({
+                    'patient_name': llm_data.get('patient_name'),
+                    'exam_date': llm_data.get('exam_date'),
+                    'impressions': llm_data.get('impressions'),
+                    'findings': llm_data.get('findings')
+                })
+        except Exception as e:
+            logging.error(f"LLM fallback failed: {str(e)}")
     
     # Add missing null checks
     return {

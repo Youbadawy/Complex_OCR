@@ -1,4 +1,7 @@
-# Import Streamlit first
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, message=".*missing ScriptRunContext.*")
+
+# Import Streamlit first 
 import streamlit as st
 import time
 import platform
@@ -158,13 +161,20 @@ def init_db():
 # Initialize Donut model
 @st.cache_resource
 def init_donut():
+    # Suppress unnecessary warnings
+    from transformers import logging as hf_logging
+    hf_logging.set_verbosity_error()
+    
     processor = DonutProcessor.from_pretrained(
         "naver-clova-ix/donut-base-finetuned-docvqa",
-        device_map="cuda" if torch.cuda.is_available() else "cpu"
+        device_map="auto",
+        use_fast=True  # Force fast processor
     )
+    processor.legacy = False  # Address legacy warning
+    
     model = VisionEncoderDecoderModel.from_pretrained(
         "naver-clova-ix/donut-base-finetuned-docvqa",
-        device_map="cuda" if torch.cuda.is_available() else "cpu"
+        device_map="auto"
     )
     return processor, model
 
@@ -239,7 +249,9 @@ def process_pdf(uploaded_file):
 def process_single_page(image, page_num, uploaded_file):
     try:
         img_array = np.array(image)
-        processor, donut_model = init_donut()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            processor, donut_model = init_donut()
         
         # Donut layout analysis
         try:
@@ -361,7 +373,17 @@ def process_single_page(image, page_num, uploaded_file):
             'raw_ocr_text': ocr_data.get('raw_text', '')  # Safe access
         }
         
-        return data
+        return {
+            'patient_name': structured_data.get('patient_name', 'Unknown'),
+            'exam_date': structured_data.get('exam_date', 'Unknown'),
+            'birads_right': structured_data.get('birads_right', 'Unknown'),
+            'birads_left': structured_data.get('birads_left', 'Unknown'),
+            'impressions': structured_data.get('impressions', 'Not Available'),
+            'findings': ocr_utils.extract_findings_text(structured_data.get('findings', '')),
+            'source_pdf': uploaded_file.name,
+            'page_number': page_num + 1,
+            'processing_confidence': structured_data.get('confidence', {}).get('overall', 0.0)
+        }
     
     except Exception as e:
         logging.error(f"Error processing page {page_num+1} of {uploaded_file.name}", exc_info=True)
