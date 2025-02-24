@@ -784,6 +784,16 @@ def extract_with_template_matching(image):
 def process_template_scale(image_hash: str, template_key: str, scale: float):
     """Process a single template at specific scale"""
     try:
+        # Get template from global TEMPLATES dict
+        template = TEMPLATES.get(template_key)
+        if template is None:
+            return template_key, "Unknown", 0.0, scale, (0,0)
+            
+        # Get image from cache
+        image = IMAGE_CACHE.get(image_hash)
+        if image is None:
+            return template_key, "Unknown", 0.0, scale, (0,0)
+            
         # Scale the template
         scaled_template = cv2.resize(
             template, 
@@ -796,17 +806,17 @@ def process_template_scale(image_hash: str, template_key: str, scale: float):
         
         # Skip if template larger than image
         if t_h > image.shape[0] or t_w > image.shape[1]:
-            return field, "Unknown", 0.0, scale, (0,0)
+            return template_key, "Unknown", 0.0, scale, (0,0)
 
         # Match template
         res = cv2.matchTemplate(image, scaled_template, cv2.TM_CCOEFF_NORMED)
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
         
-        return field, "Unknown", max_val, scale, max_loc
+        return template_key, "Unknown", max_val, scale, max_loc
     
     except Exception as e:
-        logging.warning(f"Scale {scale} failed for {field}: {str(e)}")
-        return field, "Unknown", 0.0, scale, (0,0)
+        logging.warning(f"Scale {scale} failed for {template_key}: {str(e)}")
+        return template_key, "Unknown", 0.0, scale, (0,0)
 
 def clean_additional_text(text):
     """Clean and format remaining OCR text"""
