@@ -572,31 +572,48 @@ def validate_llm_results(data: Dict[str, Any]) -> bool:
     return True
 
 def extract_fields_from_text(text: str) -> Dict[str, Any]:
-    """Extract structured fields from OCR text using combined approaches"""
-    # First attempt LLM extraction
-    try:
-        llm_data = parse_text_with_llm(text)
-        if validate_llm_results(llm_data):
-            return llm_data
-    except Exception as e:
-        logging.warning(f"LLM extraction failed: {str(e)}")
-
-    # Regex fallback for critical fields
-    fields = {
-        'patient_name': re.search(r'(?i)patient(?: name)?:\s*([A-Za-z ,.-]+)', text),
-        'exam_date': re.search(r'\b\d{4}-\d{2}-\d{2}\b', text),
-        'birads_right': re.search(r'(?i)right.*?birads.*?(\d)', text),
-        'birads_left': re.search(r'(?i)left.*?birads.*?(\d)', text)
+    """Extract structured fields from OCR text using regex-first approach"""
+    # Regex patterns for simple fields
+    patterns = {
+        'patient_name': (r'(?i)(?:Patient|Name)\s*:\s*((?:Dr\.\s)?[A-ZÀ-ÿ][a-zà-ÿ]+\s(?:[A-ZÀ-ÿ][a-zà-ÿ]+\s?){1,3})'),
+        'exam_date': (r'(?i)(?:date\s+of\s+exam|exam\s+date)\s*:\s*(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})'),
+        'birads_right': (r'(?i)right\s+breast.*?(bi-rads|birads)\s*[:-]*\s*(\d)'),
+        'birads_left': (r'(?i)left\s+breast.*?(bi-rads|birads)\s*[:-]*\s*(\d)')
     }
+
+    # Extract simple fields with regex first
+    fields = {}
+    for field, pattern in patterns.items():
+        match = re.search(pattern, text)
+        if match:
+            fields[field] = match.group(1 if field == 'patient_name' else -1).strip()
+            
+    # Only use LLM for complex fields if simple fields were found
+    if any(fields.values()):
+        try:
+            complex_fields = parse_text_with_llm(text)
+            fields.update({
+                'impressions': complex_fields.get('impressions'),
+                'findings': complex_fields.get('findings'),
+                'follow_up_recommendation': complex_fields.get('follow_up_recommendation')
+            })
+        except Exception as e:
+            logging.warning(f"LLM extraction failed for complex fields: {str(e)}")
+            fields.update({
+                'impressions': None,
+                'findings': None, 
+                'follow_up_recommendation': None
+            })
     
+    # Ensure all fields exist even if not found
     return {
-        'patient_name': fields['patient_name'].group(1) if fields['patient_name'] else None,
-        'exam_date': fields['exam_date'].group() if fields['exam_date'] else None,
-        'birads_right': fields['birads_right'].group(1) if fields['birads_right'] else None,
-        'birads_left': fields['birads_left'].group(1) if fields['birads_left'] else None,
-        'impressions': None,
-        'findings': None,
-        'follow_up_recommendation': None
+        'patient_name': fields.get('patient_name'),
+        'exam_date': fields.get('exam_date'),
+        'birads_right': fields.get('birads_right'),
+        'birads_left': fields.get('birads_left'),
+        'impressions': fields.get('impressions'),
+        'findings': fields.get('findings'),
+        'follow_up_recommendation': fields.get('follow_up_recommendation')
     }
 
     
