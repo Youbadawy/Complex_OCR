@@ -3,6 +3,7 @@ import pytesseract
 import re
 import asyncio
 import logging
+from typing import Dict, Any, Optional
 from spellchecker import SpellChecker
 from functools import lru_cache
 from hashlib import sha256
@@ -547,6 +548,28 @@ async def handle_llm_response(response_json: dict) -> Dict[str, Any]:
         return result
     except json.JSONDecodeError:
         raise ValueError("Invalid JSON in LLM response")
+
+def validate_llm_results(data: Dict[str, Any]) -> bool:
+    """Validate LLM extraction results"""
+    required_fields = [
+        'patient_name', 'exam_date', 'birads_right', 'birads_left',
+        'impressions', 'findings', 'follow_up_recommendation'
+    ]
+    
+    # Check all required fields exist and aren't None
+    if not all(field in data for field in required_fields):
+        return False
+        
+    # Validate BIRADS scores are valid integers 0-6
+    for field in ['birads_right', 'birads_left']:
+        try:
+            score = int(data[field])
+            if not 0 <= score <= 6:
+                return False
+        except (ValueError, TypeError):
+            return False
+            
+    return True
 
 def extract_fields_from_text(text: str) -> Dict[str, Any]:
     """Extract structured fields from OCR text using combined approaches"""
