@@ -604,11 +604,22 @@ with tab1:
                         try:
                             images = convert_from_bytes(uploaded_file.read(), dpi=300)
                             for page_num, image in enumerate(images):
+                                # Replace PaddleOCR call with hybrid approach
+                                img_array = np.array(image)
+                                try:
+                                    ocr_text = ocr_utils.hybrid_ocr(img_array)
+                                    if "PaddleOCR failed" in caplog.text:
+                                        st.warning(f"Used Tesseract fallback for page {page_num+1}")
+                                except Exception as e:
+                                    logging.error(f"OCR failed for page {page_num+1}: {str(e)}")
+                                    continue
+                                    
                                 future = file_executor.submit(
                                     process_single_page,
                                     image=image,
                                     page_num=page_num,
-                                    uploaded_file=uploaded_file
+                                    uploaded_file=uploaded_file,
+                                    ocr_text=ocr_text
                                 )
                                 futures.append(future)
                         except Exception as e:

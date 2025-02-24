@@ -92,27 +92,43 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 MEDICAL_TERMS = {"birads", "impression", "mammogram", "ultrasound"}
 
 def hybrid_ocr(image: np.ndarray) -> str:
-    """Hybrid OCR pipeline with caching"""
+    """Hybrid OCR pipeline with proper fallback"""
     cache_key = _cache_key(image)
     
     if cache_key in OCR_CACHE:
         return OCR_CACHE[cache_key]
-    # Preprocessing
-    enhanced = cv2.convertScaleAbs(image, alpha=1.5, beta=0)
-    processed = preprocess_image(enhanced)
     
-    # Multi-engine OCR
-    paddle_text = extract_text_paddle(processed)
-    tesseract_text = extract_text_tesseract(processed)
-    
-    # Validate and combine
-    validated = validate_results({
-        "paddle": paddle_text,
-        "tesseract": tesseract_text
-    })
-    
-    OCR_CACHE[cache_key] = validated
-    return validated
+    # Attempt PaddleOCR first with validation
+    paddle_text = ""
+    try:
+        paddle_text = extract_text_paddle(image)
+        if medical_term_score(paddle_text) >= 2:  # At least 2 medical terms
+            OCR_CACHE[cache_key] = paddle_text
+            return paddle_text
+    except Exception as e:
+        logging.warning(f"PaddleOCR failed: {str(e)}")
+
+    # Fallback to Tesseract with enhanced processing
+    try:
+        enhanced = cv2.convertScaleAbs(image, alpha=1.5, beta=40)
+        processed = preprocess_image(enhanced, apply_sharpen=True)
+        
+        tesseract_result = extract_text_tesseract(processed)
+        tesseract_text = ' '.join([t for t, c in zip(tesseract_result['text'], 
+                                   tesseract_result['confidence']) if c > 60])
+        
+        # Validate Tesseract results
+        if medical_term_score(tesseract_text) >= 1:
+            OCR_CACHE[cache_key] = tesseract_text
+            return tesseract_text
+            
+        # Final fallback to raw Tesseract
+        OCR_CACHE[cache_key] = tesseract_text
+        return tesseract_text
+
+    except Exception as e:
+        logging.error(f"All OCR methods failed: {str(e)}")
+        raise OCRError("Hybrid OCR pipeline failed") from e
 
 def validate_results(texts: dict) -> str:
     """Validate OCR results against medical terms"""
@@ -138,26 +154,29 @@ def medical_term_score(text: str) -> int:
     )
 
 def extract_text_paddle(image: np.ndarray) -> str:
-    """Modified PaddleOCR wrapper with tensor tracking"""
+    """Modified PaddleOCR wrapper with initialization checks"""
     try:
-        from paddleocr import PaddleOCR
-        import paddle
-        ocr = PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False)
+        # Check if PaddleOCR is properly initialized
+        if not hasattr(extract_text_paddle, "ocr_instance"):
+            from paddleocr import PaddleOCR
+            extract_text_paddle.ocr_instance = PaddleOCR(
+                use_angle_cls=True, 
+                lang='en', 
+                use_gpu=False,
+                enable_mkldnn=True
+            )
+            
+        # Add health check
+        dummy_check = np.zeros((100,100,3), dtype=np.uint8)
+        extract_text_paddle.ocr_instance.ocr(dummy_check, cls=True)
         
-        # Convert image to proper tensor format
-        input_tensor = paddle.to_tensor(image).transpose([2, 0, 1]).unsqueeze(0)
-        logging.info(f"Input tensor properties: {input_tensor.shape} | {input_tensor.place} | {input_tensor.dtype}")
-        
-        # Run OCR with tensor tracking
-        result = ocr.ocr(input_tensor.numpy(), cls=True)
-        
-        if result and result[0]:
-            return ' '.join([line[1][0] for line in result[0]])
-        return ''
+        # Proceed with actual OCR
+        result = extract_text_paddle.ocr_instance.ocr(image, cls=True)
+        return ' '.join([line[1][0] for line in result[0]]) if result else ""
         
     except Exception as e:
-        logging.error(f"PaddleOCR failed: {str(e)}")
-        return ''
+        logging.error(f"PaddleOCR critical failure: {str(e)}")
+        raise  # This will trigger the fallback in hybrid_ocr
 
 def preprocess_image(image, apply_sharpen=True, downscale_factor=1.0):
     """Optimized image preprocessing with caching"""
