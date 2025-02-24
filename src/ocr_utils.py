@@ -92,43 +92,48 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 MEDICAL_TERMS = {"birads", "impression", "mammogram", "ultrasound"}
 
 def hybrid_ocr(image: np.ndarray) -> str:
-    """Hybrid OCR pipeline with proper fallback"""
     cache_key = _cache_key(image)
     
     if cache_key in OCR_CACHE:
         return OCR_CACHE[cache_key]
     
-    # Attempt PaddleOCR first with validation
+    # Enhanced image preprocessing
+    processed_img = preprocess_image(image, apply_sharpen=True, downscale_factor=1.2)
+    
+    # Attempt PaddleOCR with validation
     paddle_text = ""
     try:
-        paddle_text = extract_text_paddle(image)
-        if medical_term_score(paddle_text) >= 2:  # At least 2 medical terms
+        if ocr_utils.extract_text_paddle.ocr_instance is None:
+            raise RuntimeError("PaddleOCR not initialized")
+            
+        result = ocr_utils.extract_text_paddle.ocr_instance.ocr(processed_img, cls=True)
+        paddle_text = ' '.join([line[1][0] for line in result[0]]) if result else ""
+        
+        # Lower medical term threshold for initial pass
+        if medical_term_score(paddle_text) >= 1:  
             OCR_CACHE[cache_key] = paddle_text
             return paddle_text
+            
     except Exception as e:
         logging.warning(f"PaddleOCR failed: {str(e)}")
 
     # Fallback to Tesseract with enhanced processing
     try:
-        enhanced = cv2.convertScaleAbs(image, alpha=1.5, beta=40)
-        processed = preprocess_image(enhanced, apply_sharpen=True)
+        enhanced = cv2.convertScaleAbs(processed_img, alpha=1.8, beta=50)
+        tesseract_result = extract_text_tesseract(enhanced)
         
-        tesseract_result = extract_text_tesseract(processed)
-        tesseract_text = ' '.join([t for t, c in zip(tesseract_result['text'], 
-                                   tesseract_result['confidence']) if c > 60])
+        # More lenient confidence threshold for medical texts
+        tesseract_text = ' '.join([
+            t for t, c in zip(tesseract_result['text'], 
+            tesseract_result['confidence']) if c > 40
+        ])
         
-        # Validate Tesseract results
-        if medical_term_score(tesseract_text) >= 1:
-            OCR_CACHE[cache_key] = tesseract_text
-            return tesseract_text
-            
-        # Final fallback to raw Tesseract
         OCR_CACHE[cache_key] = tesseract_text
         return tesseract_text
 
     except Exception as e:
         logging.error(f"All OCR methods failed: {str(e)}")
-        raise OCRError("Hybrid OCR pipeline failed") from e
+        return ""  # Return empty instead of raising to allow partial processing
 
 def validate_results(texts: dict) -> str:
     """Validate OCR results against medical terms"""

@@ -253,8 +253,23 @@ def process_pdf(uploaded_file):
 
 def process_single_page(image, page_num, uploaded_file):
     try:
-        import warnings
-        img_array = np.array(image)
+        img_array = np.array(image.convert('RGB'))
+        
+        # Get OCR text with fallback
+        ocr_text = ocr_utils.hybrid_ocr(img_array)
+        
+        # Handle empty OCR results
+        if not ocr_text.strip():
+            return {
+                'error': f"Page {page_num+1}: No text extracted",
+                'source_pdf': uploaded_file.name,
+                'page_number': page_num + 1
+            }
+            
+        # Validate medical content
+        if 'IMPRESSION' not in ocr_text and 'BIRADS' not in ocr_text:
+            logging.warning(f"Low medical content on page {page_num+1}")
+            
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             processor, donut_model = init_donut()
