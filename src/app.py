@@ -634,15 +634,6 @@ with tab1:
                             error_msg = f"Failed to process {uploaded_file.name}: {str(e)}"
                             logging.error(error_msg, exc_info=True)
                             error_messages.append(error_msg)
-                                    
-                                future = file_executor.submit(
-                                    process_single_page,
-                                    image=image,
-                                    page_num=page_num,
-                                    uploaded_file=uploaded_file,
-                                    ocr_text=ocr_text
-                                )
-                                futures.append(future)
                         except Exception as e:
                             error_msg = f"Failed to process {uploaded_file.name}: {str(e)}"
                             logging.error(error_msg, exc_info=True)
