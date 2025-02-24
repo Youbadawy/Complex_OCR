@@ -862,34 +862,58 @@ def apply_regex_validation(results):
     return results
 
 def extract_findings_text(findings):
-    """Convert structured findings data to plain text with error handling"""
+    """Convert structured findings data to plain text with robust error handling"""
     try:
-        # Handle stringified JSON from CSV imports
+        # Handle null/empty case first
+        if not findings:
+            return ""
+        
+        # Attempt JSON parsing if string
         if isinstance(findings, str):
             try:
                 findings = json.loads(findings)
-            except json.JSONDecodeError:
-                return findings  # Return raw string if not JSON
+            except json.JSONDecodeError as e:
+                logging.warning(f"Failed to parse findings JSON: {e}")
+                return findings  # Return raw string as fallback
 
-        # Process list of finding dictionaries
+        # Process list of finding dictionaries with index tracking
         if isinstance(findings, list):
             descriptions = []
-            for item in findings:
-                if isinstance(item, dict):
-                    desc = item.get('description', '')
-                    if desc:  # Only add non-empty descriptions
-                        descriptions.append(desc.strip(' .'))
-            return ' '.join(descriptions) if descriptions else ''
-        
-        # Handle single dictionary case
+            for idx, item in enumerate(findings):
+                try:
+                    if isinstance(item, dict):
+                        # Extract multiple possible fields
+                        desc = item.get('description', '')
+                        loc = item.get('location', '')
+                        meas = item.get('measurements', '')
+                        
+                        # Clean and combine fields
+                        parts = [loc, meas, desc]
+                        clean_desc = ' - '.join(filter(None, parts)).strip()
+                        if clean_desc:
+                            descriptions.append(f"{idx+1}. {clean_desc}")
+                    elif item:  # Handle string/numeric entries
+                        descriptions.append(str(item).strip())
+                except Exception as e:
+                    logging.warning(f"Error processing item {idx}: {str(e)}")
+                    continue
+            
+            return '\n'.join(descriptions) if descriptions else ''
+
+        # Process single finding dictionary
         if isinstance(findings, dict):
-            return findings.get('description', '')
-        
-        return str(findings)
+            return '\n'.join(
+                f"{k}: {v}" 
+                for k, v in findings.items() 
+                if k != 'confidence' and v
+            )
+
+        # Fallback for unexpected types
+        return str(findings).strip()
     
     except Exception as e:
-        logging.error(f"Findings extraction error: {str(e)}", exc_info=True)
-        return ''  # Return empty string on failure
+        logging.error(f"Findings extraction failed: {str(e)}", exc_info=True)
+        return ""
 
 def default_structured_output():
     """Fallback structure for failed extractions"""
