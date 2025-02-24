@@ -4,6 +4,15 @@ import time
 import platform
 import os
 import json
+import pdfplumber
+import hashlib
+from concurrent.futures import ProcessPoolExecutor
+import sqlite3
+from pathlib import Path
+
+# Database configuration
+DB_PATH = "mammo_reports.db"
+BATCH_SIZE = 10
 # import streamlit_authenticator as stauth  # <- Comment this
 
 # Set page config immediately after import
@@ -114,6 +123,58 @@ def init_donut():
         device_map="cuda" if torch.cuda.is_available() else "cpu"
     )
     return processor, model
+
+def process_pdf_batch(batch):
+    """Process 10 PDFs in parallel with mixed text/OCR"""
+    with ProcessPoolExecutor(max_workers=min(len(batch), 4)) as executor:
+        futures = {executor.submit(process_pdf, pdf): pdf for pdf in batch}
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                result = future.result()
+                yield result
+            except Exception as e:
+                logging.error(f"Processing failed: {str(e)}")
+
+def process_pdf(uploaded_file):
+    """Process single PDF with hybrid text/OCR extraction"""
+    file_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
+    
+    # Check cache
+    if Path(DB_PATH).exists():
+        with sqlite3.connect(DB_PATH) as conn:
+            cached = conn.execute("""
+                SELECT findings, metadata FROM reports
+                WHERE md5_hash = ?
+            """, (file_hash,)).fetchone()
+            if cached:
+                return json.loads(cached[0]), json.loads(cached[1])
+
+    # Hybrid extraction
+    text_content = []
+    with pdfplumber.open(uploaded_file) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text()
+            if len(text) > 50:  # Valid text page
+                text_content.append(text)
+            else:  # Scanned page
+                img = page.to_image(resolution=300).original
+                page_text = ocr_utils.hybrid_ocr(img)
+                text_content.append(page_text)
+
+    # Process and cache
+    structured_data = ocr_utils.process_text("\n".join(text_content))
+    metadata = {
+        "md5_hash": file_hash,
+        "filename": uploaded_file.name,
+        "pages": len(text_content)
+    }
+    
+    save_to_db({
+        **structured_data,
+        "metadata": metadata
+    })
+    
+    return structured_data, metadata
 
 def process_single_page(image, page_num, uploaded_file):
     try:
@@ -340,13 +401,32 @@ with tab1:
         if not uploaded_files:
             st.warning("Please upload at least one PDF file")
         else:
-            with st.spinner("Processing PDFs..."):
+            with st.spinner("Processing PDFs in batches..."):
+                init_db()
+                total_files = len(uploaded_files)
                 extracted_data = []
                 error_messages = []
                 template_warnings = []
                 
-                # Add template matching status
-                template_status = st.empty()
+                # Process in batches
+                for i in range(0, total_files, BATCH_SIZE):
+                    batch = uploaded_files[i:i+BATCH_SIZE]
+                    batch_results = []
+                    
+                    for result in process_pdf_batch(batch):
+                        batch_results.append(result)
+                        
+                    # Update progress
+                    progress = min((i + len(batch)) / total_files, 1.0)
+                    st.progress(progress)
+                    
+                    # Update session state
+                    if batch_results:
+                        new_df = pd.DataFrame(batch_results)
+                        st.session_state['df'] = pd.concat([
+                            st.session_state.get('df', pd.DataFrame()),
+                            new_df
+                        ])
                 
                 # Create progress bar
                 progress_bar = st.progress(0)
@@ -750,6 +830,38 @@ st.sidebar.markdown("### Resources")
 st.sidebar.markdown("- [Clinical Guidelines](https://example.com)")
 st.sidebar.markdown("- [Medical Knowledge Base](https://example.com)")
 st.sidebar.markdown("- [Emergency Protocols](https://example.com)")
+
+# Database functions
+def init_db():
+    """Initialize SQLite database with schema"""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS reports (
+                md5_hash TEXT PRIMARY KEY,
+                filename TEXT,
+                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                patient_name TEXT,
+                exam_date TEXT,
+                findings TEXT,
+                metadata TEXT
+            )
+        """)
+
+def save_to_db(data: dict):
+    """Save processed results to database"""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("""
+            INSERT OR REPLACE INTO reports 
+            (md5_hash, filename, patient_name, exam_date, findings, metadata)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            data['md5_hash'],
+            data['filename'],
+            data.get('patient_name'),
+            data.get('exam_date'),
+            json.dumps(data.get('findings')),
+            json.dumps(data['metadata'])
+        ))
 
 # Add to sidebar section at bottom of file
 st.sidebar.title("Mammogram Analysis Dashboard")

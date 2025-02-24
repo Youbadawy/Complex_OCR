@@ -19,6 +19,50 @@ from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
 from tenacity import retry, stop_after_attempt, wait_fixed
 
+# Constants for medical term validation
+MEDICAL_TERMS = {"birads", "impression", "mammogram", "ultrasound"}
+
+def hybrid_ocr(image: np.ndarray) -> str:
+    """Hybrid OCR pipeline with text validation"""
+    # Preprocessing
+    enhanced = cv2.convertScaleAbs(image, alpha=1.5, beta=0)
+    processed = preprocess_image(enhanced)
+    
+    # Multi-engine OCR
+    paddle_text = paddle_ocr(processed)
+    tesseract_text = tesseract_ocr(processed)
+    
+    # Validate and combine
+    validated = validate_results({
+        "paddle": paddle_text,
+        "tesseract": tesseract_text
+    })
+    
+    return validated
+
+def validate_results(texts: dict) -> str:
+    """Validate OCR results against medical terms"""
+    corrections = {
+        r"\bIMPRessiON\b": "IMPRESSION",
+        r"\baimost\b": "almost",
+        r"\bMamm0gram\b": "Mammogram"
+    }
+    
+    best_text = max(texts.values(), key=lambda t: medical_term_score(t))
+    
+    # Apply regex corrections
+    for pattern, replacement in corrections.items():
+        best_text = re.sub(pattern, replacement, best_text, flags=re.IGNORECASE)
+        
+    return best_text
+
+def medical_term_score(text: str) -> int:
+    """Score text based on medical term presence"""
+    return sum(
+        1 for term in MEDICAL_TERMS
+        if re.search(rf"\b{term}\b", text, re.IGNORECASE)
+    )
+
 def preprocess_image(image, apply_sharpen=True):
     """Preprocess image with adaptive noise handling and enhancement"""
     # Convert to grayscale and measure contrast
