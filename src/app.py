@@ -97,42 +97,57 @@ else:
 def init_paddle():
     from paddleocr import PaddleOCR
     import paddle
+    import os
     
     try:
-        # Clear existing cache if present
-        if hasattr(init_paddle, "ocr_instance"):
-            del init_paddle.ocr_instance
+        # Clear CUDA cache if available
+        if paddle.is_compiled_with_cuda():
+            paddle.device.cuda.empty_cache()
             
-        # Force CPU mode for stability
-        paddle.set_device('cpu')
+        # Create model cache directory if needed
+        model_dir = os.path.join(os.path.expanduser("~"), ".paddleocr")
+        os.makedirs(model_dir, exist_ok=True)
         
-        # Initialize with verified v4 models
+        # Initialize with explicit model paths
         ocr = PaddleOCR(
             lang='en',
-            use_gpu=False,  # Force CPU until GPU issues resolved
-            det_model_dir=hf_hub_download('PaddlePaddle/PaddleOCR', 'en_PP-OCRv4_det_infer'),
-            rec_model_dir=hf_hub_download('PaddlePaddle/PaddleOCR', 'en_PP-OCRv4_rec_infer'),
+            use_gpu=False,
+            det_model_dir=hf_hub_download(
+                'PaddlePaddle/PaddleOCR', 
+                'en_PP-OCRv4_det_infer',
+                cache_dir=model_dir
+            ),
+            rec_model_dir=hf_hub_download(
+                'PaddlePaddle/PaddleOCR',
+                'en_PP-OCRv4_rec_infer', 
+                cache_dir=model_dir
+            ),
+            cls_model_dir=hf_hub_download(
+                'PaddlePaddle/PaddleOCR',
+                'ch_ppocr_mobile_v2.0_cls_infer',
+                cache_dir=model_dir
+            ),
             use_angle_cls=True,
             show_log=False,
             enable_mkldnn=True,
-            drop_score=0.4  # Lower threshold for medical documents
+            drop_score=0.4
         )
         
-        # Test with sample medical text image
-        test_img = np.zeros((100,400,3), dtype=np.uint8)
-        cv2.putText(test_img, "Mammogram Report", (10,30), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
-        result = ocr.ocr(test_img)
+        # Validate with actual OCR test
+        test_img = np.zeros((300, 300, 3), dtype=np.uint8)
+        cv2.putText(test_img, "Medical Report", (50,150), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+        result = ocr.ocr(test_img, cls=True)
         
-        if not result or not result[0]:
-            raise RuntimeError("PaddleOCR failed basic test")
+        if not result or not result[0] or "Medical" not in result[0][0][1][0]:
+            raise RuntimeError("PaddleOCR validation test failed")
             
         return ocr
         
     except Exception as e:
-        logging.error(f"PaddlePaddle initialization failed: {str(e)}")
-        st.error("OCR engine failed to initialize - check GPU memory and model files")
-        raise RuntimeError("PaddlePaddle initialization error") from e
+        logging.critical(f"PaddleOCR initialization failed: {str(e)}")
+        st.error("Failed to initialize OCR engine - check model files and permissions")
+        return None
 
 # Add this after imports but before OCR processing
 if platform.system() == "Windows":
@@ -167,25 +182,35 @@ def init_db():
 # Initialize Donut model
 @st.cache_resource
 def init_donut():
-    """Initialize Donut model with explicit device handling"""
+    """Initialize Donut model with enhanced validation"""
     try:
-        from transformers import logging as hf_logging
-        hf_logging.set_verbosity_error()
-        
         processor = DonutProcessor.from_pretrained(
-            "naver-clova-ix/donut-base-finetuned-docvqa"
+            "naver-clova-ix/donut-base-finetuned-docvqa",
+            revision="official"  # Pin to stable version
         )
         
-        # Explicit device handling
         device = "cuda" if torch.cuda.is_available() else "cpu"
+        if device == "cuda":
+            torch.cuda.empty_cache()
+            
         model = VisionEncoderDecoderModel.from_pretrained(
-            "naver-clova-ix/donut-base-finetuned-docvqa"
+            "naver-clova-ix/donut-base-finetuned-docvqa",
+            revision="official"
         ).to(device)
         
+        # Validate with test image
+        test_img = Image.new('RGB', (300, 300), color=(255,255,255))
+        pixel_values = processor(test_img, return_tensors="pt").pixel_values
+        output = model.generate(pixel_values.to(device), max_length=5)
+        decoded = processor.batch_decode(output)[0]
+        
+        if not decoded:
+            raise ValueError("Donut validation failed")
+            
         return processor, model
+        
     except Exception as e:
-        logging.error(f"Donut initialization failed: {str(e)}")
-        st.error("Failed to initialize document analysis model")
+        logging.critical(f"Donut initialization failed: {str(e)}")
         return None, None
 
 def process_pdf_batch(batch):
@@ -261,16 +286,24 @@ def process_single_page(image, page_num, uploaded_file):
     try:
         img_array = np.array(image.convert('RGB'))
         
-        # Get OCR text with fallback
+        # Initialize OCR engines with fallback
+        paddle_ocr = init_paddle()
+        if paddle_ocr is None:
+            raise OCRError("PaddleOCR initialization failed")
+            
+        # Get OCR text with retry
         ocr_text = ocr_utils.hybrid_ocr(img_array)
-        
-        # Handle empty OCR results
         if not ocr_text.strip():
             return {
                 'error': f"Page {page_num+1}: No text extracted",
                 'source_pdf': uploaded_file.name,
                 'page_number': page_num + 1
             }
+            
+        # Initialize Donut with validation
+        processor, donut_model = init_donut()
+        if processor is None or donut_model is None:
+            raise OCRError("Document analysis model failed")
             
         # Validate medical content
         if 'IMPRESSION' not in ocr_text and 'BIRADS' not in ocr_text:
