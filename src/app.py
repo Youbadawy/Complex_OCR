@@ -792,33 +792,36 @@ with tab2:
         if 'findings' in df.columns:
             st.subheader("Common Findings")
             
-            # Preprocess findings with type safety
+            def convert_to_str(item):
+                """Safely convert findings data to strings"""
+                if isinstance(item, dict):
+                    return item.get('description', '')  # Match our data structure
+                elif isinstance(item, list):
+                    return ' '.join([convert_to_str(i) for i in item])
+                elif isinstance(item, str):
+                    return item
+                else:  # Handle numbers/other types
+                    return str(item)
+
+            # Process findings with type safety
             with st.spinner("Processing clinical findings..."):
                 try:
-                    # Convert all findings to strings first
-                    df['findings_processed'] = df['findings'].apply(
-                        lambda x: str(ocr_utils.extract_findings_text(x)) if pd.notnull(x) else ''
+                    # Convert all findings to cleaned strings
+                    df['findings'] = df['findings'].apply(
+                        lambda x: convert_to_str(ocr_utils.extract_findings_text(x))
                     )
                     
-                    # Debug type distribution
+                    # Debug type distribution if needed
                     if st.checkbox("Show findings type debug info"):
                         st.write("Findings type distribution:")
                         st.write(df['findings'].apply(type).value_counts())
-                        
-                        st.write("Processed findings type distribution:")
-                        st.write(df['findings_processed'].apply(type).value_counts())
-                        
-                        st.write("Sample findings before processing:")
-                        st.write(df['findings'].head(3).to_dict())
-                        
                         st.write("Sample processed findings:")
-                        st.write(df['findings_processed'].head(3).to_dict())
+                        st.write(df['findings'].head(3).to_dict())
                     
-                    # Now safely join strings
-                    findings_text = " ".join(
-                        [str(t) for t in df['findings_processed'] if pd.notnull(t)]
+                    # Now safely join validated strings
+                    findings_text = ' '.join(
+                        df['findings'].dropna().astype(str)
                     )
-                    
                 except Exception as e:
                     st.error(f"Failed to process findings: {str(e)}")
                     logging.error(f"Findings processing failed: {str(e)}")
