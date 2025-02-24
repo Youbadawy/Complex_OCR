@@ -92,36 +92,40 @@ else:
         st.stop()
 
 # Initialize PaddleOCR models
-@st.cache_resource
+@st.cache_resource(show_spinner="Initializing OCR Engine...")
 def init_paddle():
     from paddleocr import PaddleOCR
     import paddle
     
     try:
-        # Initialize PaddlePaddle environment first
-        place = paddle.CUDAPlace(0) if torch.cuda.is_available() else paddle.CPUPlace()
-        paddle.disable_static(place)  # Enable dynamic graph mode
+        # Clear existing cache if present
+        if hasattr(init_paddle, "ocr_instance"):
+            del init_paddle.ocr_instance
+            
+        # Force CPU mode for stability
+        paddle.set_device('cpu')
         
-        # Explicitly initialize a tensor to force memory allocation
-        dummy_tensor = paddle.zeros([1, 3, 640, 640])  # Match typical OCR input shape
-        dummy_tensor = dummy_tensor.cuda() if torch.cuda.is_available() else dummy_tensor
-        logging.info(f"PaddlePaddle initialized with {dummy_tensor.place}")
-        
-        # Initialize OCR with verified parameters
+        # Initialize with verified v4 models
         ocr = PaddleOCR(
             lang='en',
-            use_gpu=torch.cuda.is_available(),
-            det_model_dir=os.path.join('models', 'en_PP-OCRv4_det_infer'),
-            rec_model_dir=os.path.join('models', 'en_PP-OCRv4_rec_infer'),
+            use_gpu=False,  # Force CPU until GPU issues resolved
+            det_model_dir=hf_hub_download('PaddlePaddle/PaddleOCR', 'en_PP-OCRv4_det_infer'),
+            rec_model_dir=hf_hub_download('PaddlePaddle/PaddleOCR', 'en_PP-OCRv4_rec_infer'),
             use_angle_cls=True,
             show_log=False,
-            enable_mkldnn=not torch.cuda.is_available(),
-            drop_score=0.6
+            enable_mkldnn=True,
+            drop_score=0.4  # Lower threshold for medical documents
         )
         
-        # Force model initialization with dummy data
-        ocr.ocr(dummy_tensor.numpy(), cls=True)
+        # Test with sample medical text image
+        test_img = np.zeros((100,400,3), dtype=np.uint8)
+        cv2.putText(test_img, "Mammogram Report", (10,30), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+        result = ocr.ocr(test_img)
         
+        if not result or not result[0]:
+            raise RuntimeError("PaddleOCR failed basic test")
+            
         return ocr
         
     except Exception as e:
