@@ -648,24 +648,30 @@ with tab1:
                 # Create final dataframe after processing all pages
                 if extracted_data:
                     try:
-                        # Convert all findings to strings before DataFrame creation
-                        for record in extracted_data:
-                            record['findings'] = ocr_utils.extract_findings_text(record.get('findings', ''))
-                            
-                        st.session_state['df'] = pd.DataFrame(extracted_data)
+                        # Convert all entries to valid dicts
+                        valid_data = []
+                        for entry in extracted_data:
+                            if 'error' not in entry:
+                                valid_data.append({
+                                    'patient_name': entry.get('patient_name', 'Unknown'),
+                                    'exam_date': entry.get('exam_date', 'Unknown'),
+                                    'birads_right': entry.get('birads_right', 'Unknown'),
+                                    'birads_left': entry.get('birads_left', 'Unknown'),
+                                    'findings': entry.get('findings', ''),
+                                    'source_pdf': entry.get('source_pdf', 'Unknown'),
+                                    'page_number': entry.get('page_number', 0)
+                                })
                         
-                        # Final type validation
-                        st.session_state['df']['findings'] = st.session_state['df']['findings'].apply(
-                            lambda x: ocr_utils.extract_findings_text(x) if not isinstance(x, str) else x
-                        )
-                        
-                        st.success(f"Processed {len(extracted_data)} pages successfully")
-                        st.dataframe(st.session_state['df'])  # Display full dataframe immediately
-                        
+                        if valid_data:
+                            st.session_state['df'] = pd.DataFrame(valid_data)
+                            st.success(f"Processed {len(valid_data)} valid pages")
+                            st.dataframe(st.session_state['df'])
+                        else:
+                            st.warning("No valid data extracted from any pages")
+
                     except Exception as e:
-                        error_msg = f"Data formatting failed: {str(e)}"
-                        logging.error(error_msg, exc_info=True)
-                        st.error(error_msg)
+                        st.error(f"Data formatting failed: {str(e)}")
+                        logging.error(f"Data formatting error: {str(e)}", exc_info=True)
     
     # Display results
     if 'df' in st.session_state:
