@@ -105,14 +105,18 @@ def hybrid_ocr(image: np.ndarray) -> str:
     # Multi-engine OCR with error handling
     texts = {}
     try:
-        texts["paddle"] = extract_text_paddle(processed)
+        texts["paddle"] = str(extract_text_paddle(processed))  # Ensure string conversion
     except Exception as e:
         logging.warning(f"PaddleOCR failed: {str(e)}")
+        texts["paddle"] = ""  # Ensure empty string fallback
         
     try: 
-        texts["tesseract"] = extract_text_tesseract(processed)['text']
+        tesseract_result = extract_text_tesseract(processed)
+        # Convert list to string and handle empty results
+        texts["tesseract"] = ' '.join(tesseract_result['text']) if tesseract_result['text'] else ""
     except Exception as e:
         logging.error(f"Tesseract failed: {str(e)}")
+        texts["tesseract"] = ""  # Ensure string fallback
     
     # Validate and cache result
     result = validate_results(texts)
@@ -127,16 +131,29 @@ def validate_results(texts: dict) -> str:
         r"\bMamm0gram\b": "Mammogram"
     }
     
-    best_text = max(texts.values(), key=lambda t: medical_term_score(t))
+    # Ensure all values are strings
+    validated_texts = {k: str(v) for k, v in texts.items()}
     
-    # Apply regex corrections
+    best_text = max(validated_texts.values(), key=lambda t: medical_term_score(t))
+    
+    # Apply regex corrections with null checks
+    if not isinstance(best_text, str):
+        best_text = ""
+        
     for pattern, replacement in corrections.items():
-        best_text = re.sub(pattern, replacement, best_text, flags=re.IGNORECASE)
+        try:
+            best_text = re.sub(pattern, replacement, best_text, flags=re.IGNORECASE)
+        except TypeError:
+            best_text = ""
+            logging.error("Invalid text type for regex substitution")
         
     return best_text
 
 def medical_term_score(text: str) -> int:
     """Score text based on medical term presence"""
+    if not isinstance(text, str):
+        return 0
+        
     return sum(
         1 for term in MEDICAL_TERMS
         if re.search(rf"\b{term}\b", text, re.IGNORECASE)

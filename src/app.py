@@ -204,9 +204,10 @@ def process_page(page):
     try:
         text = page.extract_text()
         if len(text) > 50:
-            return text
+            return str(text)  # Ensure string conversion
         img = page.to_image(resolution=300).original
-        return ocr_utils.hybrid_ocr(img)
+        ocr_result = ocr_utils.hybrid_ocr(img)
+        return str(ocr_result) if ocr_result else ""
     except Exception as e:
         logging.error(f"Page processing error: {str(e)}")
         return ""
