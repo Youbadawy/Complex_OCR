@@ -92,48 +92,32 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 MEDICAL_TERMS = {"birads", "impression", "mammogram", "ultrasound"}
 
 def hybrid_ocr(image: np.ndarray) -> str:
+    """Hybrid OCR pipeline with text validation"""
     cache_key = _cache_key(image)
     
     if cache_key in OCR_CACHE:
         return OCR_CACHE[cache_key]
-    
-    # Enhanced image preprocessing
-    processed_img = preprocess_image(image, apply_sharpen=True, downscale_factor=1.2)
-    
-    # Attempt PaddleOCR with validation
-    paddle_text = ""
-    try:
-        if ocr_utils.extract_text_paddle.ocr_instance is None:
-            raise RuntimeError("PaddleOCR not initialized")
-            
-        result = ocr_utils.extract_text_paddle.ocr_instance.ocr(processed_img, cls=True)
-        paddle_text = ' '.join([line[1][0] for line in result[0]]) if result else ""
         
-        # Lower medical term threshold for initial pass
-        if medical_term_score(paddle_text) >= 1:  
-            OCR_CACHE[cache_key] = paddle_text
-            return paddle_text
-            
+    # Enhanced preprocessing
+    enhanced = cv2.convertScaleAbs(image, alpha=1.5, beta=40)
+    processed = preprocess_image(enhanced, apply_sharpen=True)
+    
+    # Multi-engine OCR with error handling
+    texts = {}
+    try:
+        texts["paddle"] = extract_text_paddle(processed)
     except Exception as e:
         logging.warning(f"PaddleOCR failed: {str(e)}")
-
-    # Fallback to Tesseract with enhanced processing
-    try:
-        enhanced = cv2.convertScaleAbs(processed_img, alpha=1.8, beta=50)
-        tesseract_result = extract_text_tesseract(enhanced)
         
-        # More lenient confidence threshold for medical texts
-        tesseract_text = ' '.join([
-            t for t, c in zip(tesseract_result['text'], 
-            tesseract_result['confidence']) if c > 40
-        ])
-        
-        OCR_CACHE[cache_key] = tesseract_text
-        return tesseract_text
-
+    try: 
+        texts["tesseract"] = extract_text_tesseract(processed)['text']
     except Exception as e:
-        logging.error(f"All OCR methods failed: {str(e)}")
-        return ""  # Return empty instead of raising to allow partial processing
+        logging.error(f"Tesseract failed: {str(e)}")
+    
+    # Validate and cache result
+    result = validate_results(texts)
+    OCR_CACHE[cache_key] = result
+    return result
 
 def validate_results(texts: dict) -> str:
     """Validate OCR results against medical terms"""
@@ -158,30 +142,36 @@ def medical_term_score(text: str) -> int:
         if re.search(rf"\b{term}\b", text, re.IGNORECASE)
     )
 
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def extract_text_paddle(image: np.ndarray) -> str:
-    """Modified PaddleOCR wrapper with initialization checks"""
+    """Extract text using PaddleOCR with health checks and retries"""
     try:
-        # Check if PaddleOCR is properly initialized
+        # Use current initialization pattern
         if not hasattr(extract_text_paddle, "ocr_instance"):
             from paddleocr import PaddleOCR
             extract_text_paddle.ocr_instance = PaddleOCR(
-                use_angle_cls=True, 
-                lang='en', 
+                use_angle_cls=True,
+                lang='en',
                 use_gpu=False,
                 enable_mkldnn=True
             )
             
-        # Add health check
+        # Health check
         dummy_check = np.zeros((100,100,3), dtype=np.uint8)
         extract_text_paddle.ocr_instance.ocr(dummy_check, cls=True)
         
-        # Proceed with actual OCR
+        # Process with validation
         result = extract_text_paddle.ocr_instance.ocr(image, cls=True)
-        return ' '.join([line[1][0] for line in result[0]]) if result else ""
+        text = ' '.join([line[1][0] for line in result[0]]) if result else ""
+        
+        if not text.strip():
+            raise ValueError("Empty OCR result")
+            
+        return text
         
     except Exception as e:
         logging.error(f"PaddleOCR critical failure: {str(e)}")
-        raise  # This will trigger the fallback in hybrid_ocr
+        raise
 
 def preprocess_image(image, apply_sharpen=True, downscale_factor=1.0):
     """Optimized image preprocessing with caching"""
