@@ -2,6 +2,7 @@ import cv2
 import pytesseract
 import re
 import asyncio
+import logging
 from spellchecker import SpellChecker
 from functools import lru_cache
 from hashlib import sha256
