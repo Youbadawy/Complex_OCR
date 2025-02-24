@@ -336,7 +336,7 @@ def process_single_page(image, page_num, uploaded_file):
             'birads_right': structured_data.get('birads_right', 'Unknown'),
             'birads_left': structured_data.get('birads_left', 'Unknown'),
             'impressions': structured_data.get('impressions', 'Unknown'),
-            'findings': structured_data.get('findings', 'Unknown'),
+            'findings': ocr_utils.extract_findings_text(structured_data.get('findings', 'Unknown')),
             'follow-up_recommendation': structured_data.get('follow-up_recommendation', 'Unknown'),
             'source_pdf': uploaded_file.name,
             'page_number': page_num + 1,
@@ -610,7 +610,17 @@ with tab1:
                 # Create final dataframe after processing all pages
                 if extracted_data:
                     try:
+                        # Convert all findings to strings before DataFrame creation
+                        for record in extracted_data:
+                            record['findings'] = ocr_utils.extract_findings_text(record.get('findings', ''))
+                            
                         st.session_state['df'] = pd.DataFrame(extracted_data)
+                        
+                        # Final type validation
+                        st.session_state['df']['findings'] = st.session_state['df']['findings'].apply(
+                            lambda x: ocr_utils.extract_findings_text(x) if not isinstance(x, str) else x
+                        )
+                        
                         st.success(f"Processed {len(extracted_data)} pages successfully")
                         st.dataframe(st.session_state['df'])  # Display full dataframe immediately
                         
