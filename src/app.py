@@ -279,9 +279,9 @@ def process_single_page(image, page_num, uploaded_file):
         processor, donut_model = init_donut()
         
         if processor is None or donut_model is None:
-        processor, donut_model = init_donut()
-        if processor is None or donut_model is None:
-            raise RuntimeError("Document analysis model failed to initialize")
+            processor, donut_model = init_donut()
+            if processor is None or donut_model is None:
+                raise RuntimeError("Document analysis model failed to initialize")
                 
         # Prepare image with device awareness
         donut_image = processor(
