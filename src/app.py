@@ -91,23 +91,39 @@ else:
 @st.cache_resource
 def init_paddle():
     from paddleocr import PaddleOCR
+    import paddle
     
     try:
-        return PaddleOCR(
+        # Initialize PaddlePaddle environment first
+        place = paddle.CUDAPlace(0) if torch.cuda.is_available() else paddle.CPUPlace()
+        paddle.disable_static(place)  # Enable dynamic graph mode
+        
+        # Explicitly initialize a tensor to force memory allocation
+        dummy_tensor = paddle.zeros([1, 3, 640, 640])  # Match typical OCR input shape
+        dummy_tensor = dummy_tensor.cuda() if torch.cuda.is_available() else dummy_tensor
+        logging.info(f"PaddlePaddle initialized with {dummy_tensor.place}")
+        
+        # Initialize OCR with verified parameters
+        ocr = PaddleOCR(
             lang='en',
-            use_gpu=torch.cuda.is_available(),  # Auto GPU detection
+            use_gpu=torch.cuda.is_available(),
             det_model_dir=os.path.join('models', 'en_PP-OCRv4_det_infer'),
             rec_model_dir=os.path.join('models', 'en_PP-OCRv4_rec_infer'),
             use_angle_cls=True,
             show_log=False,
-            enable_mkldnn=not torch.cuda.is_available(),  # CPU optim only when no GPU
-            use_tensorrt=False,   # Disable TensorRT for stability
+            enable_mkldnn=not torch.cuda.is_available(),
             drop_score=0.6
         )
+        
+        # Force model initialization with dummy data
+        ocr.ocr(dummy_tensor.numpy(), cls=True)
+        
+        return ocr
+        
     except Exception as e:
-        logging.error(f"PaddleOCR init failed: {str(e)}")
-        st.error("OCR engine failed to initialize - check model files")
-        raise
+        logging.error(f"PaddlePaddle initialization failed: {str(e)}")
+        st.error("OCR engine failed to initialize - check GPU memory and model files")
+        raise RuntimeError("PaddlePaddle initialization error") from e
 
 # Add this after imports but before OCR processing
 if platform.system() == "Windows":
