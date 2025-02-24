@@ -676,6 +676,36 @@ def apply_regex_validation(results):
         
     return results
 
+def extract_findings_text(findings):
+    """Convert structured findings data to plain text with error handling"""
+    try:
+        # Handle stringified JSON from CSV imports
+        if isinstance(findings, str):
+            try:
+                findings = json.loads(findings)
+            except json.JSONDecodeError:
+                return findings  # Return raw string if not JSON
+
+        # Process list of finding dictionaries
+        if isinstance(findings, list):
+            descriptions = []
+            for item in findings:
+                if isinstance(item, dict):
+                    desc = item.get('description', '')
+                    if desc:  # Only add non-empty descriptions
+                        descriptions.append(desc.strip(' .'))
+            return ' '.join(descriptions) if descriptions else ''
+        
+        # Handle single dictionary case
+        if isinstance(findings, dict):
+            return findings.get('description', '')
+        
+        return str(findings)
+    
+    except Exception as e:
+        logging.error(f"Findings extraction error: {str(e)}", exc_info=True)
+        return ''  # Return empty string on failure
+
 def default_structured_output():
     """Fallback structure for failed extractions"""
     return {

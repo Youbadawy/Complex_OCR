@@ -542,12 +542,32 @@ with tab2:
         # Findings analysis
         if 'findings' in df.columns:
             st.subheader("Common Findings")
-            findings_text = " ".join(df['findings'].dropna())
-            if findings_text:
+            
+            # Preprocess findings with error handling
+            with st.spinner("Processing clinical findings..."):
+                try:
+                    df['findings_processed'] = df['findings'].apply(
+                        lambda x: ocr_utils.extract_findings_text(x) if pd.notnull(x) else ''
+                    )
+                    findings_text = " ".join(df['findings_processed'])
+                except Exception as e:
+                    st.error("Failed to process findings data")
+                    logging.error(f"Findings processing failed: {str(e)}")
+                    findings_text = ""
+
+            if findings_text.strip():
+                # Clean and analyze text
+                findings_text = re.sub(r'[^\w\s.-]', '', findings_text)  # Remove special chars
                 word_freq = pd.Series(findings_text.lower().split()).value_counts()[:10]
-                st.bar_chart(word_freq)
+                
+                # Display results
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    st.bar_chart(word_freq)
+                with col2:
+                    st.metric("Unique Terms Found", len(word_freq))
             else:
-                st.write("No findings data available")
+                st.write("No analyzable findings data available")
 
         # Interactive exam trends over time
         if 'exam_date' in df.columns:
