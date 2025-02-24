@@ -137,14 +137,23 @@ def medical_term_score(text: str) -> int:
     )
 
 def extract_text_paddle(image: np.ndarray) -> str:
-    """Extract text using PaddleOCR"""
+    """Modified PaddleOCR wrapper with tensor tracking"""
     try:
         from paddleocr import PaddleOCR
-        ocr = PaddleOCR(use_angle_cls=True, lang='en')
-        result = ocr.ocr(image, cls=True)
+        import paddle
+        ocr = init_paddle()
+        
+        # Convert image to proper tensor format
+        input_tensor = paddle.to_tensor(image).transpose([2, 0, 1]).unsqueeze(0)
+        logging.info(f"Input tensor properties: {input_tensor.shape} | {input_tensor.place} | {input_tensor.dtype}")
+        
+        # Run OCR with tensor tracking
+        result = ocr.ocr(input_tensor.numpy(), cls=True)
+        
         if result and result[0]:
             return ' '.join([line[1][0] for line in result[0]])
         return ''
+        
     except Exception as e:
         logging.error(f"PaddleOCR failed: {str(e)}")
         return ''
