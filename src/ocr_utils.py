@@ -3,6 +3,18 @@ import pytesseract
 import re
 import asyncio
 from spellchecker import SpellChecker
+from functools import lru_cache
+from hashlib import sha256
+import numpy as np
+
+# Initialize caches with 100MB max memory (approx)
+IMAGE_CACHE = {}
+OCR_CACHE = {}
+LLM_CACHE = {}
+
+def _cache_key(image: np.ndarray) -> str:
+    """Generate cache key from image data"""
+    return sha256(image.tobytes()).hexdigest()
 
 # Constants for medical term validation
 MEDICAL_TERMS = {"birads", "impression", "mammogram", "ultrasound"}
@@ -43,7 +55,11 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 MEDICAL_TERMS = {"birads", "impression", "mammogram", "ultrasound"}
 
 def hybrid_ocr(image: np.ndarray) -> str:
-    """Hybrid OCR pipeline with text validation"""
+    """Hybrid OCR pipeline with caching"""
+    cache_key = _cache_key(image)
+    
+    if cache_key in OCR_CACHE:
+        return OCR_CACHE[cache_key]
     # Preprocessing
     enhanced = cv2.convertScaleAbs(image, alpha=1.5, beta=0)
     processed = preprocess_image(enhanced)
@@ -58,6 +74,7 @@ def hybrid_ocr(image: np.ndarray) -> str:
         "tesseract": tesseract_text
     })
     
+    OCR_CACHE[cache_key] = validated
     return validated
 
 def validate_results(texts: dict) -> str:
@@ -97,7 +114,11 @@ def extract_text_paddle(image: np.ndarray) -> str:
         return ''
 
 def preprocess_image(image, apply_sharpen=True, downscale_factor=1.0):
-    """Optimized image preprocessing with conditional operations"""
+    """Optimized image preprocessing with caching"""
+    cache_key = _cache_key(image) + f"_{apply_sharpen}_{downscale_factor}"
+    
+    if cache_key in IMAGE_CACHE:
+        return IMAGE_CACHE[cache_key]
     # Downscale if specified
     if downscale_factor < 1.0:
         h, w = image.shape[:2]
@@ -137,6 +158,7 @@ def preprocess_image(image, apply_sharpen=True, downscale_factor=1.0):
         kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
         binary = cv2.filter2D(binary, -1, kernel)
         
+    IMAGE_CACHE[cache_key] = binary
     return binary
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
@@ -758,7 +780,8 @@ def extract_with_template_matching(image):
     
     return results, warnings
 
-def process_template_scale(image, template, field, scale):
+@lru_cache(maxsize=100)
+def process_template_scale(image_hash: str, template_key: str, scale: float):
     """Process a single template at specific scale"""
     try:
         # Scale the template

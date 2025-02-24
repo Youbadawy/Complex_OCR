@@ -3,6 +3,7 @@ import streamlit as st
 import time
 import platform
 import os
+import psutil
 import json
 import pdfplumber
 import hashlib
@@ -13,6 +14,16 @@ from pathlib import Path
 # Database configuration
 DB_PATH = "mammo_reports.db"
 BATCH_SIZE = 10
+
+def manage_caches():
+    """Auto-clear caches when memory usage exceeds 80%"""
+    process = psutil.Process()
+    mem_info = process.memory_info()
+    
+    if mem_info.rss / (1024 ** 3) > 0.8:  # 0.8GB threshold
+        ocr_utils.IMAGE_CACHE.clear()
+        ocr_utils.OCR_CACHE.clear()
+        st.rerun()
 # import streamlit_authenticator as stauth  # <- Comment this
 
 # Set page config immediately after import
@@ -166,6 +177,7 @@ def process_page(page):
 
 def process_pdf(uploaded_file):
     """Process PDF with parallel page processing"""
+    manage_caches()  # Check memory before processing
     file_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
     
     # Check cache
@@ -983,6 +995,12 @@ with tab3:
         st.rerun()
 
 # Add footer with resource links
+# Cache status display
+st.sidebar.markdown("### Cache Status")
+st.sidebar.write(f"Preprocessed Images: {len(ocr_utils.IMAGE_CACHE)}")
+st.sidebar.write(f"OCR Results: {len(ocr_utils.OCR_CACHE)}")
+st.sidebar.write(f"LLM Responses: {len(ocr_utils.LLM_CACHE)}")
+
 st.sidebar.markdown("### Resources")
 st.sidebar.markdown("- [Clinical Guidelines](https://example.com)")
 st.sidebar.markdown("- [Medical Knowledge Base](https://example.com)")
