@@ -1,5 +1,6 @@
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, message=".*missing ScriptRunContext.*")
+warnings.filterwarnings("ignore", category=UserWarning, message=".*device_map.*")
 
 # Import Streamlit first 
 import streamlit as st
@@ -161,22 +162,26 @@ def init_db():
 # Initialize Donut model
 @st.cache_resource
 def init_donut():
-    # Suppress unnecessary warnings
-    from transformers import logging as hf_logging
-    hf_logging.set_verbosity_error()
-    
-    processor = DonutProcessor.from_pretrained(
-        "naver-clova-ix/donut-base-finetuned-docvqa",
-        device_map="auto",
-        use_fast=True  # Force fast processor
-    )
-    processor.legacy = False  # Address legacy warning
-    
-    model = VisionEncoderDecoderModel.from_pretrained(
-        "naver-clova-ix/donut-base-finetuned-docvqa",
-        device_map="auto"
-    )
-    return processor, model
+    """Initialize Donut model with explicit device handling"""
+    try:
+        from transformers import logging as hf_logging
+        hf_logging.set_verbosity_error()
+        
+        processor = DonutProcessor.from_pretrained(
+            "naver-clova-ix/donut-base-finetuned-docvqa"
+        )
+        
+        # Explicit device handling
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = VisionEncoderDecoderModel.from_pretrained(
+            "naver-clova-ix/donut-base-finetuned-docvqa"
+        ).to(device)
+        
+        return processor, model
+    except Exception as e:
+        logging.error(f"Donut initialization failed: {str(e)}")
+        st.error("Failed to initialize document analysis model")
+        return None, None
 
 def process_pdf_batch(batch):
     """Process 10 PDFs in parallel with mixed text/OCR"""
@@ -254,24 +259,29 @@ def process_single_page(image, page_num, uploaded_file):
             warnings.simplefilter("ignore")
             processor, donut_model = init_donut()
         
-        # Donut layout analysis
-        try:
-            # Prepare image for Donut
-            donut_image = processor(
-                image.convert("RGB"), 
-                return_tensors="pt"
-            ).pixel_values
+        # Initialize Donut with null checks
+        processor, donut_model = init_donut()
+        if processor is None or donut_model is None:
+            raise RuntimeError("Document analysis model failed to initialize")
+                
+        # Prepare image with device awareness
+        donut_image = processor(
+            image.convert("RGB"), 
+            return_tensors="pt"
+        ).pixel_values.to(donut_model.device)  # Add device alignment
             
-            # Generate layout parse
+        # Generate layout parse with error handling
+        try:
             donut_output = donut_model.generate(
-                donut_image.to(donut_model.device),
+                donut_image,
                 max_length=512,
-                early_stopping=True
+                early_stopping=True,
+                num_beams=3  # Required when using early_stopping
             )
             layout_info = processor.batch_decode(donut_output)[0]
             layout_json = processor.token2json(layout_info)
         except Exception as e:
-            logging.warning(f"Donut layout analysis failed: {str(e)}")
+            logging.warning(f"Layout analysis failed, using fallback: {str(e)}")
             layout_json = {"sections": [], "tables": []}
 
         # Existing PaddleOCR processing
@@ -649,10 +659,10 @@ with tab1:
                 # Create final dataframe after processing all pages
                 if extracted_data:
                     try:
-                        # Convert all entries to valid dicts
+                        # Convert all entries to valid dicts with null checks
                         valid_data = []
                         for entry in extracted_data:
-                            if 'error' not in entry:
+                            if 'error' not in entry and entry.get('birads_right') not in [None, 'Unknown']:
                                 valid_data.append({
                                     'patient_name': entry.get('patient_name', 'Unknown'),
                                     'exam_date': entry.get('exam_date', 'Unknown'),
@@ -667,8 +677,15 @@ with tab1:
                             st.session_state['df'] = pd.DataFrame(valid_data)
                             st.success(f"Processed {len(valid_data)} valid pages")
                             st.dataframe(st.session_state['df'])
+                            
+                            # Show sample structured data
+                            structured_sample = ocr_utils.convert_to_structured_json(
+                                st.session_state['df'].iloc[0].to_dict()
+                            )
+                            st.json(structured_sample)
                         else:
                             st.warning("No valid data extracted from any pages")
+                            st.session_state['df'] = pd.DataFrame()  # Ensure empty DF
 
                     except Exception as e:
                         st.error(f"Data formatting failed: {str(e)}")
