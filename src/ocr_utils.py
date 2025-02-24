@@ -459,25 +459,19 @@ def parse_text_with_llm(text: str) -> Dict[str, Any]:
 
     client = Groq(api_key=api_key)
     
-    prompt = f"""Extract ONLY these complex fields from mammogram report:
-- Clinical impressions (key conclusions)
-- Detailed findings (locations, measurements)
-- Follow-up recommendations
+    prompt = f"""Extract structured medical information from this mammogram report text.
+Return JSON with these fields:
+- patient_name
+- exam_date (YYYY-MM-DD format)
+- birads_right (0-6)
+- birads_left (0-6) 
+- impressions
+- findings
+- follow_up_recommendation
+- confidence (0-100)
 
-Return JSON with:
-{{
-  "impressions": "string",
-  "findings": "string",
-  "follow_up_recommendation": "string",
-  "confidence": {{
-    "impressions": 0-100,
-    "findings": 0-100,
-    "follow_up_recommendation": 0-100
-  }}
-}}
-
-Text excerpt:
-{text[:2500]}"""
+Report text:
+{text[:3000]}"""
 
     try:
         # Log the full prompt and input text
@@ -555,92 +549,32 @@ async def handle_llm_response(response_json: dict) -> Dict[str, Any]:
         raise ValueError("Invalid JSON in LLM response")
 
 def extract_fields_from_text(text: str) -> Dict[str, Any]:
-    """Extract fields using regex first, then LLM for complex fields"""
-    # Regex patterns for simple fields
-    patterns = {
-        'patient_name': (
-            r'(?i)(?:patient|name)\s*:\s*((?:Dr\.\s)?[A-ZÀ-ÿ][a-zà-ÿ]+\s(?:[A-ZÀ-ÿ][a-zà-ÿ]+\s?){1,3})'
-        ),
-        'exam_date': (
-            r'(?i)(?:date\s+of\s+exam|exam\s+date)\s*:\s*(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})'
-        ),
-        'birads_right': (
-            r'(?i)right\s+breast.*?(bi-rads|birads)\s*[:-]*\s*(\d)'
-        ),
-        'birads_left': (
-            r'(?i)left\s+breast.*?(bi-rads|birads)\s*[:-]*\s*(\d)'
-        )
+    """Extract structured fields from OCR text using combined approaches"""
+    # First attempt LLM extraction
+    try:
+        llm_data = parse_text_with_llm(text)
+        if validate_llm_results(llm_data):
+            return llm_data
+    except Exception as e:
+        logging.warning(f"LLM extraction failed: {str(e)}")
+
+    # Regex fallback for critical fields
+    fields = {
+        'patient_name': re.search(r'(?i)patient(?: name)?:\s*([A-Za-z ,.-]+)', text),
+        'exam_date': re.search(r'\b\d{4}-\d{2}-\d{2}\b', text),
+        'birads_right': re.search(r'(?i)right.*?birads.*?(\d)', text),
+        'birads_left': re.search(r'(?i)left.*?birads.*?(\d)', text)
     }
-
-    # Extract simple fields with regex
-    fields = {}
-    for field, pattern in patterns.items():
-        match = re.search(pattern, text)
-        if match:
-            fields[field] = match.group(1 if field == 'patient_name' else -1).strip()
-            
-    # Standardize dates
-    if 'exam_date' in fields:
-        fields['exam_date'] = format_date(fields['exam_date'])
-
-    # Now handle complex fields with LLM
-    complex_fields = get_complex_fields_via_llm(text)
     
-    return {**fields, **complex_fields}
-
-    # Regex fallback for any missing critical fields
-    missing_fields = [k for k, v in fields.items() if v is None]
-    if missing_fields:
-        # Enhanced regex patterns with multi-line support and medical context
-        patterns = {
-            'patient_name': (
-                r'(?i)(?:patient|name)(?:\s*(?:name|ID)\b)?[:\s\-*]+'
-                r'((?:[A-ZÀ-ÿ][a-zà-ÿ]*-?)+\s*(?:[A-ZÀ-ÿ][a-zà-ÿ]*(?:\s+[A-ZÀ-ÿ][a-zà-ÿ]*)*))'
-            ),
-            'exam_date': (
-                r'(?i)(?:date\s*(?:of\s*)?(?:exam|study)|exam\s*date)[:\s\-*]+'
-                r'(\b(?:20\d{2}[-/](?:0[1-9]|1[0-2])[-/](?:0[1-9]|[12][0-9]|3[01])|'
-                r'(?:0[1-9]|1[0-2])[-/](?:0[1-9]|[12][0-9]|3[01])[-/]20\d{2})\b)'
-            ),
-            'birads_right': (
-                r'(?i)(?:bi-rads|birads|breast\s+imaging\s+reporting\s+.*?)\s*'
-                r'(?:right|rt\.?)\b[\s:\-]*(\d)'
-            ),
-            'birads_left': (
-                r'(?i)(?:bi-rads|birads|breast\s+imaging\s+reporting\s+.*?)\s*'
-                r'(?:left|lt\.?)\b[\s:\-]*(\d)'
-            ),
-            'impressions': (
-                r'(?i)(?:impressions?|conclusions?)\b[:\s]*'
-                r'((?:.*?(?:\n\s*.*?)*?)(?=\n\s*(?:recommendations?|findings|follow-?up|$))'
-            ),
-            'clinical_history': (
-                r'(?i)(?:clinical\s+history|patient\s+history)\b[:\s]*'
-                r'((?:.*?(?:\n\s*.*?)*?)(?=\n\s*(?:exam|findings|impressions|$))'
-            ),
-            'findings': (
-                r'(?i)(?:findings|results)\b[:\s]*'
-                r'((?:.*?(?:\n\s*.*?)*?)(?=\n\s*(?:impressions|recommendations?|$))'
-            ),
-            'follow-up_recommendation': (
-                r'(?i)(?:recommendations?|follow-?up)\b[:\s]*'
-                r'((?:.*?(?:\n\s*.*?)*?)(?=\n\s*(?:end\s+of\s+report|$)))'
-            )
-        }
-
-        for field, pattern in patterns.items():
-            if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
-                captured = match.group(1).strip()
-                # Post-process based on field type
-                if field == 'patient_name':
-                    captured = re.sub(r'\s+', ' ', captured).title()
-                elif field in ('birads_right', 'birads_left'):
-                    captured = max(0, min(int(captured), 6)) if captured.isdigit() else None
-                elif field == 'exam_date':
-                    captured = re.sub(r'[/]', '-', captured)
-                
-                if captured:
-                    fields[field] = captured
+    return {
+        'patient_name': fields['patient_name'].group(1) if fields['patient_name'] else None,
+        'exam_date': fields['exam_date'].group() if fields['exam_date'] else None,
+        'birads_right': fields['birads_right'].group(1) if fields['birads_right'] else None,
+        'birads_left': fields['birads_left'].group(1) if fields['birads_left'] else None,
+        'impressions': None,
+        'findings': None,
+        'follow_up_recommendation': None
+    }
 
     
     return fields, []
@@ -966,24 +900,6 @@ def format_date(match):
         return pd.to_datetime(match.group()).strftime('%Y-%m-%d')
     except:
         return match.group()
-def get_complex_fields_via_llm(text: str) -> Dict[str, Any]:
-    """Get only complex fields from LLM"""
-    try:
-        response = parse_text_with_llm(text)
-        return {
-            'impressions': response.get('impressions'),
-            'findings': response.get('findings'),
-            'follow_up_recommendation': response.get('follow_up_recommendation'),
-            'confidence': response.get('confidence', {})
-        }
-    except Exception as e:
-        logging.warning(f"LLM failed: {str(e)}")
-        return {
-            'impressions': None,
-            'findings': None, 
-            'follow_up_recommendation': None,
-            'confidence': {}
-        }
 def init_paddle():
     """Initialize PaddleOCR with default settings"""
     from paddleocr import PaddleOCR
