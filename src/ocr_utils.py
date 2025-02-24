@@ -4,6 +4,7 @@ import re
 import asyncio
 import aiohttp
 from tenacity import AsyncRetrying
+import json
 import pandas as pd
 from pytesseract import Output
 import os
@@ -438,6 +439,46 @@ Text:
     except Exception as e:
         logging.error(f"LLM extraction failed: {str(e)}")
         raise OCRError("Failed to extract fields after 3 attempts") from e
+
+def create_llm_prompt(text: str) -> str:
+    """Create a standardized prompt for LLM processing"""
+    return f"""Extract structured medical information from this mammogram report text.
+Focus on patient details, exam dates, BIRADS scores, and key findings.
+
+Report text:
+{text}
+
+Return a JSON response with these fields:
+- patient_name
+- exam_date 
+- birads_right
+- birads_left
+- impressions
+- findings
+- follow_up_recommendation
+"""
+
+async def handle_llm_response(response_json: dict) -> Dict[str, Any]:
+    """Process and validate LLM API response"""
+    if not isinstance(response_json, dict):
+        raise ValueError("Invalid response format")
+    
+    # Extract choices array
+    choices = response_json.get('choices', [])
+    if not choices:
+        raise ValueError("Empty response from LLM")
+        
+    # Get content from first choice
+    content = choices[0].get('message', {}).get('content', '')
+    if not content:
+        raise ValueError("No content in LLM response")
+        
+    # Parse JSON content
+    try:
+        result = json.loads(content)
+        return result
+    except json.JSONDecodeError:
+        raise ValueError("Invalid JSON in LLM response")
 
 def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[str, Any]:
     """Extract fields using LLM first, with regex fallback for missing fields"""
