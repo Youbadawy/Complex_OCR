@@ -1,6 +1,9 @@
 import cv2
 import pytesseract
 import re
+import asyncio
+import aiohttp
+from tenacity import AsyncRetrying
 import pandas as pd
 from pytesseract import Output
 import os
@@ -77,9 +80,17 @@ def extract_text_paddle(image: np.ndarray) -> str:
         return ''
 
 def preprocess_image(image, apply_sharpen=True):
-    """Preprocess image with adaptive noise handling and enhancement"""
-    # Convert to grayscale and measure contrast
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    """Preprocess image with adaptive noise handling and GPU acceleration"""
+    if cv2.cuda.getCudaEnabledDeviceCount() > 0:
+        gpu_img = cv2.cuda_GpuMat()
+        gpu_img.upload(image)
+        # CUDA-accelerated operations
+        gray = cv2.cuda.cvtColor(gpu_img, cv2.COLOR_BGR2GRAY)
+        contrast = cv2.cuda.mean(cv2.cuda.Laplacian(gray, cv2.CV_64F))[0]
+        result = gray.download()
+    else:
+        # CPU fallback
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     contrast = cv2.Laplacian(gray, cv2.CV_64F).var()
     
     # Adaptive noise reduction for low-contrast images
@@ -574,7 +585,7 @@ def convert_to_structured_json(df):
     }
 
 def extract_with_template_matching(image):
-    """Multi-scale template matching with parallel processing"""
+    """Multi-scale template matching with resource-aware parallel processing"""
     # Map field names to template filenames
     field_template_map = {
         'document_date': 'date_template',
@@ -583,6 +594,10 @@ def extract_with_template_matching(image):
         'patient_name': 'patient_template',
         'impressions': 'impressions_template'
     }
+    
+    # Adjusted parallel processing settings
+    max_workers = min(os.cpu_count(), 4)  # Prevent over-subscription
+    scales = np.linspace(0.9, 1.1, 3)  # Reduced scale range for efficiency
     results = {k: "Unknown" for k in field_template_map.keys()}
     results['additional_information'] = ""
     warnings = []

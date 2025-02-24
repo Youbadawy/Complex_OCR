@@ -84,11 +84,12 @@ def init_paddle():
     try:
         return PaddleOCR(
             lang='en',
+            use_gpu=torch.cuda.is_available(),  # Auto GPU detection
             det_model_dir=os.path.join('models', 'en_PP-OCRv4_det_infer'),
             rec_model_dir=os.path.join('models', 'en_PP-OCRv4_rec_infer'),
             use_angle_cls=True,
             show_log=False,
-            enable_mkldnn=True,  # Optimize for CPU
+            enable_mkldnn=not torch.cuda.is_available(),  # CPU optim only when no GPU
             use_tensorrt=False,   # Disable TensorRT for stability
             drop_score=0.6
         )
@@ -151,8 +152,20 @@ def process_pdf_batch(batch):
             except Exception as e:
                 logging.error(f"Processing failed: {str(e)}")
 
+def process_page(page):
+    """Process individual page with error handling"""
+    try:
+        text = page.extract_text()
+        if len(text) > 50:
+            return text
+        img = page.to_image(resolution=300).original
+        return ocr_utils.hybrid_ocr(img)
+    except Exception as e:
+        logging.error(f"Page processing error: {str(e)}")
+        return ""
+
 def process_pdf(uploaded_file):
-    """Process single PDF with hybrid text/OCR extraction"""
+    """Process PDF with parallel page processing"""
     file_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
     
     # Check cache
@@ -165,17 +178,20 @@ def process_pdf(uploaded_file):
             if cached:
                 return json.loads(cached[0]), json.loads(cached[1])
 
-    # Hybrid extraction
+    # Parallel page processing
     text_content = []
     with pdfplumber.open(uploaded_file) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text()
-            if len(text) > 50:  # Valid text page
-                text_content.append(text)
-            else:  # Scanned page
-                img = page.to_image(resolution=300).original
-                page_text = ocr_utils.hybrid_ocr(img)
-                text_content.append(page_text)
+        with ThreadPoolExecutor(max_workers=min(4, os.cpu_count())) as executor:
+            page_futures = {
+                executor.submit(process_page, page): page
+                for page in pdf.pages
+            }
+            for future in concurrent.futures.as_completed(page_futures):
+                try:
+                    page_text = future.result()
+                    text_content.append(page_text)
+                except Exception as e:
+                    logging.error(f"Page failed: {str(e)}")
 
     # Process and cache
     structured_data = ocr_utils.process_text("\n".join(text_content))
