@@ -723,15 +723,23 @@ with tab1:
                                 valid_data.append({
                                     'patient_name': entry.get('patient_name', 'Unknown'),
                                     'exam_date': entry.get('exam_date', 'Unknown'),
-                                    'birads_right': entry.get('birads_right', 'Unknown'),
-                                    'birads_left': entry.get('birads_left', 'Unknown'),
+                                    'birads_right': int(entry.get('birads_right', 0)),
+                                    'birads_left': int(entry.get('birads_left', 0)),
                                     'findings': entry.get('findings', ''),
                                     'source_pdf': entry.get('source_pdf', 'Unknown'),
-                                    'page_number': entry.get('page_number', 0)
+                                    'page_number': int(entry.get('page_number', 0)),
+                                    'processing_confidence': float(entry.get('processing_confidence', 0.0))
                                 })
                         
                         if valid_data:
-                            st.session_state['df'] = pd.DataFrame(valid_data)
+                            df = pd.DataFrame(valid_data).astype({
+                                'birads_right': 'int8',
+                                'birads_left': 'int8',
+                                'processing_confidence': 'float32',
+                                'page_number': 'int32'
+                            })
+                            df['exam_date'] = pd.to_datetime(df['exam_date'], errors='coerce').dt.date
+                            st.session_state['df'] = df.dropna(subset=['patient_name', 'exam_date'])
                             st.success(f"Processed {len(valid_data)} valid pages")
                             st.dataframe(st.session_state['df'])
                             
