@@ -248,6 +248,7 @@ def process_pdf(uploaded_file):
 
 def process_single_page(image, page_num, uploaded_file):
     try:
+        import warnings
         img_array = np.array(image)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
