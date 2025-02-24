@@ -347,6 +347,37 @@ from groq import Groq
     )),
     before_sleep=lambda _: logging.warning("Rate limited, retrying...")
 )
+async def parse_text_with_llm_async(text: str) -> Dict[str, Any]:
+    """Async version of LLM parsing with rate limiting"""
+    semaphore = asyncio.Semaphore(5)  # Max 5 concurrent requests
+    async with semaphore:
+        async with aiohttp.ClientSession() as session:
+            async for attempt in AsyncRetrying(stop=stop_after_attempt(3)):
+                with attempt:
+                    prompt = create_llm_prompt(text)
+                    async with session.post(
+                        "https://api.groq.com/v1/chat/completions",
+                        headers={"Authorization": f"Bearer {os.getenv('GROQ_API_KEY')}"},
+                        json={
+                            "messages": [{"role": "user", "content": prompt}],
+                            "model": "mixtral-8x7b-32768",
+                            "temperature": 0.2
+                        }
+                    ) as response:
+                        response.raise_for_status()
+                        return await handle_llm_response(await response.json())
+
+@retry(
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=5, min=5, max=60),
+    retry=retry_if_exception_type((
+        requests.exceptions.HTTPError,
+        json.JSONDecodeError,
+        KeyError,
+        Exception
+    )),
+    before_sleep=lambda _: logging.warning("Rate limited, retrying...")
+)
 def parse_text_with_llm(text: str) -> Dict[str, Any]:
     """Extract structured fields from OCR text using Groq's LLM API"""
     dotenv.load_dotenv()
