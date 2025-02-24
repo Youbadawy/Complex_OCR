@@ -459,21 +459,25 @@ def parse_text_with_llm(text: str) -> Dict[str, Any]:
 
     client = Groq(api_key=api_key)
     
-    prompt = f"""You are an expert in medical document processing, specializing in mammogram reports. Extract the following fields:
-- Patient name (title case, correct fused words like 'PatientName' to 'Patient Name')
-- Exam date (YYYY-MM-DD, correct formats like '23Dec2021')
-- BIRADS score for the right breast (0-6)
-- BIRADS score for the left breast (0-6)
-- Clinical impressions
-- Key findings (include measurements and locations)
+    prompt = f"""Extract ONLY these complex fields from mammogram report:
+- Clinical impressions (key conclusions)
+- Detailed findings (locations, measurements)
 - Follow-up recommendations
 
-Correct OCR errors, prioritize medical terminology, and handle varied labels. For each field, provide a confidence score (0-1). Return valid JSON with keys: 
-patient_name, exam_date, birads_right, birads_left, impressions, findings, 
-follow_up_recommendation, and a 'confidence' sub-object with scores for each field.
+Return JSON with:
+{{
+  "impressions": "string",
+  "findings": "string",
+  "follow_up_recommendation": "string",
+  "confidence": {{
+    "impressions": 0-100,
+    "findings": 0-100,
+    "follow_up_recommendation": 0-100
+  }}
+}}
 
-Text:
-{text[:3000]}"""
+Text excerpt:
+{text[:2500]}"""
 
     try:
         # Log the full prompt and input text
@@ -550,41 +554,39 @@ async def handle_llm_response(response_json: dict) -> Dict[str, Any]:
     except json.JSONDecodeError:
         raise ValueError("Invalid JSON in LLM response")
 
-def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[str, Any]:
-    """Extract fields using LLM first, with regex fallback for missing fields"""
-    fields = {
-        'patient_name': None,
-        'exam_date': None,
-        'birads_right': None,
-        'birads_left': None,
-        'impressions': None,
-        'findings': None,
-        'follow-up_recommendation': None,
-        'document_date': None,
-        'exam_type': None,
-        'clinical_history': None
+def extract_fields_from_text(text: str) -> Dict[str, Any]:
+    """Extract fields using regex first, then LLM for complex fields"""
+    # Regex patterns for simple fields
+    patterns = {
+        'patient_name': (
+            r'(?i)(?:patient|name)\s*:\s*((?:Dr\.\s)?[A-ZÀ-ÿ][a-zà-ÿ]+\s(?:[A-ZÀ-ÿ][a-zà-ÿ]+\s?){1,3})'
+        ),
+        'exam_date': (
+            r'(?i)(?:date\s+of\s+exam|exam\s+date)\s*:\s*(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})'
+        ),
+        'birads_right': (
+            r'(?i)right\s+breast.*?(bi-rads|birads)\s*[:-]*\s*(\d)'
+        ),
+        'birads_left': (
+            r'(?i)left\s+breast.*?(bi-rads|birads)\s*[:-]*\s*(\d)'
+        )
     }
 
-    # First try LLM extraction
-    llm_fields = {}
-    if use_llm_fallback:
-        try:
-            llm_fields = parse_text_with_llm(text)
-            # Map LLM fields to our schema
-            fields.update({
-                'patient_name': llm_fields.get('patient_name'),
-                'exam_date': llm_fields.get('exam_date'),
-                'birads_right': llm_fields.get('birads_right'),
-                'birads_left': llm_fields.get('birads_left'),
-                'impressions': llm_fields.get('impressions'),
-                'findings': llm_fields.get('findings'),
-                'follow-up_recommendation': llm_fields.get('follow_up_recommendation'),
-                'document_date': llm_fields.get('document_date'),
-                'exam_type': llm_fields.get('exam_type'),
-                'clinical_history': llm_fields.get('clinical_history')
-            })
-        except Exception as e:
-            logging.warning(f"LLM extraction failed: {str(e)}")
+    # Extract simple fields with regex
+    fields = {}
+    for field, pattern in patterns.items():
+        match = re.search(pattern, text)
+        if match:
+            fields[field] = match.group(1 if field == 'patient_name' else -1).strip()
+            
+    # Standardize dates
+    if 'exam_date' in fields:
+        fields['exam_date'] = format_date(fields['exam_date'])
+
+    # Now handle complex fields with LLM
+    complex_fields = get_complex_fields_via_llm(text)
+    
+    return {**fields, **complex_fields}
 
     # Regex fallback for any missing critical fields
     missing_fields = [k for k, v in fields.items() if v is None]
@@ -964,3 +966,21 @@ def format_date(match):
         return pd.to_datetime(match.group()).strftime('%Y-%m-%d')
     except:
         return match.group()
+def get_complex_fields_via_llm(text: str) -> Dict[str, Any]:
+    """Get only complex fields from LLM"""
+    try:
+        response = parse_text_with_llm(text)
+        return {
+            'impressions': response.get('impressions'),
+            'findings': response.get('findings'),
+            'follow_up_recommendation': response.get('follow_up_recommendation'),
+            'confidence': response.get('confidence', {})
+        }
+    except Exception as e:
+        logging.warning(f"LLM failed: {str(e)}")
+        return {
+            'impressions': None,
+            'findings': None, 
+            'follow_up_recommendation': None,
+            'confidence': {}
+        }
