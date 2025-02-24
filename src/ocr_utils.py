@@ -266,10 +266,11 @@ def parse_extracted_text(ocr_result):
     lines = []
     current_line = []
     for i, word in enumerate(raw_text.split()):
-        # Correct spelling
-        corrected = spell.correction(word)
-        if corrected and corrected != word:
-            word = corrected
+        # Correct spelling using medical dictionary
+        if not MEDICAL_DICT.known([word.lower()]):
+            corrected = MEDICAL_DICT.correction(word)
+            if corrected and corrected != word:
+                word = corrected
         
         if word.isupper() and len(current_line) > 0:
             lines.append(' '.join(current_line))
