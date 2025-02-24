@@ -156,11 +156,40 @@ def select_best_ocr_result(results):
 
 def parse_extracted_text(ocr_result):
     raw_text = ' '.join([t for t, c in zip(ocr_result['text'], ocr_result['confidence']) if c != -1])
-    confidences = [c/100 for t, c in zip(ocr_result['text'], ocr_result['confidence']) if c != -1]
     
-    # Initialize spell checker with medical dictionary
-    spell = SpellChecker()
+    # Enhanced medical spell checking
+    spell = SpellChecker(language=None)
     spell.word_frequency.load_text_file('medical_terms.txt')
+    spell.word_frequency.load_text_file('french_medical_terms.txt')
+    
+    # Add common OCR error mappings
+    ocr_corrections = {
+        'aimost': 'almost', 'IMPRessiON': 'IMPRESSION',
+        'IMPLANTSE': 'IMPLANTS', 'HISTORy': 'HISTORY'
+    }
+    
+    # Context-aware correction
+    corrected_words = []
+    for word in raw_text.split():
+        # Apply direct substitutions first
+        word = ocr_corrections.get(word, word)
+        
+        # Medical term validation
+        if word.lower() not in spell and len(word) > 3:
+            candidates = spell.candidates(word)
+            if candidates:
+                best = max(candidates, key=lambda x: spell.word_usage_frequency(x))
+                word = best
+                
+        corrected_words.append(word)
+    
+    # Add structured field validation
+    structured_text = '\n'.join(corrected_words)
+    structured_text = re.sub(
+        r'(?i)(BIRADS|IMPRESSION|MAMMOGRAM|HISTORY|ULTRASOUND):',
+        lambda m: f"\n{m.group(1).upper()}:\n",
+        structured_text
+    )
     
     # Clean and structure text from complex layouts
     lines = []

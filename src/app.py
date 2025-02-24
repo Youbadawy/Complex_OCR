@@ -70,15 +70,22 @@ else:
 @st.cache_resource
 def init_paddle():
     from paddleocr import PaddleOCR
-    return PaddleOCR(
-        lang='en',
-        det_model_dir=os.path.join('models', 'en_PP-OCRv4_det_infer'),
-        rec_model_dir=os.path.join('models', 'en_PP-OCRv4_rec_infer'),
-        cls_model_dir=os.path.join('models', 'en_PP-OCRv4_cls_infer'),
-        use_angle_cls=True,
-        show_log=False,
-        drop_score=0.5  # Adjust confidence threshold
-    )
+    
+    try:
+        return PaddleOCR(
+            lang='en',
+            det_model_dir=os.path.join('models', 'en_PP-OCRv4_det_infer'),
+            rec_model_dir=os.path.join('models', 'en_PP-OCRv4_rec_infer'),
+            use_angle_cls=True,
+            show_log=False,
+            enable_mkldnn=True,  # Optimize for CPU
+            use_tensorrt=False,   # Disable TensorRT for stability
+            drop_score=0.6
+        )
+    except Exception as e:
+        logging.error(f"PaddleOCR init failed: {str(e)}")
+        st.error("OCR engine failed to initialize - check model files")
+        raise
 
 # Add this after imports but before OCR processing
 if platform.system() == "Windows":
@@ -157,21 +164,42 @@ def process_single_page(image, page_num, uploaded_file):
             }
 
         # Enhanced Mixtral prompt with layout context
-        prompt = f"""Medical Document Analysis Task:
-        Document Structure: {layout_json.get('sections', [])}
-        Raw OCR Text: {ocr_data['raw_text'][:3000]}
+        prompt = f"""MEDICAL DOCUMENT STRUCTURE:
+        {layout_json}
+
+        OCR TEXT:
+        {ocr_data['raw_text'][:3000]}
+
+        TASK: Extract and validate these fields:
+        1. patient_name (title case)
+        2. exam_date (YYYY-MM-DD)
+        3. birads_right (0-6)
+        4. birads_left (0-6)
+        5. impressions (markdown bullets)
+        6. findings (structured list)
+        7. recommendations (numbered list)
+        8. clinical_history (paragraph)
+        9. document_date (from header/footer)
+        10. electronically_signed_by
+
+        RULES:
+        - Correct OCR errors using medical context
+        - Handle both English/French terms
+        - Return JSON with confidence scores
+        - Mark missing fields as 'Unknown'
         
-        Perform:
-        1. Validate and correct using section boundaries
-        2. Extract tables from {layout_json.get('tables', [])} 
-        3. Structure as JSON with:
-           - patient_info
-           - clinical_history
-           - imaging_findings
-           - birads_assessment
-           - recommendations
-           - identified_tables
-        4. Maintain original medical terminology"""
+        EXAMPLE OUTPUT:
+        {{
+            "patient_name": "Jane Doe",
+            "exam_date": "2021-12-23",
+            "birads_right": 1,
+            "clinical_history": "Breast augmentation in 2010...",
+            "impressions": ["No malignancy", "ACR Category A"],
+            "confidence_scores": {{
+                "patient_name": 0.95,
+                "exam_date": 0.90
+            }}
+        }}"""
         
         # Context correction with Mixtral 8x7B
         groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
