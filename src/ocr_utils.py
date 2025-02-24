@@ -50,13 +50,19 @@ if not FRENCH_MEDICAL_TERMS_PATH.exists():
         "lésion", "calcification", "asymétrie", "dépistage", "diagnostic",
         "palpable", "classification", "rapport", "sein", "nodule"
     ]
-    FRENCH_MEDICAL_TERMS_PATH.write_text("\n".join(default_fr_terms), encoding='utf-8')
+    FRENCH_MEDICAL_TERMS_PATH.write_text(
+        "\n".join(default_fr_terms), 
+        encoding='utf-8'  # Ensure new files use UTF-8
+    )
 
 # Preload medical dictionary for spell checking
 MEDICAL_DICT = SpellChecker(language=None)
 MEDICAL_DICT.word_frequency.load_text_file(str(MEDICAL_TERMS_PATH), encoding='utf-8')
 if FRENCH_MEDICAL_TERMS_PATH.exists():
-    MEDICAL_DICT.word_frequency.load_text_file(str(FRENCH_MEDICAL_TERMS_PATH), encoding='utf-8')
+    MEDICAL_DICT.word_frequency.load_text_file(
+        str(FRENCH_MEDICAL_TERMS_PATH), 
+        encoding='latin-1'  # Changed from utf-8 to handle accented characters
+    )
 else:
     logging.warning("French medical terms file not found, using English only")
 
