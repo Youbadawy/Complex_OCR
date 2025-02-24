@@ -792,15 +792,35 @@ with tab2:
         if 'findings' in df.columns:
             st.subheader("Common Findings")
             
-            # Preprocess findings with error handling
+            # Preprocess findings with type safety
             with st.spinner("Processing clinical findings..."):
                 try:
+                    # Convert all findings to strings first
                     df['findings_processed'] = df['findings'].apply(
-                        lambda x: ocr_utils.extract_findings_text(x) if pd.notnull(x) else ''
+                        lambda x: str(ocr_utils.extract_findings_text(x)) if pd.notnull(x) else ''
                     )
-                    findings_text = " ".join(df['findings_processed'])
+                    
+                    # Debug type distribution
+                    if st.checkbox("Show findings type debug info"):
+                        st.write("Findings type distribution:")
+                        st.write(df['findings'].apply(type).value_counts())
+                        
+                        st.write("Processed findings type distribution:")
+                        st.write(df['findings_processed'].apply(type).value_counts())
+                        
+                        st.write("Sample findings before processing:")
+                        st.write(df['findings'].head(3).to_dict())
+                        
+                        st.write("Sample processed findings:")
+                        st.write(df['findings_processed'].head(3).to_dict())
+                    
+                    # Now safely join strings
+                    findings_text = " ".join(
+                        [str(t) for t in df['findings_processed'] if pd.notnull(t)]
+                    )
+                    
                 except Exception as e:
-                    st.error("Failed to process findings data")
+                    st.error(f"Failed to process findings: {str(e)}")
                     logging.error(f"Findings processing failed: {str(e)}")
                     findings_text = ""
 
