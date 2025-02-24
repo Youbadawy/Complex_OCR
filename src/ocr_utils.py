@@ -141,7 +141,7 @@ def extract_text_paddle(image: np.ndarray) -> str:
     try:
         from paddleocr import PaddleOCR
         import paddle
-        ocr = init_paddle()
+        ocr = PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False)
         
         # Convert image to proper tensor format
         input_tensor = paddle.to_tensor(image).transpose([2, 0, 1]).unsqueeze(0)
@@ -984,3 +984,7 @@ def get_complex_fields_via_llm(text: str) -> Dict[str, Any]:
             'follow_up_recommendation': None,
             'confidence': {}
         }
+def init_paddle():
+    """Initialize PaddleOCR with default settings"""
+    from paddleocr import PaddleOCR
+    return PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False)
