@@ -111,6 +111,22 @@ logging.basicConfig(
     force=True
 )
 
+# Database functions
+def init_db():
+    """Initialize SQLite database with schema"""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS reports (
+                md5_hash TEXT PRIMARY KEY,
+                filename TEXT,
+                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                patient_name TEXT,
+                exam_date TEXT,
+                findings TEXT,
+                metadata TEXT
+            )
+        """)
+
 # Initialize Donut model
 @st.cache_resource
 def init_donut():
@@ -407,6 +423,7 @@ with tab1:
                 extracted_data = []
                 error_messages = []
                 template_warnings = []
+                template_status = st.empty()  # Create placeholder for template status
                 
                 # Process in batches
                 for i in range(0, total_files, BATCH_SIZE):

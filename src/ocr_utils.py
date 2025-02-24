@@ -29,8 +29,8 @@ def hybrid_ocr(image: np.ndarray) -> str:
     processed = preprocess_image(enhanced)
     
     # Multi-engine OCR
-    paddle_text = paddle_ocr(processed)
-    tesseract_text = tesseract_ocr(processed)
+    paddle_text = extract_text_paddle(processed)
+    tesseract_text = extract_text_tesseract(processed)
     
     # Validate and combine
     validated = validate_results({
@@ -62,6 +62,19 @@ def medical_term_score(text: str) -> int:
         1 for term in MEDICAL_TERMS
         if re.search(rf"\b{term}\b", text, re.IGNORECASE)
     )
+
+def extract_text_paddle(image: np.ndarray) -> str:
+    """Extract text using PaddleOCR"""
+    try:
+        from paddleocr import PaddleOCR
+        ocr = PaddleOCR(use_angle_cls=True, lang='en')
+        result = ocr.ocr(image, cls=True)
+        if result and result[0]:
+            return ' '.join([line[1][0] for line in result[0]])
+        return ''
+    except Exception as e:
+        logging.error(f"PaddleOCR failed: {str(e)}")
+        return ''
 
 def preprocess_image(image, apply_sharpen=True):
     """Preprocess image with adaptive noise handling and enhancement"""
