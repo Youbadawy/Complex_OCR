@@ -3,6 +3,7 @@ import streamlit as st
 import time
 import platform
 import os
+import json
 # import streamlit_authenticator as stauth  # <- Comment this
 
 # Set page config immediately after import
