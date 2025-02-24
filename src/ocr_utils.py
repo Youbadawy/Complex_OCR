@@ -2,6 +2,22 @@ import cv2
 import pytesseract
 import re
 import asyncio
+from spellchecker import SpellChecker
+
+# Constants for medical term validation
+MEDICAL_TERMS = {"birads", "impression", "mammogram", "ultrasound"}
+
+PRE_COMPILED_PATTERNS = {
+    'date': re.compile(r'\b(20\d{2}(?:-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?)?)\b'),
+    'birads': re.compile(r'(?i)(bi-rads|birads)[\s:-]*(\d)'),
+    'impression': re.compile(r'\bIMPRessiON\b', re.IGNORECASE),
+    'medical_terms': re.compile(r'\b(' + '|'.join(MEDICAL_TERMS) + r')\b', re.IGNORECASE)
+}
+
+# Preload medical dictionary for spell checking
+MEDICAL_DICT = SpellChecker(language=None)
+MEDICAL_DICT.word_frequency.load_text_file('medical_terms.txt')
+MEDICAL_DICT.word_frequency.load_text_file('french_medical_terms.txt')
 import aiohttp
 from tenacity import AsyncRetrying
 import json
@@ -80,53 +96,44 @@ def extract_text_paddle(image: np.ndarray) -> str:
         logging.error(f"PaddleOCR failed: {str(e)}")
         return ''
 
-def preprocess_image(image, apply_sharpen=True):
-    """Preprocess image with adaptive noise handling and GPU acceleration"""
-    if cv2.cuda.getCudaEnabledDeviceCount() > 0:
-        gpu_img = cv2.cuda_GpuMat()
-        gpu_img.upload(image)
-        # CUDA-accelerated operations
-        gray = cv2.cuda.cvtColor(gpu_img, cv2.COLOR_BGR2GRAY)
-        contrast = cv2.cuda.mean(cv2.cuda.Laplacian(gray, cv2.CV_64F))[0]
-        result = gray.download()
-    else:
-        # CPU fallback
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+def preprocess_image(image, apply_sharpen=True, downscale_factor=1.0):
+    """Optimized image preprocessing with conditional operations"""
+    # Downscale if specified
+    if downscale_factor < 1.0:
+        h, w = image.shape[:2]
+        image = cv2.resize(image, (int(w*downscale_factor), int(h*downscale_factor)))
+    
+    # Convert to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    
+    # Fast contrast check
     contrast = cv2.Laplacian(gray, cv2.CV_64F).var()
     
-    # Adaptive noise reduction for low-contrast images
-    if contrast < 50:  # Indicates noisy/poor quality image
-        gray = cv2.bilateralFilter(gray, 9, 75, 75)
+    # Conditional noise reduction
+    if contrast < 50:
+        if contrast < 30:  # Heavy noise
+            gray = cv2.medianBlur(gray, 3)
+        else:  # Moderate noise
+            gray = cv2.GaussianBlur(gray, (3, 3), 0)
     
-    blur = cv2.GaussianBlur(gray, (3, 3), 0)
+    # Deskewing optimization
+    edges = cv2.Canny(gray, 50, 150)
+    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100, minLineLength=100, maxLineGap=10)
     
-    # Deskewing logic
-    height, width = blur.shape
-    edges = cv2.Canny(blur, 50, 150)
-    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100,
-                          minLineLength=100, maxLineGap=10)
-    
-    angles = []
     if lines is not None:
-        for line in lines:
-            x1, y1, x2, y2 = line[0]
-            angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
-            angles.append(angle)
-            
+        angles = [np.degrees(np.arctan2(y2-y1, x2-x1)) for line in lines for x1,y1,x2,y2 in line]
         median_angle = np.median(angles)
-        rotation_matrix = cv2.getRotationMatrix2D((width/2, height/2), median_angle, 1)
-        deskewed = cv2.warpAffine(blur, rotation_matrix, (width, height),
-                                 borderMode=cv2.BORDER_REPLICATE)
-    else:
-        deskewed = blur
-    
+        if abs(median_angle) > 1.0:  # Only deskew if angle > 1 degree
+            h, w = gray.shape
+            M = cv2.getRotationMatrix2D((w//2, h//2), median_angle, 1)
+            gray = cv2.warpAffine(gray, M, (w, h), borderMode=cv2.BORDER_REPLICATE)
+
     # Adaptive thresholding
-    binary = cv2.adaptiveThreshold(deskewed, 255, 
-                                  cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+    binary = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
                                   cv2.THRESH_BINARY, 11, 2)
     
-    # Optional sharpening for faded text
-    if apply_sharpen:
+    # Conditional sharpening
+    if apply_sharpen and contrast < 40:
         kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
         binary = cv2.filter2D(binary, -1, kernel)
         
@@ -226,37 +233,32 @@ def select_best_ocr_result(results):
 def parse_extracted_text(ocr_result):
     raw_text = ' '.join([t for t, c in zip(ocr_result['text'], ocr_result['confidence']) if c != -1])
     
-    # Enhanced medical spell checking
-    spell = SpellChecker(language=None)
-    spell.word_frequency.load_text_file('medical_terms.txt')
-    spell.word_frequency.load_text_file('french_medical_terms.txt')
+    # Apply critical medical corrections first
+    raw_text = PRE_COMPILED_PATTERNS['impression'].sub('IMPRESSION', raw_text)
+    raw_text = PRE_COMPILED_PATTERNS['birads'].sub(r'BIRADS \2', raw_text)
     
-    # Add common OCR error mappings
-    ocr_corrections = {
-        'aimost': 'almost', 'IMPRessiON': 'IMPRESSION',
-        'IMPLANTSE': 'IMPLANTS', 'HISTORy': 'HISTORY'
-    }
+    # Fast spell checking only for non-medical terms
+    words = raw_text.split()
+    corrected = []
     
-    # Context-aware correction
-    corrected_words = []
-    for word in raw_text.split():
-        # Apply direct substitutions first
-        word = ocr_corrections.get(word, word)
-        
-        # Medical term validation
-        if word.lower() not in spell and len(word) > 3:
-            candidates = spell.candidates(word)
+    for word in words:
+        # Skip numbers and already valid medical terms
+        if word.isdigit() or PRE_COMPILED_PATTERNS['medical_terms'].match(word):
+            corrected.append(word)
+            continue
+            
+        # Check spelling only if not in medical dictionary
+        if not MEDICAL_DICT.known([word.lower()]):
+            candidates = MEDICAL_DICT.candidates(word)
             if candidates:
-                best = max(candidates, key=lambda x: spell.word_usage_frequency(x))
-                word = best
+                word = max(candidates, key=MEDICAL_DICT.word_usage_frequency)
                 
-        corrected_words.append(word)
+        corrected.append(word)
     
-    # Add structured field validation
-    structured_text = '\n'.join(corrected_words)
-    structured_text = re.sub(
-        r'(?i)(BIRADS|IMPRESSION|MAMMOGRAM|HISTORY|ULTRASOUND):',
-        lambda m: f"\n{m.group(1).upper()}:\n",
+    # Apply remaining regex patterns
+    structured_text = '\n'.join(corrected)
+    structured_text = PRE_COMPILED_PATTERNS['date'].sub(
+        lambda m: format_date(m.group()), 
         structured_text
     )
     
@@ -877,3 +879,9 @@ def install_dependencies():
     except ImportError:
         import sys, subprocess
         subprocess.check_call([sys.executable, "-m", "pip", "install", "sentencepiece"])
+def format_date(match):
+    """Helper function to standardize date formats"""
+    try:
+        return pd.to_datetime(match.group()).strftime('%Y-%m-%d')
+    except:
+        return match.group()
