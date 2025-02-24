@@ -3,6 +3,11 @@ warnings.filterwarnings("ignore", category=UserWarning, message=".*missing Scrip
 warnings.filterwarnings("ignore", category=UserWarning, message=".*device_map.*")
 warnings.filterwarnings("ignore", category=UserWarning)  # Suppress all UserWarnings
 
+# Custom exception class
+class OCRError(Exception):
+    """Custom exception for OCR processing errors"""
+    pass
+
 # Import Streamlit first
 import streamlit as st
 import time
