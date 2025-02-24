@@ -608,8 +608,12 @@ with tab1:
                                 img_array = np.array(image)
                                 try:
                                     ocr_text = ocr_utils.hybrid_ocr(img_array)
-                                    if "PaddleOCR failed" in caplog.text:
-                                        st.warning(f"Used Tesseract fallback for page {page_num+1}")
+                                    # Check log records for PaddleOCR failure
+                                    for handler in logging.getLogger().handlers:
+                                        if isinstance(handler, logging.StreamHandler):
+                                            if any("PaddleOCR failed" in record.getMessage() 
+                                                  for record in handler.buffer):
+                                                st.warning(f"Used Tesseract fallback for page {page_num+1}")
                                 except Exception as e:
                                     logging.error(f"OCR failed for page {page_num+1}: {str(e)}")
                                     continue
