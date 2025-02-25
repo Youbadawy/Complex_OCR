@@ -6,7 +6,7 @@ import logging
 import asyncio
 import json
 from functools import lru_cache
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Tuple
 from spellchecker import SpellChecker
 from pathlib import Path
 from pytesseract import Output
@@ -17,11 +17,19 @@ FRENCH_MEDICAL_TERMS_PATH = Path(__file__).parent / "french_medical_terms.txt"
 
 # Global caches
 IMAGE_CACHE = {}
+OCR_CACHE = {}  # Added OCR cache
+LLM_CACHE = {}  # Added LLM cache
 PRE_COMPILED_PATTERNS = {
-    'impression': re.compile(r'\bIMPRessiON\b', re.IGNORECASE),
-    'birads': re.compile(r'(?i)(bi-rads|birads)[\s:-]*(\d)'),
-    'date': re.compile(r'\b\d{4}-\d{2}-\d{2}\b'),
-    'medical_terms': re.compile(r'\b(birads|impression|mammogram|ultrasound)\b', re.IGNORECASE)
+    'impression': re.compile(r'\b(?:IMPRESSION|IMPRESSIONS|ASSESSMENT)[:.\s]*([^\n]+(?:\n[^\n]+)*)', re.IGNORECASE),
+    'findings': re.compile(r'\b(?:FINDINGS|FINDING|OBSERVATION)[:.\s]*([^\n]+(?:\n[^\n]+)*)', re.IGNORECASE),
+    'recommendation': re.compile(r'\b(?:RECOMMENDATION|RECOMMENDATIONS|FOLLOW[\s-]*UP)[:.\s]*([^\n]+(?:\n[^\n]+)*)', re.IGNORECASE),
+    'birads': re.compile(r'(?i)(bi-rads|birads|category|assessment)[\s:-]*(\d|[0-6]|negative|benign|suspicious|malignant)', re.IGNORECASE),
+    'date': re.compile(r'\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b|\b\d{1,2}[-/]\d{1,2}[-/]\d{4}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}\b', re.IGNORECASE),
+    'medical_terms': re.compile(r'\b(birads|impression|mammogram|ultrasound)\b', re.IGNORECASE),
+    'provider': re.compile(r'(?:electronically\s+signed\s+by|dictated\s+by|physician|provider|radiologist)[:\s]+([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s*,\s*M\.?D\.?)?)', re.IGNORECASE),
+    'patient_name': re.compile(r'(?:patient|name|patient name)[:\s]+([A-Z][a-z]+\s+[A-Z][a-z]+)', re.IGNORECASE),
+    'exam_date': re.compile(r'(?:exam date|date of exam|study date)[:\s]+(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4})', re.IGNORECASE),
+    'document_type': re.compile(r'\b(mammogram|mammography|ultrasound|breast imaging|screening|diagnostic)\b', re.IGNORECASE),
 }
 
 def _cache_key(image: np.ndarray) -> str:
@@ -60,13 +68,101 @@ def simple_ocr(image: np.ndarray) -> str:
         return ""
 
 def extract_medical_fields(text: str) -> dict:
-    """Basic medical field extraction with regex"""
-    return {
-        'patient_name': re.search(r'(?i)patient(?: name)?:\s*([^\n]+)', text),
-        'exam_date': re.search(r'\b\d{4}-\d{2}-\d{2}\b', text),
-        'birads': re.search(r'(?i)bi-rads[\s:-]*(\d)', text),
-        'findings': text  # Keep full text as fallback
+    """Extract all medical fields from document text"""
+    # Create a comprehensive result dictionary with all required fields
+    result = {
+        'patient_name': None,
+        'exam_date': None,
+        'document_date': None,
+        'document_type': None,
+        'birads_score': None,
+        'impression_result': None,
+        'mammogram_results': None,
+        'ultrasound_results': None,
+        'patient_history': None,
+        'recommendation': None,
+        'electronically_signed_by': None,
+        'testing_provider': None
     }
+    
+    # Extract patient name
+    patient_match = PRE_COMPILED_PATTERNS['patient_name'].search(text)
+    if patient_match:
+        result['patient_name'] = patient_match.group(1).strip()
+    
+    # Extract dates
+    exam_date_match = PRE_COMPILED_PATTERNS['exam_date'].search(text)
+    if exam_date_match:
+        result['exam_date'] = standardize_date(exam_date_match.group(1))
+    
+    # Extract any date as document date if exam date not found
+    date_matches = PRE_COMPILED_PATTERNS['date'].findall(text)
+    if date_matches:
+        # Use first date as document date if exam date not already set
+        if not result['exam_date'] and date_matches:
+            result['document_date'] = standardize_date(date_matches[0])
+        # If exam date is set, use next date as document date
+        elif date_matches and len(date_matches) > 1:
+            result['document_date'] = standardize_date(date_matches[1])
+    
+    # Extract document type
+    doc_type_match = PRE_COMPILED_PATTERNS['document_type'].search(text)
+    if doc_type_match:
+        result['document_type'] = doc_type_match.group(1).strip()
+    else:
+        # Default to mammogram if no type found
+        result['document_type'] = "Mammogram"
+    
+    # Extract BIRADS score
+    birads_match = PRE_COMPILED_PATTERNS['birads'].search(text)
+    if birads_match:
+        birads_value = birads_match.group(2).strip().lower()
+        # Convert textual BIRADS to numeric
+        if birads_value in ['negative', 'benign']:
+            result['birads_score'] = '2'
+        elif birads_value == 'suspicious':
+            result['birads_score'] = '4'
+        elif birads_value == 'malignant':
+            result['birads_score'] = '5'
+        else:
+            result['birads_score'] = birads_value
+    
+    # Extract impression section
+    impression_match = PRE_COMPILED_PATTERNS['impression'].search(text)
+    if impression_match:
+        result['impression_result'] = impression_match.group(1).strip()
+    
+    # Extract findings section
+    findings_match = PRE_COMPILED_PATTERNS['findings'].search(text)
+    if findings_match:
+        findings_text = findings_match.group(1).strip()
+        # Categorize findings based on keywords
+        if 'mammogram' in findings_text.lower():
+            result['mammogram_results'] = findings_text
+        elif 'ultrasound' in findings_text.lower():
+            result['ultrasound_results'] = findings_text
+        else:
+            # Default to mammogram results if not specified
+            result['mammogram_results'] = findings_text
+    
+    # Extract recommendation section
+    recommendation_match = PRE_COMPILED_PATTERNS['recommendation'].search(text)
+    if recommendation_match:
+        result['recommendation'] = recommendation_match.group(1).strip()
+    
+    # Extract provider information
+    provider_match = PRE_COMPILED_PATTERNS['provider'].search(text)
+    if provider_match:
+        result['electronically_signed_by'] = provider_match.group(1).strip()
+        result['testing_provider'] = provider_match.group(1).strip()
+    
+    # Extract patient history (often between patient info and findings)
+    history_pattern = re.compile(r'(?:history|clinical history|indication)[:.\s]+([^\n]+(?:\n[^\n]+)*)', re.IGNORECASE)
+    history_match = history_pattern.search(text)
+    if history_match:
+        result['patient_history'] = history_match.group(1).strip()
+    
+    return result
 
 # Preload medical dictionary for spell checking
 MEDICAL_DICT = SpellChecker(language=None)
@@ -221,7 +317,7 @@ def preprocess_image(image, apply_sharpen=True, downscale_factor=1.0):
     """Optimized image preprocessing with caching"""
     cache_key = _cache_key(image) + f"_{apply_sharpen}_{downscale_factor}"
     
-    if cache_key in IMAGE_CACHE:
+    if cache_key in IMAGE_CACHE: 
         return IMAGE_CACHE[cache_key]
     # Downscale if specified
     if downscale_factor < 1.0:
@@ -360,7 +456,7 @@ def parse_extracted_text(ocr_result):
     raw_text = ' '.join([t for t, c in zip(ocr_result['text'], ocr_result['confidence']) if c != -1])
     
     # Apply critical medical corrections first
-    raw_text = PRE_COMPILED_PATTERNS['impression'].sub('IMPRESSION', raw_text)
+    raw_text = PRE_COMPILED_PATTERNS['impression'].sub(r'IMPRESSION: \1', raw_text)
     raw_text = PRE_COMPILED_PATTERNS['birads'].sub(r'BIRADS \2', raw_text)
     
     # Fast spell checking only for non-medical terms
@@ -384,7 +480,7 @@ def parse_extracted_text(ocr_result):
     # Apply remaining regex patterns
     structured_text = '\n'.join(corrected)
     structured_text = PRE_COMPILED_PATTERNS['date'].sub(
-        lambda m: format_date(m.group()), 
+        lambda m: standardize_date(m.group()), 
         structured_text
     )
     
@@ -522,11 +618,16 @@ def parse_text_with_llm(text: str) -> Dict[str, Any]:
 Return JSON with these fields:
 - patient_name
 - exam_date (YYYY-MM-DD format)
-- birads_right (0-6)
-- birads_left (0-6) 
-- impressions
-- findings
-- follow_up_recommendation
+- document_date (YYYY-MM-DD format)
+- document_type (e.g., Mammogram, Ultrasound)
+- birads_score (0-6)
+- impression_result
+- mammogram_results
+- ultrasound_results
+- patient_history
+- recommendation
+- electronically_signed_by
+- testing_provider
 - confidence (0-100)
 
 Report text:
@@ -556,9 +657,9 @@ Report text:
         result = json.loads(raw_response)
         
         # Validate response structure
-        required = ['patient_name', 'exam_date', 'birads_right', 'birads_left',
-                   'impressions', 'findings', 'follow_up_recommendation', 'confidence']
-        if all(k in result for k in required) and isinstance(result['confidence'], dict):
+        required = ['patient_name', 'exam_date', 'birads_score',
+                   'impression_result', 'recommendation', 'confidence']
+        if all(k in result for k in required) and isinstance(result['confidence'], (int, float)):
             return result
             
         raise ValueError("Invalid response structure from LLM")
@@ -578,11 +679,16 @@ Report text:
 Return a JSON response with these fields:
 - patient_name
 - exam_date 
-- birads_right
-- birads_left
-- impressions
-- findings
-- follow_up_recommendation
+- document_date
+- document_type
+- birads_score
+- impression_result
+- mammogram_results
+- ultrasound_results
+- patient_history
+- recommendation
+- electronically_signed_by
+- testing_provider
 """
 
 async def handle_llm_response(response_json: dict) -> Dict[str, Any]:
@@ -610,80 +716,56 @@ async def handle_llm_response(response_json: dict) -> Dict[str, Any]:
 def validate_llm_results(data: Dict[str, Any]) -> bool:
     """Validate LLM extraction results"""
     required_fields = [
-        'patient_name', 'exam_date', 'birads_right', 'birads_left',
-        'impressions', 'findings', 'follow_up_recommendation'
+        'patient_name', 'exam_date', 'birads_score',
+        'impression_result', 'recommendation'
     ]
     
     # Check all required fields exist and aren't None
     if not all(field in data for field in required_fields):
         return False
         
-    # Validate BIRADS scores are valid integers 0-6
-    for field in ['birads_right', 'birads_left']:
-        try:
-            score = int(data[field])
-            if not 0 <= score <= 6:
-                return False
-        except (ValueError, TypeError):
+    # Validate BIRADS score is valid integer 0-6
+    try:
+        score = int(data['birads_score'])
+        if not 0 <= score <= 6:
             return False
+    except (ValueError, TypeError):
+        return False
             
     return True
 
 def extract_fields_from_text(text: str) -> Dict[str, Any]:
     """Extract structured fields with improved error handling"""
-    # Enhanced regex patterns
-    patterns = {
-        'patient_name': (
-            r'(?i)(?:patient|name|nom)\s*[:.]?\s*((?:Dr\.\s)?[A-ZÀ-ÿ][a-zà-ÿ]+(?:\s[A-ZÀ-ÿ][a-zà-ÿ]+){1,3})'
-        ),
-        'exam_date': (
-            r'(?i)(?:date\s+of\s+exam|exam\s+date|date)\s*[:.]?\s*(\d{4}[-/]\d{2}[-/]\d{2})'
-        ),
-        'birads_right': (
-            r'(?i)(?:right\s+breast|sein\s+droit).*?(bi-rads|birads|categorie)\s*[:-]*\s*(\d)'
-        ),
-        'birads_left': (
-            r'(?i)(?:left\s+breast|sein\s+gauche).*?(bi-rads|birads|categorie)\s*[:-]*\s*(\d)'
-        )
-    }
-
-    fields = {}
-    for field, pattern in patterns.items():
-        try:
-            match = re.search(pattern, text)
-            fields[field] = match.group(1).strip() if match else None
-        except Exception as e:
-            logging.warning(f"Regex extraction failed for {field}: {str(e)}")
-            fields[field] = None
-
-    # Fallback to LLM for missing critical fields
-    required_fields = ['patient_name', 'exam_date']
-    if any(fields[f] is None for f in required_fields):
+    # First try regex extraction for all fields
+    regex_fields = extract_medical_fields(text)
+    
+    # Check if we have all required fields
+    required_fields = ['patient_name', 'exam_date', 'birads_score']
+    missing_fields = [f for f in required_fields if not regex_fields.get(f)]
+    
+    # If missing critical fields, try LLM extraction
+    if missing_fields:
         try:
             llm_data = parse_text_with_llm(text)
             if validate_llm_results(llm_data):
-                fields.update({
-                    'patient_name': llm_data.get('patient_name'),
-                    'exam_date': llm_data.get('exam_date'),
-                    'impressions': llm_data.get('impressions'),
-                    'findings': llm_data.get('findings')
-                })
+                # Update missing fields from LLM results
+                for field in missing_fields:
+                    if field in llm_data and llm_data[field]:
+                        regex_fields[field] = llm_data[field]
+                
+                # Also update these fields which LLM might extract better
+                for field in ['impression_result', 'recommendation', 'patient_history']:
+                    if field in llm_data and llm_data[field]:
+                        regex_fields[field] = llm_data[field]
         except Exception as e:
             logging.error(f"LLM fallback failed: {str(e)}")
     
-    # Add missing null checks
-    return {
-        'patient_name': fields['patient_name'] or None,
-        'exam_date': format_date(fields['exam_date']) if fields['exam_date'] else None,
-        'birads_right': fields['birads_right'] or None,
-        'birads_left': fields['birads_left'] or None,
-        'impressions': None,
-        'findings': None,
-        'follow_up_recommendation': None
-    }
-
+    # Ensure all fields have values (even if None)
+    for field in regex_fields:
+        if regex_fields[field] is None:
+            regex_fields[field] = "Unknown"
     
-    return fields, []
+    return regex_fields
 
 def similar(a, b, threshold=0.7):
     """Fuzzy string matching for OCR corrections"""
@@ -1024,16 +1106,34 @@ def install_dependencies():
     except ImportError:
         import sys, subprocess
         subprocess.check_call([sys.executable, "-m", "pip", "install", "sentencepiece"])
-def format_date(match):
-    """Helper function to standardize date formats"""
+
+def standardize_date(date_str):
+    """Standardize various date formats to YYYY-MM-DD"""
+    if not date_str:
+        return None
+        
     try:
-        return pd.to_datetime(match.group()).strftime('%Y-%m-%d')
+        return pd.to_datetime(date_str).strftime('%Y-%m-%d')
     except:
-        return match.group()
+        # Try various date formats
+        date_formats = [
+            '%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y',
+            '%b %d, %Y', '%B %d, %Y', '%d %b %Y', '%d %B %Y'
+        ]
+        
+        for fmt in date_formats:
+            try:
+                return pd.to_datetime(date_str, format=fmt).strftime('%Y-%m-%d')
+            except:
+                continue
+                
+        return date_str  # Return original if parsing fails
+
 def init_paddle():
     """Initialize PaddleOCR with default settings"""
     from paddleocr import PaddleOCR
     return PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False)
+
 def extract_with_regex(pattern: str, text: str) -> Optional[str]:
     """Helper function for safe regex extraction"""
     match = re.search(pattern, text)
@@ -1042,7 +1142,49 @@ def extract_with_regex(pattern: str, text: str) -> Optional[str]:
 def validate_llm_results(data: Dict[str, Any]) -> bool:
     """Validate required fields exist in LLM response"""
     required_fields = [
-        'patient_name', 'exam_date', 'birads_right', 'birads_left',
-        'impressions', 'findings', 'follow_up_recommendation'
+        'patient_name', 'exam_date', 'birads_score',
+        'impression_result', 'recommendation'
     ]
     return all(field in data for field in required_fields)
+
+def process_document_text(text: str) -> Dict[str, Any]:
+    """Process complete document text and extract all required fields"""
+    # First try regex extraction
+    fields = extract_medical_fields(text)
+    
+    # Check if we have all required fields
+    required_fields = ['patient_name', 'exam_date', 'birads_score']
+    missing_fields = [f for f in required_fields if not fields.get(f) or fields[f] == "Unknown"]
+    
+    # If missing critical fields, try LLM extraction
+    if missing_fields:
+        try:
+            llm_data = parse_text_with_llm(text)
+            if validate_llm_results(llm_data):
+                # Update missing fields from LLM results
+                for field in missing_fields:
+                    if field in llm_data and llm_data[field]:
+                        fields[field] = llm_data[field]
+                
+                # Also update these fields which LLM might extract better
+                for field in ['impression_result', 'recommendation', 'patient_history']:
+                    if field in llm_data and llm_data[field]:
+                        fields[field] = llm_data[field]
+                        
+                # Add confidence scores
+                fields['confidence_scores'] = {
+                    'ocr': 0.9,  # High confidence for OCR
+                    'nlp': float(llm_data.get('confidence', 80)) / 100  # Convert to 0-1 scale
+                }
+        except Exception as e:
+            logging.error(f"LLM fallback failed: {str(e)}")
+            fields['confidence_scores'] = {'ocr': 0.7, 'nlp': 0.0}
+    else:
+        fields['confidence_scores'] = {'ocr': 0.9, 'nlp': 0.0}
+    
+    # Ensure all fields have values (even if Unknown)
+    for field in fields:
+        if fields[field] is None:
+            fields[field] = "Unknown"
+    
+    return fields

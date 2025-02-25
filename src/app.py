@@ -31,59 +31,120 @@ DB_PATH = "mammo_reports.db"
 BATCH_SIZE = 10
 
 def process_pdf(uploaded_file):
-    """Process PDF with reliable page-by-page OCR"""
-    results = []
-    
-    with pdfplumber.open(uploaded_file) as pdf:
-        for page_num, page in enumerate(pdf.pages):
-            try:
-                # Extract text directly first
-                text = page.extract_text()
-                
-                # Fallback to OCR if needed
-                if not text or len(text) < 50:
+    """Process PDF as a complete document with combined text from all pages"""
+    try:
+        # Generate file hash for caching
+        file_hash = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
+        
+        # Check cache
+        if Path(DB_PATH).exists():
+            with sqlite3.connect(DB_PATH) as conn:
+                cached = conn.execute("""
+                    SELECT findings, metadata FROM reports
+                    WHERE md5_hash = ?
+                """, (file_hash,)).fetchone()
+                if cached:
+                    return json.loads(cached[0]), json.loads(cached[1])
+        
+        # Extract text from all pages
+        all_text = []
+        with pdfplumber.open(uploaded_file) as pdf:
+            # Process all pages and combine text
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    all_text.append(page_text)
+                else:
+                    # Fallback to OCR if text extraction fails
                     img = page.to_image(resolution=300).original
-                    text = ocr_utils.simple_ocr(np.array(img))
-                
-                # Extract structured fields
-                fields = ocr_utils.extract_medical_fields(text)
-                
-                results.append({
-                    'patient_name': fields['patient_name'].group(1) if fields['patient_name'] else 'Unknown',
-                    'exam_date': fields['exam_date'].group() if fields['exam_date'] else 'Unknown',
-                    'birads_score': int(fields['birads'].group(1)) if fields['birads'] else 0,
-                    'findings': text[:500],  # First 500 chars
-                    'source_file': uploaded_file.name,
-                    'page_number': page_num + 1
-                })
-                
-            except Exception as e:
-                st.error(f"Error processing page {page_num+1}: {str(e)}")
-                continue
-    
-    return pd.DataFrame(results)
+                    ocr_text = ocr_utils.simple_ocr(np.array(img))
+                    all_text.append(ocr_text)
+        
+        # Combine all text into a single document
+        combined_text = "\n\n".join(all_text)
+        
+        # Process the combined text to extract all fields
+        structured_data = ocr_utils.process_document_text(combined_text)
+        
+        # Add metadata
+        metadata = {
+            "md5_hash": file_hash,
+            "filename": uploaded_file.name,
+            "pages": len(all_text),
+            "processing_date": pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+        # Save to database
+        save_to_db({
+            "md5_hash": file_hash,
+            "filename": uploaded_file.name,
+            "patient_name": structured_data.get('patient_name', 'Unknown'),
+            "exam_date": structured_data.get('exam_date', 'Unknown'),
+            "findings": json.dumps(structured_data),
+            "metadata": json.dumps(metadata)
+        })
+        
+        return structured_data, metadata
+        
+    except Exception as e:
+        logging.error(f"PDF processing error: {str(e)}", exc_info=True)
+        return ocr_utils.default_structured_output(), {"error": str(e), "filename": uploaded_file.name}
+
 # Streamlit UI
 st.title("Medical Report Processor")
 
 uploaded_files = st.file_uploader("Upload PDFs", type="pdf", accept_multiple_files=True)
 
 if uploaded_files:
-    all_dfs = []
-    for file in uploaded_files:
-        with st.spinner(f"Processing {file.name}..."):
-            df = process_pdf(file)
-            all_dfs.append(df)
+    all_results = []
     
-    final_df = pd.concat(all_dfs)
-    st.session_state.df = final_df
+    # Create progress bar
+    progress_bar = st.progress(0)
+    status_text = st.empty()
     
-    st.success(f"Processed {len(final_df)} pages")
-    st.dataframe(final_df)
+    # Process each PDF as a complete document
+    for i, file in enumerate(uploaded_files):
+        status_text.text(f"Processing {file.name}...")
+        
+        # Process the PDF
+        structured_data, metadata = process_pdf(file)
+        
+        # Add to results
+        all_results.append(structured_data)
+        
+        # Update progress
+        progress = (i + 1) / len(uploaded_files)
+        progress_bar.progress(progress)
     
-    if not final_df.empty:
+    # Create DataFrame with one row per PDF
+    if all_results:
+        # Ensure consistent columns
+        required_columns = [
+            'birads_score', 'document_date', 'document_type', 
+            'electronically_signed_by', 'exam_date', 'impression_result', 
+            'mammogram_results', 'patient_history', 'patient_name', 
+            'recommendation', 'testing_provider', 'ultrasound_results'
+        ]
+        
+        # Create DataFrame with consistent columns
+        df = pd.DataFrame(all_results)
+        
+        # Add missing columns with default values
+        for col in required_columns:
+            if col not in df.columns:
+                df[col] = "Unknown"
+        
+        # Store in session state
+        st.session_state.df = df
+        
+        # Display results
+        st.success(f"Processed {len(df)} documents")
+        st.dataframe(df)
+        
+        # Download button
         st.download_button(
             "Download Results",
-            final_df.to_csv(index=False),
+            df.to_csv(index=False),
             "medical_data.csv",
             "text/csv"
         )
@@ -201,7 +262,601 @@ def init_donut():
         if device == "cuda":
             torch.cuda.empty_cache()
             
-        model = VisionEncoderDecoderModel.from_pretrained(
+        model = VisionEncoderDeco # Ericsson/codechecker
+# -------------------------------------------------------------------------
+#
+#  Part of the CodeChecker project, under the Apache License v2.0 with
+#  LLVM Exceptions. See LICENSE for license information.
+#  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+#
+# -------------------------------------------------------------------------
+"""
+Defines the CodeChecker action for parsing a set of analysis results into a
+human-readable format.
+"""
+
+import argparse
+import os
+import sys
+
+from typing import Dict, List, Optional, Set, Tuple
+
+from codechecker_report_converter.report import report_file, \
+    reports as reports_helper
+from codechecker_report_converter.report.output import baseline, codeclimate, \
+    gerrit, json as report_to_json, plaintext
+from codechecker_report_converter.report.output.html import \
+    html as report_to_html
+from codechecker_report_converter.report.statistics import Statistics
+
+from codechecker_common import arg, logger
+from codechecker_common.skiplist_handler import SkipListHandler
+from codechecker_common.source_code_comment_handler import \
+    REVIEW_STATUS_VALUES, SourceCodeCommentHandler
+from codechecker_common.util import load_json
+
+LOG = logger.get_logger('system')
+
+
+def get_argparser_ctor_args():
+    """
+    This method returns a dict containing the kwargs for constructing an
+    argparse.ArgumentParser (either directly or as a subparser).
+    """
+
+    return {
+        'prog': 'CodeChecker parse',
+        'formatter_class': arg.RawDescriptionDefaultHelpFormatter,
+
+        # Description is shown when the command's help is queried directly
+        'description': """
+Parse and pretty-print the summary and results from one or more
+'codechecker-analyze' result files. Bugs which are commented by using
+"false_positive", "suppress" and "intentional" source code comments will not be
+printed by the `parse` command.""",
+
+        # Help is shown when the "parent" CodeChecker command lists the
+        # individual subcommands.
+        'help': "Print analysis summary and results in a human-readable format."
+    }
+
+
+def add_arguments_to_parser(parser):
+    """
+    Add the subcommand's arguments to the given argparse.ArgumentParser.
+    """
+
+    parser.add_argument('input',
+                        type=str,
+                        nargs='+',
+                        metavar='file/folder',
+                        help="The analysis result files and/or folders "
+                             "containing analysis results which should be "
+                             "parsed and printed.")
+
+    parser.add_argument('-t', '--type', '--input-format',
+                        dest="input_format",
+                        required=False,
+                        choices=['plist'],
+                        default='plist',
+                        help="Specify the format the analysis results were "
+                             "created as.")
+
+    output_opts = parser.add_argument_group("export arguments")
+    output_opts.add_argument('-e', '--export',
+                             dest="export",
+                             required=False,
+                             choices=['html', 'json', 'codeclimate', 'gerrit',
+                                      'baseline'],
+                             help="Specify extra output format type.")
+
+    output_opts.add_argument('-o', '--output',
+                             dest="output_path",
+                             default=argparse.SUPPRESS,
+                             help="Store the output in the given folder.")
+
+    output_opts.add_argument('--url',
+                             type=str,
+                             dest="trim_path_prefix",
+                             default=argparse.SUPPRESS,
+                             help="Path prefix to trim when generating "
+                                  "gerrit output.")
+
+    parser.add_argument('--suppress',
+                        type=str,
+                        dest="suppress",
+                        default=argparse.SUPPRESS,
+                        required=False,
+                        help="Path of the suppress file to use. Records in the "
+                             "suppress file are used to suppress the "
+                             "display of certain results when parsing the "
+                             "analyses' report. (Reports to an analysis "
+                             "result can also be suppressed in the source "
+                             "code -- please consult the manual on how to "
+                             "do so.) NOTE: The suppress file relies on the "
+                             "\"bug identifier\" generated by the analyzers "
+                             "which is experimental, take care when relying "
+                             "on it.")
+
+    parser.add_argument('--export-source-suppress',
+                        dest="create_suppress",
+                        action="store_true",
+                        required=False,
+                        default=argparse.SUPPRESS,
+                        help="Write suppress data from the suppression "
+                             "annotations found in the source files that were "
+                             "analyzed earlier that created the results. "
+                             "The suppression information will be written "
+                             "to the parameter of '--suppress'.")
+
+    parser.add_argument('--print-steps',
+                        dest="print_steps",
+                        action="store_true",
+                        required=False,
+                        default=argparse.SUPPRESS,
+                        help="Print the steps the analyzers took in finding "
+                             "the reported defect.")
+
+    parser.add_argument('--review-status',
+                        nargs='*',
+                        dest="review_status",
+                        metavar='REVIEW_STATUS',
+                        choices=REVIEW_STATUS_VALUES,
+                        default=["confirmed", "unreviewed"],
+                        help="Filter results by review statuses. Valid "
+                             f"values are: {', '.join(REVIEW_STATUS_VALUES)}.")
+
+    parser.add_argument('--trim-path-prefix',
+                        type=str,
+                        nargs='*',
+                        dest="trim_path_prefix",
+                        required=False,
+                        default=argparse.SUPPRESS,
+                        help="Removes leading path from files which will be "
+                             "printed. For instance if you analyze files "
+                             "'/home/jsmith/my_proj/x.cpp' and "
+                             "'/home/jsmith/my_proj/y.cpp', but would prefer "
+                             "to see just 'x.cpp' and 'y.cpp' in the output, "
+                             "this flag can help you. "
+                             "Use '--trim-path-prefix=/home/jsmith/my_proj/' "
+                             "to remove the leading path.")
+
+    parser.add_argument('--verbose',
+                        type=str,
+                        dest="verbosity",
+                        choices=['info', 'debug', 'debug_analyzer'],
+                        default=argparse.SUPPRESS,
+                        help="Set verbosity level.")
+
+    parser.add_argument('--skip',
+                        type=str,
+                        dest="skipfile",
+                        default=argparse.SUPPRESS,
+                        help="Path to the Skipfile dictating which project "
+                             "files should be omitted from analysis. Please "
+                             "consult the User guide on how a Skipfile "
+                             "should be laid out.")
+
+    parser.add_argument('--config',
+                        dest='config_file',
+                        required=False,
+                        help="R|Allow the configuration from an explicit JSON "
+                             "based configuration file. The values configured "
+                             "in the config file will overwrite the values "
+                             "set in the command line. The format of "
+                             "configuration file is:\n"
+                             "{\n"
+                             "  \"analyze\": [\n"
+                             "    \"--enable=core.DivideZero\",\n"
+                             "    \"--enable=core.CallAndMessage\",\n"
+                             "    \"--report-hash=context-free-v2\",\n"
+                             "    \"--verbose=debug\",\n"
+                             "    \"--skip=$HOME/project/skip.txt\",\n"
+                             "    \"--clean\"\n"
+                             "  ]\n"
+                             "}")
+
+    logger.add_verbose_arguments(parser)
+    parser.set_defaults(func=main)
+
+
+def parse(plist_file: str, metadata_dict: Dict, skip_handler: SkipListHandler,
+          trim_path_prefixes: Optional[List[str]] = None) -> \
+        Tuple[List, List, Dict, Dict, Dict, Dict, Dict, Dict]:
+    """
+    Parses a plist report file.
+    Returns:
+        - list of source files
+        - list of reports
+        - map of source files to reports
+        - report statistics
+        - map of source files to analyzer statistics
+        - map of source files to analyzer checkers
+        - map of source files to analyzer runtimes
+        - map of source files to analyzer failed checkers
+    """
+    files = []
+    reports = []
+    file_sources_map = {}
+    file_stats = {}
+    file_checkers_map = {}
+    file_runtime_map = {}
+    file_failed_checkers_map = {}
+
+    source_code_comment_handler = SourceCodeCommentHandler()
+
+    all_reports, metadata_dict, analyzer_statistics = \
+        report_file.get_report_data(plist_file, metadata_dict)
+
+    file_stats.update(analyzer_statistics)
+
+    for report in all_reports:
+        path = report.file_path
+
+        if path:
+            if skip_handler and skip_handler.should_skip(path):
+                continue
+
+            if trim_path_prefixes:
+                for prefix in trim_path_prefixes:
+                    if prefix and path.startswith(prefix):
+                        path = path[len(prefix):]
+                        break
+
+            report.trim_path_prefixes(trim_path_prefixes)
+
+            # Skip the report if it is a deduplication.
+            if report.main:
+                if path not in file_sources_map:
+                    try:
+                        with open(report.file_path,
+                                  encoding='utf-8',
+                                  errors='ignore') as source_file:
+                            source = source_file.read()
+                    except (OSError, IOError):
+                        source = ""
+                    file_sources_map[path] = source
+
+                if source_code_comment_handler.has_source_line_comments(
+                        report.file_path, report.line, file_sources_map):
+                    continue
+
+                report.review_status = \
+                    source_code_comment_handler.get_suppressed(
+                        report.file_path,
+                        report.line,
+                        report.checker_name,
+                        file_sources_map)
+
+                if report.review_status == 'false_positive':
+                    report.review_status = 'false positive'
+
+                if report.review_status == 'intentional':
+                    report.review_status = 'intentional'
+
+                reports.append(report)
+                files.append(path)
+
+    # Get report statistics.
+    statistics = Statistics()
+    statistics.num_of_analyzer_result_files = 1
+    statistics.num_of_reports = len(reports)
+    statistics.num_of_reports_with_source = len(reports)
+
+    for report in reports:
+        statistics.add_report(report)
+
+    # Get analyzer statistics.
+    statistics.num_of_analyzer_result_files = 1
+    for analyzer_type, res in metadata_dict.items():
+        analyzer_statistics = {}
+        analyzer_statistics['version'] = res.get('analyzer_statistics', {})
+        analyzer_statistics['failed'] = res.get('failed', {})
+        analyzer_statistics['successful'] = res.get('successful', {})
+        analyzer_statistics['runtime'] = res.get('runtime', {})
+
+        checkers = res.get('checkers', {})
+        analyzer_statistics['checkers'] = checkers
+
+        if metadata_dict and analyzer_type in metadata_dict and \
+                'analyzer_statistics' in metadata_dict[analyzer_type]:
+            metadata = metadata_dict[analyzer_type]
+            analyzer_statistics['analyzer_statistics'] = \
+                metadata.get('analyzer_statistics', {})
+
+            for curr_file, failed_checkers in metadata.get('failed', {}).items():
+                if curr_file not in file_failed_checkers_map:
+                    file_failed_checkers_map[curr_file] = {}
+
+                file_failed_checkers_map[curr_file][analyzer_type] = \
+                    failed_checkers
+
+            for curr_file, checker_names in metadata.get('checkers', {}).items():
+                if curr_file not in file_checkers_map:
+                    file_checkers_map[curr_file] = {}
+
+                file_checkers_map[curr_file][analyzer_type] = checker_names
+
+            for curr_file, runtime in metadata.get('runtime', {}).items():
+                if curr_file not in file_runtime_map:
+                    file_runtime_map[curr_file] = {}
+
+                file_runtime_map[curr_file][analyzer_type] = runtime
+
+    return (
+        files,
+        reports,
+        file_sources_map,
+        statistics.checker_statistics,
+        file_stats,
+        file_checkers_map,
+        file_runtime_map,
+        file_failed_checkers_map
+    )
+
+
+def main(args):
+    """
+    Entry point for parsing some analysis results and printing them to the
+    stdout in a human-readable format.
+    """
+    logger.setup_logger(args.verbose if 'verbose' in args else None)
+
+    # Load configuration file if given.
+    if 'config_file' in args:
+        cfg = load_json(args.config_file, default={})
+        if 'parse' in cfg:
+            for k, v in cfg['parse'].items():
+                # `args` object has priority over config file options.
+                if k not in args:
+                    setattr(args, k, v)
+
+    export = args.export if 'export' in args else None
+    if export == 'html' and 'output_path' not in args:
+        LOG.error("Argument --output is required if HTML output is used.")
+        sys.exit(1)
+
+    if export == 'gerrit' and 'trim_path_prefix' not in args:
+        LOG.error("Argument --url is required if gerrit output is used.")
+        sys.exit(1)
+
+    if export and export not in ['baseline', 'html', 'gerrit']:
+        output_path = args.output_path if 'output_path' in args else None
+        if output_path is None:
+            LOG.error("Argument --output is required if JSON output is used.")
+            sys.exit(1)
+
+    if 'trim_path_prefix' in args:
+        args.trim_path_prefix = \
+            [prefix.rstrip('/') for prefix in args.trim_path_prefix]
+    else:
+        args.trim_path_prefix = None
+
+    if 'suppress' in args:
+        if not os.path.isfile(args.suppress):
+            LOG.error("Suppress file '%s' given, but it does not exist",
+                      args.suppress)
+            sys.exit(1)
+
+    skip_handler = None
+    if 'skipfile' in args:
+        try:
+            with open(args.skipfile, encoding='utf-8', errors='ignore') as f:
+                skip_handler = SkipListHandler(f.read())
+        except (IOError, OSError) as err:
+            LOG.error("Failed to open skip file: %s", err)
+            sys.exit(1)
+
+    input_files = set()
+    for input_path in args.input:
+        input_path = os.path.abspath(input_path)
+        if os.path.isfile(input_path):
+            input_files.add(input_path)
+        elif os.path.isdir(input_path):
+            input_paths = []
+            try:
+                input_paths = [os.path.join(input_path, filename)
+                               for filename in os.listdir(input_path)]
+            except OSError as err:
+                LOG.error("Failed to get files from directory %s: %s",
+                          input_path, err)
+                sys.exit(1)
+
+            input_files.update(input_paths)
+
+    if not input_files:
+        LOG.error("No input file was given.")
+        sys.exit(1)
+
+    all_reports = []
+    statistics = Statistics()
+    file_sources_map = {}
+    file_stats = {}
+    file_checkers_map = {}
+    file_runtime_map = {}
+    file_failed_checkers_map = {}
+
+    metadata_dict = {}
+    for input_file in input_files:
+        if not os.path.exists(input_file):
+            LOG.warning("Input file does not exist: %s", input_file)
+            continue
+
+        if os.path.isdir(input_file):
+            LOG.warning("Input path is a directory: %s", input_file)
+            continue
+
+        LOG.debug("Parsing input file '%s'", input_file)
+
+        if args.input_format == 'plist':
+            try:
+                files, reports, sources_map, checker_statistics, stats, \
+                    checkers_map, runtime_map, failed_checkers_map = \
+                    parse(input_file, metadata_dict, skip_handler,
+                          args.trim_path_prefix)
+
+                all_reports.extend(reports)
+                statistics.num_of_analyzer_result_files += 1
+                statistics.num_of_reports += len(reports)
+                statistics.num_of_reports_with_source += len(reports)
+
+                for checker_name, res in checker_statistics.items():
+                    statistics.add_checker_statistics(checker_name, res)
+
+                file_sources_map.update(sources_map)
+                file_stats.update(stats)
+                file_checkers_map.update(checkers_map)
+                file_runtime_map.update(runtime_map)
+                file_failed_checkers_map.update(failed_checkers_map)
+            except Exception as ex:
+                LOG.error("Parsing the plist failed: %s", str(ex))
+        else:
+            LOG.error("Unsupported input format: %s", args.input_format)
+            sys.exit(1)
+
+    if 'review_status' in args:
+        all_reports = [r for r in all_reports
+                       if r.review_status in args.review_status]
+
+    all_reports = sorted(all_reports, key=lambda r: r.file_path)
+
+    # Create report dir if report_dir is set
+    if 'output_path' in args and args.output_path and not os.path.exists(
+            args.output_path):
+        os.makedirs(args.output_path)
+
+    if export == 'html':
+        output_path = os.path.abspath(args.output_path)
+
+        LOG.info("Generating HTML output files to file://%s/index.html",
+                 output_path)
+
+        report_to_html.convert(
+            all_reports,
+            output_path,
+            file_stats,
+            file_checkers_map,
+            file_runtime_map,
+            file_failed_checkers_map)
+
+        print("\n----==== Summary ====----")
+        print("Number of analyzed analyzer result files: ",
+              statistics.num_of_analyzer_result_files)
+        print("Number of analyzer reports:               ",
+              statistics.num_of_reports)
+        print("Number of analyzer reports with source:   ",
+              statistics.num_of_reports_with_source)
+
+        print("\nHTML files were generated in '%s' folder." % output_path)
+        return
+
+    if export == 'gerrit':
+        output_path = os.path.abspath(args.output_path) \
+            if 'output_path' in args else None
+
+        LOG.info("Generating Gerrit review files")
+
+        gerrit.convert(all_reports, args.trim_path_prefix[0], output_path)
+
+        print("\n----==== Summary ====----")
+        print("Number of analyzed analyzer result files: ",
+              statistics.num_of_analyzer_result_files)
+        print("Number of analyzer reports:               ",
+              statistics.num_of_reports)
+        print("Number of analyzer reports with source:   ",
+              statistics.num_of_reports_with_source)
+
+        if output_path:
+            print("\nGerrit review file was generated in '%s' folder." %
+                  output_path)
+        return
+
+    if export == 'json':
+        output_path = os.path.abspath(args.output_path)
+        LOG.info("Generating JSON output files to '%s'", output_path)
+
+        report_to_json.convert(
+            all_reports,
+            output_path,
+            file_stats,
+            file_checkers_map,
+            file_runtime_map,
+            file_failed_checkers_map)
+
+        print("\n----==== Summary ====----")
+        print("Number of analyzed analyzer result files: ",
+              statistics.num_of_analyzer_result_files)
+        print("Number of analyzer reports:               ",
+              statistics.num_of_reports)
+        print("Number of analyzer reports with source:   ",
+              statistics.num_of_reports_with_source)
+
+        print("\nJSON files were generated in '%s' folder." % output_path)
+        return
+
+    if export == 'codeclimate':
+        output_path = os.path.abspath(args.output_path)
+        LOG.info("Generating Code Climate output files to '%s'", output_path)
+        codeclimate.convert(all_reports, output_path)
+
+        print("\n----==== Summary ====----")
+        print("Number of analyzed analyzer result files: ",
+              statistics.num_of_analyzer_result_files)
+        print("Number of analyzer reports:               ",
+              statistics.num_of_reports)
+
+        print("\nCode Climate files were generated in '%s' folder." %
+              output_path)
+        return
+
+    if export == 'baseline':
+        output_path = os.path.abspath(args.output_path) \
+            if 'output_path' in args else None
+
+        LOG.info("Generating baseline output")
+        baseline.convert(all_reports, output_path)
+
+        print("\n----==== Summary ====----")
+        print("Number of analyzed analyzer result files: ",
+              statistics.num_of_analyzer_result_files)
+        print("Number of analyzer reports:               ",
+              statistics.num_of_reports)
+
+        if output_path:
+            print("\nBaseline file was generated in '%s' folder." % output_path)
+        return
+
+    if 'create_suppress' in args:
+        reports_helper.create_suppress_file(all_reports, args.suppress)
+        sys.exit(0)
+
+    reports_helper.dump_report_stats(statistics, file_stats, 'report')
+
+    print("\n----==== Summary ====----")
+    print("Number of processed analyzer result files: ",
+          statistics.num_of_analyzer_result_files)
+    print("Number of analyzer reports:                ",
+          statistics.num_of_reports)
+    print("Number of analyzer reports with source:    ",
+          statistics.num_of_reports_with_source)
+
+    if all_reports:
+        print("\n----==== Checker Statistics ====----")
+        statistics.print_checker_statistics()
+
+    # Print reports.
+    if all_reports:
+        for report in all_reports:
+            if 'print_steps' in args:
+                report.print_steps()
+            else:
+                print(report)
+    else:
+        print("\nNo report data was found.")
+        if 'review_status' in args:
+            print("Review status(es) given were: " +
+                  ', '.join(args.review_status))
+derModel.from_pretrained(
             "naver-clova-ix/donut-base-finetuned-docvqa",
             revision="official"
         ).to(device)
@@ -222,7 +877,7 @@ def init_donut():
         return None, None
 
 def process_pdf_batch(batch):
-    """Process 10 PDFs in parallel with mixed text/OCR"""
+    """Process batch of PDFs in parallel with document-level processing"""
     with ProcessPoolExecutor(max_workers=min(len(batch), 4)) as executor:
         futures = {executor.submit(process_pdf, pdf): pdf for pdf in batch}
         for future in concurrent.futures.as_completed(futures):
@@ -244,208 +899,6 @@ def process_page(page):
     except Exception as e:
         logging.error(f"Page processing error: {str(e)}")
         return ""
-
-def process_pdf(uploaded_file):
-    """Process PDF with parallel page processing"""
-    # Remove memory cache check since manage_caches() is not defined
-    file_hash = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
-    
-    # Check cache
-    if Path(DB_PATH).exists():
-        with sqlite3.connect(DB_PATH) as conn:
-            cached = conn.execute("""
-                SELECT findings, metadata FROM reports
-                WHERE md5_hash = ?
-            """, (file_hash,)).fetchone()
-            if cached:
-                return json.loads(cached[0]), json.loads(cached[1])
-
-    # Parallel page processing
-    text_content = []
-    with pdfplumber.open(uploaded_file) as pdf:
-        with ThreadPoolExecutor(max_workers=min(4, os.cpu_count())) as executor:
-            page_futures = {
-                executor.submit(process_page, page): page
-                for page in pdf.pages
-            }
-            for future in concurrent.futures.as_completed(page_futures):
-                try:
-                    page_text = future.result()
-                    text_content.append(page_text)
-                except Exception as e:
-                    logging.error(f"Page failed: {str(e)}")
-
-    # Process and cache
-    structured_data = ocr_utils.process_text("\n".join(text_content))
-    metadata = {
-        "md5_hash": file_hash,
-        "filename": uploaded_file.name,
-        "pages": len(text_content)
-    }
-    
-    save_to_db({
-        **structured_data,
-        "metadata": metadata
-    })
-    
-    return structured_data, metadata
-
-def process_single_page(image, page_num, uploaded_file):
-    try:
-        img_array = np.array(image.convert('RGB'))
-        
-        # Get OCR text with fallback
-        ocr_text = ocr_utils.hybrid_ocr(img_array)
-        if not ocr_text.strip():
-            return {'error': f"Page {page_num+1}: No text extracted"}
-
-        # Medical content validation
-        required_terms = r'(BIRADS|IMPRESSION|MAMMOGRAM)'
-        if not re.search(required_terms, ocr_text, re.IGNORECASE):
-            return {'error': f"Page {page_num+1}: Non-medical content"}
-            
-        # Simplified extraction with validation
-        structured_data = {
-            'patient_name': re.search(r'(?i)patient(?: name)?:\s*([A-Za-z ]+)', ocr_text),
-            'exam_date': re.search(r'\b\d{4}-\d{2}-\d{2}\b', ocr_text),
-            'birads_right': re.search(r'(?i)right.*?BIRADS.*?(\d)', ocr_text),
-            'birads_left': re.search(r'(?i)left.*?BIRADS.*?(\d)', ocr_text),
-            'findings': ocr_text,
-            'source_pdf': uploaded_file.name,
-            'page_number': page_num + 1
-        }
-
-        # Convert matches to values with type safety
-        try:
-            return {
-                'patient_name': structured_data['patient_name'].group(1).strip() if structured_data['patient_name'] else 'Unknown',
-                'exam_date': structured_data['exam_date'].group() if structured_data['exam_date'] else 'Unknown',
-                'birads_right': int(structured_data['birads_right'].group(1)) if structured_data['birads_right'] else 0,
-                'birads_left': int(structured_data['birads_left'].group(1)) if structured_data['birads_left'] else 0,
-                'findings': structured_data['findings'],
-                'source_pdf': uploaded_file.name,
-                'page_number': page_num + 1,
-                'processing_confidence': 0.8  # Base confidence
-            }
-        except Exception as e:
-            logging.error(f"Field extraction error: {str(e)}")
-            return {
-                'error': f"Page {page_num+1}: Extraction failed",
-                'source_pdf': uploaded_file.name,
-                'page_number': page_num + 1
-            }
-        
-    except Exception as e:
-        logging.error(f"Page {page_num+1} error: {str(e)}")
-        return {'error': f"Page {page_num+1}: {str(e)}"}
-
-        # Add error handling for empty OCR results
-        if not text:
-            logging.warning(f"No text extracted from page {page_num}")
-            structured_data = ocr_utils.default_structured_output()
-            warnings = ['OCR failed - no text detected']
-            return {
-                **structured_data,
-                'source_pdf': uploaded_file.name,
-                'page_number': page_num + 1,
-                'warnings': warnings
-            }
-
-        # Enhanced Mixtral prompt with layout context
-        prompt = f"""MEDICAL DOCUMENT STRUCTURE:
-        No layout data available
-
-        OCR TEXT:
-        {text[:3000]}
-
-        TASK: Extract and validate these fields:
-        1. patient_name (title case)
-        2. exam_date (YYYY-MM-DD)
-        3. birads_right (0-6)
-        4. birads_left (0-6)
-        5. impressions (markdown bullets)
-        6. findings (structured list)
-        7. recommendations (numbered list)
-        8. clinical_history (paragraph)
-        9. document_date (from header/footer)
-        10. electronically_signed_by
-
-        RULES:
-        - Correct OCR errors using medical context
-        - Handle both English/French terms
-        - Return JSON with confidence scores
-        - Mark missing fields as 'Unknown'
-        
-        EXAMPLE OUTPUT:
-        {{
-            "patient_name": "Jane Doe",
-            "exam_date": "2021-12-23",
-            "birads_right": 1,
-            "clinical_history": "Breast augmentation in 2010...",
-            "impressions": ["No malignancy", "ACR Category A"],
-            "confidence_scores": {{
-                "patient_name": 0.95,
-                "exam_date": 0.90
-            }}
-        }}"""
-        
-        # Context correction with Mixtral 8x7B
-        groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        try:
-            response = groq_client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
-                model="mixtral-8x7b-32768",
-                temperature=0.1,
-                max_tokens=2000,
-                response_format={"type": "json_object"}
-            )
-            
-            structured_data = json.loads(response.choices[0].message.content)
-            warnings = [] if 'confidence' in structured_data else ['Low confidence flags']
-            
-        except Exception as e:
-            logging.error(f"Mixtral processing failed: {str(e)}")
-            structured_data = ocr_utils.default_structured_output()
-            warnings = ['AI processing failed - using raw OCR']
-
-        # Standardized data structure with safe field access
-        data = {
-            'patient_name': structured_data.get('patient_name', 'Unknown'),
-            'document_date': structured_data.get('document_date', 'Unknown'),
-            'exam_type': structured_data.get('exam_type', 'Unknown'),
-            'exam_date': structured_data.get('exam_date', 'Unknown'),
-            'clinical_history': structured_data.get('clinical_history', ''),
-            'birads_right': structured_data.get('birads_right', 'Unknown'),
-            'birads_left': structured_data.get('birads_left', 'Unknown'),
-            'impressions': structured_data.get('impressions', 'Unknown'),
-            'findings': ocr_utils.extract_findings_text(structured_data.get('findings', 'Unknown')),
-            'follow-up_recommendation': structured_data.get('follow-up_recommendation', 'Unknown'),
-            'source_pdf': uploaded_file.name,
-            'page_number': page_num + 1,
-            'warnings': ', '.join(warnings) if warnings else 'None',
-            'processing_confidence': 0.0,
-            'raw_ocr_text': text  # Direct text access
-        }
-        
-        return {
-            'patient_name': structured_data.get('patient_name', 'Unknown'),
-            'exam_date': structured_data.get('exam_date', 'Unknown'),
-            'birads_right': structured_data.get('birads_right', 'Unknown'),
-            'birads_left': structured_data.get('birads_left', 'Unknown'),
-            'impressions': structured_data.get('impressions', 'Not Available'),
-            'findings': ocr_utils.extract_findings_text(structured_data.get('findings', '')),
-            'source_pdf': uploaded_file.name,
-            'page_number': page_num + 1,
-            'processing_confidence': structured_data.get('confidence', {}).get('overall', 0.0)
-        }
-    
-    except Exception as e:
-        logging.error(f"Error processing page {page_num+1} of {uploaded_file.name}", exc_info=True)
-        return {
-            'error': f"Page {page_num+1}: {str(e)}",
-            'source pdf': uploaded_file.name,
-            'page number': page_num + 1
-        }
 
 # Combined model loader with progress
 @st.cache_resource(show_spinner=False)
@@ -524,7 +977,7 @@ def plot_birads_distribution(df):
 
 def plot_findings_analysis(df):
     """Interactive findings analysis visualization"""
-    findings_text = ' '.join(df['findings'].dropna())
+    findings_text = ' '.join(df['mammogram_results'].dropna())
     word_freq = pd.Series(findings_text.lower().split()).value_counts().reset_index()
     word_freq.columns = ['Term', 'Count']
     word_freq = word_freq[~word_freq['Term'].isin(STOP_WORDS)]
@@ -603,155 +1056,62 @@ with tab1:
         if not uploaded_files:
             st.warning("Please upload at least one PDF file")
         else:
-            with st.spinner("Processing PDFs in batches..."):
+            with st.spinner("Processing PDFs..."):
                 init_db()
-                total_files = len(uploaded_files)
-                extracted_data = []
-                error_messages = []
-                template_warnings = []
-                template_status = st.empty()  # Create placeholder for template status
-                
-                # Process in batches
-                for i in range(0, total_files, BATCH_SIZE):
-                    batch = uploaded_files[i:i+BATCH_SIZE]
-                    batch_results = []
-                    
-                    for result in process_pdf_batch(batch):
-                        batch_results.append(result)
-                        
-                    # Update progress
-                    progress = min((i + len(batch)) / total_files, 1.0)
-                    st.progress(progress)
-                    
-                    # Update session state
-                    if batch_results:
-                        new_df = pd.DataFrame(batch_results)
-                        st.session_state['df'] = pd.concat([
-                            st.session_state.get('df', pd.DataFrame()),
-                            new_df
-                        ])
                 
                 # Create progress bar
                 progress_bar = st.progress(0)
-                total_files = len(uploaded_files)
+                status_text = st.empty()
                 
-                # Initialize dataframe in session state if not exists
-                if 'df' not in st.session_state:
-                    st.session_state['df'] = pd.DataFrame()
-
-                # Simple processing loop
-                if uploaded_files:
-                    all_text = []
-                    sources = []  # New list to track source per page
+                # Process each PDF as a complete document
+                all_results = []
+                for i, file in enumerate(uploaded_files):
+                    status_text.text(f"Processing {file.name}...")
                     
-                    for uploaded_file in uploaded_files:
-                        with pdfplumber.open(uploaded_file) as pdf:
-                            # Process each page and track its source file
-                            for page in pdf.pages:
-                                all_text.append(page.extract_text())
-                                sources.append(uploaded_file.name)  # Add filename per page
+                    # Process the PDF
+                    structured_data, metadata = process_pdf(file)
                     
-                    # Create DataFrame with aligned arrays
-                    st.session_state['df'] = pd.DataFrame({
-                        'text': all_text,
-                        'source': sources  # Now same length as all_text
-                    })
-
-                    # Simple processing loop
-                    if uploaded_files:
-                        all_text = []
-                        total_pages = 0
-                        processed_pages = 0
-                        
-                        # First count total pages
-                        for uploaded_file in uploaded_files:
-                            with pdfplumber.open(uploaded_file) as pdf:
-                                total_pages += len(pdf.pages)
-                        
-                        # Then process pages
-                        for uploaded_file in uploaded_files:
-                            with pdfplumber.open(uploaded_file) as pdf:
-                                for page in pdf.pages:
-                                    all_text.append(page.extract_text())
-                                    processed_pages += 1
-                                    progress = processed_pages / total_pages
-                                    progress_bar.progress(min(progress, 1.0))
-                        
-                        # Process results
-                        try:
-                            if all_text:  # Only process if we have extracted text
-                                result = {'text': '\n'.join(all_text)}
-                                if 'error' in result:
-                                    error_messages.append(result['error'])
-                                else:
-                                    # Collect extracted data
-                                    extracted_data.append(result)
-                                    template_warnings.extend(result.get('template_warnings', []))
-                        except Exception as e:
-                            error_msg = f"Processing failed: {str(e)}"
-                            logging.error(error_msg, exc_info=True)
-                            error_messages.append(error_msg)
+                    # Add to results
+                    all_results.append(structured_data)
+                    
+                    # Update progress
+                    progress = (i + 1) / len(uploaded_files)
+                    progress_bar.progress(progress)
                 
-                template_status.empty()
-                
-                # Display template warnings
-                if template_warnings:
-                    unique_warnings = list(set(template_warnings))
-                    with st.expander("⚠️ Template Matching Warnings"):
-                        st.write("The following issues were detected during template matching:")
-                        for warning in unique_warnings:
-                            st.write(f"- {warning}")
-                        st.info("Please verify extracted fields and consider updating template images")
-                
-                # Handle processing results
-                if error_messages:
-                    st.error("Some pages failed to process:")
-                    for msg in error_messages[-3:]:  # Show last 3 errors
-                        st.write(f"- {msg}")
-                    st.info("Check mammo_ai.log for full details")
-                
-                # Create final dataframe after processing all pages
-                if extracted_data:
-                    try:
-                        # Convert all entries to valid dicts with null checks
-                        valid_data = []
-                        for entry in extracted_data:
-                            if 'error' not in entry and entry.get('birads_right') not in [None, 'Unknown']:
-                                valid_data.append({
-                                    'patient_name': entry.get('patient_name', 'Unknown'),
-                                    'exam_date': entry.get('exam_date', 'Unknown'),
-                                    'birads_right': int(entry.get('birads_right', 0)),
-                                    'birads_left': int(entry.get('birads_left', 0)),
-                                    'findings': entry.get('findings', ''),
-                                    'source_pdf': entry.get('source_pdf', 'Unknown'),
-                                    'page_number': int(entry.get('page_number', 0)),
-                                    'processing_confidence': float(entry.get('processing_confidence', 0.0))
-                                })
-                        
-                        if valid_data:
-                            df = pd.DataFrame(valid_data).astype({
-                                'birads_right': 'int8',
-                                'birads_left': 'int8',
-                                'processing_confidence': 'float32',
-                                'page_number': 'int32'
-                            })
-                            df['exam_date'] = pd.to_datetime(df['exam_date'], errors='coerce').dt.date
-                            st.session_state['df'] = df.dropna(subset=['patient_name', 'exam_date'])
-                            st.success(f"Processed {len(valid_data)} valid pages")
-                            st.dataframe(st.session_state['df'])
-                            
-                            # Show sample structured data
-                            structured_sample = ocr_utils.convert_to_structured_json(
-                                st.session_state['df'].iloc[0].to_dict()
-                            )
-                            st.json(structured_sample)
-                        else:
-                            st.warning("No valid data extracted from any pages")
-                            st.session_state['df'] = pd.DataFrame()  # Ensure empty DF
-
-                    except Exception as e:
-                        st.error(f"Data formatting failed: {str(e)}")
-                        logging.error(f"Data formatting error: {str(e)}", exc_info=True)
+                # Create DataFrame with one row per PDF
+                if all_results:
+                    # Ensure consistent columns
+                    required_columns = [
+                        'birads_score', 'document_date', 'document_type', 
+                        'electronically_signed_by', 'exam_date', 'impression_result', 
+                        'mammogram_results', 'patient_history', 'patient_name', 
+                        'recommendation', 'testing_provider', 'ultrasound_results'
+                    ]
+                    
+                    # Create DataFrame with consistent columns
+                    df = pd.DataFrame(all_results)
+                    
+                    # Add missing columns with default values
+                    for col in required_columns:
+                        if col not in df.columns:
+                            df[col] = "Unknown"
+                    
+                    # Store in session state
+                    st.session_state.df = df
+                    
+                    # Display results
+                    st.success(f"Processed {len(df)} documents")
+                    st.dataframe(df)
+                    
+                    # Download button
+                    st.download_button(
+                        "Download Results",
+                        df.to_csv(index=False),
+                        "medical_data.csv",
+                        "text/csv"
+                    )
+                else:
+                    st.warning("No valid data extracted from PDFs")
     
     # Display results
     if 'df' in st.session_state:
@@ -844,7 +1204,7 @@ with tab2:
                 st.warning("BI-RADS data not available for visualization")
 
         with tab2:
-            if 'findings' in df.columns:
+            if 'mammogram_results' in df.columns:
                 plot_findings_analysis(df)
             else:
                 st.warning("Findings data not available for visualization")
@@ -859,8 +1219,8 @@ with tab2:
         st.subheader("Basic Statistics")
         col1, col2, col3 = st.columns(3)
         with col1:
-            if 'patient name' in df.columns:
-                unique_patients = df['patient name'].nunique()
+            if 'patient_name' in df.columns:
+                unique_patients = df['patient_name'].nunique()
                 st.metric("Unique Patients", unique_patients)
             else:
                 st.metric("Unique Patients", "N/A")
@@ -868,18 +1228,18 @@ with tab2:
             total_reports = len(df)
             st.metric("Total Reports", total_reports)
         with col3:
-            latest_date = df['exam date'].max() if 'exam date' in df.columns else "N/A"
+            latest_date = df['exam_date'].max() if 'exam_date' in df.columns else "N/A"
             st.metric("Latest Exam Date", latest_date)
 
         # Exam type analysis
-        if 'exam type' in df.columns:
+        if 'document_type' in df.columns:
             st.subheader("Exam Type Distribution")
-            exam_dist = df['exam type'].value_counts().reset_index()
+            exam_dist = df['document_type'].value_counts().reset_index()
             exam_dist.columns = ['Exam Type', 'Count']
             st.bar_chart(exam_dist.set_index('Exam Type'))
 
         # BIRADS analysis
-        if {'birads_score', 'exam_date'}.issubset(df.columns):
+        if 'birads_score' in df.columns:
             st.subheader("BIRADS Analysis")
             
             # Interactive BIRADS score filter
@@ -923,7 +1283,7 @@ with tab2:
                 st.info("No cases found with selected BIRADS scores")
 
         # Findings analysis
-        if 'findings' in df.columns:
+        if 'mammogram_results' in df.columns:
             st.subheader("Common Findings")
             
             def convert_to_str(item):
@@ -941,20 +1301,20 @@ with tab2:
             with st.spinner("Processing clinical findings..."):
                 try:
                     # Convert all findings to cleaned strings
-                    df['findings'] = df['findings'].apply(
+                    df['mammogram_results'] = df['mammogram_results'].apply(
                         lambda x: convert_to_str(ocr_utils.extract_findings_text(x))
                     )
                     
                     # Debug type distribution if needed
                     if st.checkbox("Show findings type debug info"):
                         st.write("Findings type distribution:")
-                        st.write(df['findings'].apply(type).value_counts())
+                        st.write(df['mammogram_results'].apply(type).value_counts())
                         st.write("Sample processed findings:")
-                        st.write(df['findings'].head(3).to_dict())
+                        st.write(df['mammogram_results'].head(3).to_dict())
                     
                     # Now safely join validated strings
                     findings_text = ' '.join(
-                        df['findings'].dropna().astype(str)
+                        df['mammogram_results'].dropna().astype(str)
                     )
                 except Exception as e:
                     st.error(f"Failed to process findings: {str(e)}")
@@ -1049,10 +1409,10 @@ with tab2:
 
         # Additional Information Analysis
         st.subheader("Findings Analysis")
-        if 'additional_information' in df.columns:
+        if 'impression_result' in df.columns:
             try:
                 # Generate word cloud
-                text = ' '.join(df['additional_information'].dropna())
+                text = ' '.join(df['impression_result'].dropna())
                 wordcloud = WordCloud(width=800, height=400).generate(text)
                 
                 # Display using matplotlib
@@ -1072,7 +1432,6 @@ with tab2:
                 st.error(f"Text analysis failed: {str(e)}")
 
     else:
-        st.warning("Patient name column missing in data")
         st.info("ℹ️ No data available. Process PDFs or upload a file to begin analysis.")
 
 with tab3:
@@ -1129,7 +1488,7 @@ with tab3:
         if csv_file:
             context = f"Analyzing {len(df)} patient records. "
         elif 'df' in st.session_state:
-            context += f"Report contains: {st.session_state['df']['additional_information'].iloc[0][:200]}... "
+            context += f"Report contains: {st.session_state['df']['impression_result'].iloc[0][:200]}... "
         
         # Add BIRADS context
         if 'birads_score' in st.session_state.get('df', pd.DataFrame()).columns:
@@ -1155,8 +1514,8 @@ with tab3:
 # Cache status display
 st.sidebar.markdown("### Cache Status")
 st.sidebar.write(f"Preprocessed Images: {len(ocr_utils.IMAGE_CACHE)}")
-st.sidebar.write(f"OCR Results: {len(ocr_utils.OCR_CACHE)}")
-st.sidebar.write(f"LLM Responses: {len(ocr_utils.LLM_CACHE)}")
+st.sidebar.write(f"OCR Results: {len(ocr_utils.OCR_CACHE) if hasattr(ocr_utils, 'OCR_CACHE') else 0}")
+st.sidebar.write(f"LLM Responses: {len(ocr_utils.LLM_CACHE) if hasattr(ocr_utils, 'LLM_CACHE') else 0}")
 
 st.sidebar.markdown("### Resources")
 st.sidebar.markdown("- [Clinical Guidelines](https://example.com)")
@@ -1192,7 +1551,7 @@ def save_to_db(data: dict):
             data.get('patient_name'),
             data.get('exam_date'),
             json.dumps(data.get('findings')),
-            json.dumps(data['metadata'])
+            json.dumps(data.get('metadata'))
         ))
 
 # Add to sidebar section at bottom of file
