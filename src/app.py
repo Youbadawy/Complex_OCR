@@ -104,6 +104,10 @@ def init_paddle():
     import paddle
     import os
     
+    # Initialize model_dir first before any potential exceptions
+    model_dir = os.path.abspath(os.path.expanduser("~/.paddleocr"))
+    os.makedirs(model_dir, exist_ok=True)
+
     try:
         # Clear existing CUDA cache
         if paddle.is_compiled_with_cuda():
@@ -111,10 +115,6 @@ def init_paddle():
         else:
             paddle.device.cpu.empty_cache()
 
-        # Set explicit model paths
-        model_dir = os.path.abspath(os.path.expanduser("~/.paddleocr"))
-        os.makedirs(model_dir, exist_ok=True)
-        
         # Verify model files exist before initializing
         det_model = hf_hub_download(
             'PaddlePaddle/PaddleOCR', 
