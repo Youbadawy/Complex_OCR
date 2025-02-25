@@ -105,53 +105,63 @@ def init_paddle():
     import os
     
     try:
-        # Clear CUDA cache if available
+        # Clear existing CUDA cache
         if paddle.is_compiled_with_cuda():
             paddle.device.cuda.empty_cache()
-            
-        # Create model cache directory if needed
-        model_dir = os.path.join(os.path.expanduser("~"), ".paddleocr")
+        else:
+            paddle.device.cpu.empty_cache()
+
+        # Set explicit model paths
+        model_dir = os.path.abspath(os.path.expanduser("~/.paddleocr"))
         os.makedirs(model_dir, exist_ok=True)
         
-        # Initialize with explicit model paths
+        # Verify model files exist before initializing
+        det_model = hf_hub_download(
+            'PaddlePaddle/PaddleOCR', 
+            'en_PP-OCRv4_det_infer',
+            cache_dir=model_dir,
+            force_filename='en_PP-OCRv4_det_infer'
+        )
+        rec_model = hf_hub_download(
+            'PaddlePaddle/PaddleOCR',
+            'en_PP-OCRv4_rec_infer', 
+            cache_dir=model_dir,
+            force_filename='en_PP-OCRv4_rec_infer'
+        )
+        cls_model = hf_hub_download(
+            'PaddlePaddle/PaddleOCR',
+            'ch_ppocr_mobile_v2.0_cls_infer',
+            cache_dir=model_dir,
+            force_filename='ch_ppocr_mobile_v2.0_cls_infer'
+        )
+
+        # Initialize with verified paths
         ocr = PaddleOCR(
             lang='en',
             use_gpu=False,
-            det_model_dir=hf_hub_download(
-                'PaddlePaddle/PaddleOCR', 
-                'en_PP-OCRv4_det_infer',
-                cache_dir=model_dir
-            ),
-            rec_model_dir=hf_hub_download(
-                'PaddlePaddle/PaddleOCR',
-                'en_PP-OCRv4_rec_infer', 
-                cache_dir=model_dir
-            ),
-            cls_model_dir=hf_hub_download(
-                'PaddlePaddle/PaddleOCR',
-                'ch_ppocr_mobile_v2.0_cls_infer',
-                cache_dir=model_dir
-            ),
+            det_model_dir=os.path.dirname(det_model),
+            rec_model_dir=os.path.dirname(rec_model),
+            cls_model_dir=os.path.dirname(cls_model),
             use_angle_cls=True,
-            show_log=False,
+            show_log=True,  # Enable logging for debugging
             enable_mkldnn=True,
-            drop_score=0.4
+            drop_score=0.3  # Lower threshold for medical texts
         )
         
-        # Validate with actual OCR test
-        test_img = np.zeros((300, 300, 3), dtype=np.uint8)
-        cv2.putText(test_img, "Medical Report", (50,150), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+        # Validate with medical text image
+        test_img = np.zeros((300, 600, 3), dtype=np.uint8)
+        cv2.putText(test_img, "BIRADS 2: Benign Findings", (50,150), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2)
         result = ocr.ocr(test_img, cls=True)
         
-        if not result or not result[0] or "Medical" not in result[0][0][1][0]:
-            raise RuntimeError("PaddleOCR validation test failed")
+        if not result or "Benign" not in str(result):
+            raise RuntimeError("PaddleOCR medical text validation failed")
             
         return ocr
         
     except Exception as e:
-        logging.critical(f"PaddleOCR initialization failed: {str(e)}")
-        st.error("Failed to initialize OCR engine - check model files and permissions")
+        logging.critical(f"PaddleOCR init failed: {str(e)}", exc_info=True)
+        st.error(f"OCR Engine failed: {str(e)} - Check model files in {model_dir}")
         return None
 
 # Add this after imports but before OCR processing
