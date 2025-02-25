@@ -592,9 +592,9 @@ with tab1:
                                 if 'error' in result:
                                     error_messages.append(result['error'])
                                 else:
-                                # Collect extracted data
-                                extracted_data.append(result)
-                                template_warnings.extend(result.get('template_warnings', []))
+                                    # Collect extracted data
+                                    extracted_data.append(result)
+                                    template_warnings.extend(result.get('template_warnings', []))
                         except Exception as e:
                             error_msg = f"Processing failed: {str(e)}"
                             logging.error(error_msg, exc_info=True)
