@@ -100,8 +100,42 @@ else:
 # Initialize PaddleOCR models
 @st.cache_resource(show_spinner="Initializing OCR Engine...")
 def init_paddle():
+    """Initialize PaddleOCR with model verification"""
     from paddleocr import PaddleOCR
-    return PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False)
+    import paddle
+    
+    try:
+        # Clear existing CUDA cache
+        paddle.disable_static()
+        if paddle.is_compiled_with_cuda():
+            paddle.device.cuda.empty_cache()
+        
+        # Initialize with verified settings
+        ocr = PaddleOCR(
+            use_angle_cls=True,
+            lang='en',
+            use_gpu=False,
+            enable_mkldnn=True,
+            det_model_dir=os.path.expanduser('~/.paddleocr/whl/det/en/en_PP-OCRv3_det_infer'),
+            rec_model_dir=os.path.expanduser('~/.paddleocr/whl/rec/en/en_PP-OCRv3_rec_infer'),
+            cls_model_dir=os.path.expanduser('~/.paddleocr/whl/cls/ch_ppocr_mobile_v2.0_cls_infer')
+        )
+        
+        # Validate with test OCR
+        test_img = np.zeros((300, 300, 3), dtype=np.uint8)
+        cv2.putText(test_img, "BIRADS 2", (50,150), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+        result = ocr.ocr(test_img, cls=True)
+        
+        if not result or "BIRADS" not in str(result):
+            raise RuntimeError("PaddleOCR validation failed")
+            
+        return ocr
+        
+    except Exception as e:
+        logging.critical(f"PaddleOCR init failed: {str(e)}")
+        st.error(f"OCR Engine failed: {str(e)} - Check model files in ~/.paddleocr")
+        return None
 
 # Add this after imports but before OCR processing
 if platform.system() == "Windows":
@@ -238,19 +272,52 @@ def process_pdf(uploaded_file):
 
 def process_single_page(image, page_num, uploaded_file):
     try:
-        # Simple OCR processing
-        ocr = init_paddle()
-        result = ocr.ocr(np.array(image), cls=True)
-        text = ' '.join([line[1][0] for line in result[0]]) if result else ""
+        img_array = np.array(image.convert('RGB'))
         
-        # Basic field extraction
-        return {
-            'text': text,
+        # Get OCR text with fallback
+        ocr_text = ocr_utils.hybrid_ocr(img_array)
+        if not ocr_text.strip():
+            return {'error': f"Page {page_num+1}: No text extracted"}
+
+        # Medical content validation
+        required_terms = r'(BIRADS|IMPRESSION|MAMMOGRAM)'
+        if not re.search(required_terms, ocr_text, re.IGNORECASE):
+            return {'error': f"Page {page_num+1}: Non-medical content"}
+            
+        # Simplified extraction with validation
+        structured_data = {
+            'patient_name': re.search(r'(?i)patient(?: name)?:\s*([A-Za-z ]+)', ocr_text),
+            'exam_date': re.search(r'\b\d{4}-\d{2}-\d{2}\b', ocr_text),
+            'birads_right': re.search(r'(?i)right.*?BIRADS.*?(\d)', ocr_text),
+            'birads_left': re.search(r'(?i)left.*?BIRADS.*?(\d)', ocr_text),
+            'findings': ocr_text,
             'source_pdf': uploaded_file.name,
             'page_number': page_num + 1
         }
+
+        # Convert matches to values with type safety
+        try:
+            return {
+                'patient_name': structured_data['patient_name'].group(1).strip() if structured_data['patient_name'] else 'Unknown',
+                'exam_date': structured_data['exam_date'].group() if structured_data['exam_date'] else 'Unknown',
+                'birads_right': int(structured_data['birads_right'].group(1)) if structured_data['birads_right'] else 0,
+                'birads_left': int(structured_data['birads_left'].group(1)) if structured_data['birads_left'] else 0,
+                'findings': structured_data['findings'],
+                'source_pdf': uploaded_file.name,
+                'page_number': page_num + 1,
+                'processing_confidence': 0.8  # Base confidence
+            }
+        except Exception as e:
+            logging.error(f"Field extraction error: {str(e)}")
+            return {
+                'error': f"Page {page_num+1}: Extraction failed",
+                'source_pdf': uploaded_file.name,
+                'page_number': page_num + 1
+            }
+        
     except Exception as e:
-        return {'error': str(e)}
+        logging.error(f"Page {page_num+1} error: {str(e)}")
+        return {'error': f"Page {page_num+1}: {str(e)}"}
 
         # Add error handling for empty OCR results
         if not text:

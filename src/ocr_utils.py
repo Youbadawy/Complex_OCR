@@ -92,17 +92,51 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 MEDICAL_TERMS = {"birads", "impression", "mammogram", "ultrasound"}
 
 def hybrid_ocr(image: np.ndarray) -> str:
-    """Original hybrid OCR pipeline without medical validation"""
-    # Simple preprocessing
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+    """Hybrid OCR pipeline with medical validation"""
+    # Enhanced preprocessing for medical documents
+    enhanced = cv2.convertScaleAbs(image, alpha=1.5, beta=40)
+    processed = preprocess_image(enhanced, apply_sharpen=True)
     
-    # Multi-engine OCR
-    paddle_text = extract_text_paddle(binary)
-    tesseract_text = extract_text_tesseract(binary)['text']
+    # Attempt PaddleOCR first with validation
+    paddle_text = ""
+    try:
+        if not hasattr(extract_text_paddle, "ocr_instance"):
+            raise RuntimeError("PaddleOCR not initialized")
+            
+        # Health check with test image
+        test_img = np.zeros((100,300,3), dtype=np.uint8)
+        cv2.putText(test_img, "BIRADS", (10,50), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+        test_result = extract_text_paddle.ocr_instance.ocr(test_img)
+        if not test_result or "BIRADS" not in str(test_result):
+            raise RuntimeError("PaddleOCR health check failed")
+            
+        # Process actual image
+        result = extract_text_paddle.ocr_instance.ocr(processed)
+        paddle_text = ' '.join([line[1][0] for line in result[0]]) if result else ""
+        
+    except Exception as e:
+        logging.warning(f"PaddleOCR failed: {str(e)} - Switching to Tesseract")
+        paddle_text = ""
+
+    # Fallback to Tesseract with enhanced processing
+    try:
+        tesseract_result = extract_text_tesseract(processed)
+        tesseract_text = ' '.join([t for t, c in zip(tesseract_result['text'], 
+                                  tesseract_result['confidence']) if c > 40])
+    except Exception as e:
+        logging.error(f"Tesseract failed: {str(e)}")
+        tesseract_text = ""
+
+    # Combine and validate results
+    combined_text = f"{paddle_text} {tesseract_text}".strip()
     
-    # Combine results
-    return f"{paddle_text} {tesseract_text}".strip()
+    # Medical content validation with lower threshold
+    if medical_term_score(combined_text) < 1:  # Require at least 1 medical term
+        logging.warning("Low medical content - using raw OCR fallback")
+        return f"{paddle_text} {tesseract_text}".strip()
+    
+    return combined_text
 
 def validate_results(texts: dict) -> str:
     """Validate OCR results against medical terms"""
