@@ -1,60 +1,48 @@
 import cv2
 import pytesseract
 import re
-import asyncio
-import logging
-from typing import Dict, Any, Optional
-from spellchecker import SpellChecker
-from functools import lru_cache
-from hashlib import sha256
 import numpy as np
+import logging
+from pytesseract import Output
 
-# Initialize caches with 100MB max memory (approx)
-IMAGE_CACHE = {}
-OCR_CACHE = {}
-LLM_CACHE = {}
+def simple_ocr(image: np.ndarray) -> str:
+    """Reliable OCR pipeline with basic preprocessing"""
+    try:
+        # Convert to grayscale
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+        
+        # Basic adaptive thresholding
+        processed = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                         cv2.THRESH_BINARY, 11, 2)
+        
+        # OCR with Tesseract
+        text_data = pytesseract.image_to_data(
+            processed,
+            output_type=Output.DICT,
+            config='--psm 3 --oem 3'  # Fully automatic page segmentation
+        )
+        
+        # Filter by confidence
+        text = ' '.join([
+            text_data['text'][i] 
+            for i in range(len(text_data['text'])) 
+            if int(text_data['conf'][i]) > 60
+        ])
+        
+        return text.strip()
+    
+    except Exception as e:
+        logging.error(f"OCR failed: {str(e)}")
+        return ""
 
-def _cache_key(image: np.ndarray) -> str:
-    """Generate cache key from image data"""
-    return sha256(image.tobytes()).hexdigest()
-
-# Constants for medical term validation
-MEDICAL_TERMS = {"birads", "impression", "mammogram", "ultrasound"}
-
-PRE_COMPILED_PATTERNS = {
-    'date': re.compile(r'\b(20\d{2}(?:-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?)?)\b'),
-    'birads': re.compile(r'(?i)(bi-rads|birads)[\s:-]*(\d)'),
-    'impression': re.compile(r'\bIMPRessiON\b', re.IGNORECASE),
-    'medical_terms': re.compile(r'\b(' + '|'.join(MEDICAL_TERMS) + r')\b', re.IGNORECASE)
-}
-
-# Create default medical dictionaries if missing
-from pathlib import Path
-
-# Create default medical dictionaries if missing
-MEDICAL_TERMS_PATH = Path(__file__).parent / "medical_terms.txt"
-FRENCH_MEDICAL_TERMS_PATH = Path(__file__).parent / "french_medical_terms.txt"
-
-# Create English medical terms file if missing
-if not MEDICAL_TERMS_PATH.exists():
-    default_terms = [
-        "birads", "mammogram", "ultrasound", "impression", "lesion",
-        "calcification", "density", "asymmetry", "biopsy", "benign",
-        "malignant", "screening", "diagnostic", "sonography", "palpable"
-    ]
-    MEDICAL_TERMS_PATH.write_text("\n".join(default_terms))
-
-# Create French medical terms file if missing  
-if not FRENCH_MEDICAL_TERMS_PATH.exists():
-    default_fr_terms = [
-        "mammographie", "échographie", "biopsie", "bénin", "malin",
-        "lésion", "calcification", "asymétrie", "dépistage", "diagnostic",
-        "palpable", "classification", "rapport", "sein", "nodule"
-    ]
-    FRENCH_MEDICAL_TERMS_PATH.write_text(
-        "\n".join(default_fr_terms), 
-        encoding='utf-8'  # Ensure new files use UTF-8
-    )
+def extract_medical_fields(text: str) -> dict:
+    """Basic medical field extraction with regex"""
+    return {
+        'patient_name': re.search(r'(?i)patient(?: name)?:\s*([^\n]+)', text),
+        'exam_date': re.search(r'\b\d{4}-\d{2}-\d{2}\b', text),
+        'birads': re.search(r'(?i)bi-rads[\s:-]*(\d)', text),
+        'findings': text  # Keep full text as fallback
+    }
 
 # Preload medical dictionary for spell checking
 MEDICAL_DICT = SpellChecker(language=None)

@@ -1,72 +1,67 @@
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning, message=".*missing ScriptRunContext.*")
-warnings.filterwarnings("ignore", category=UserWarning, message=".*device_map.*")
-warnings.filterwarnings("ignore", category=UserWarning)  # Suppress all UserWarnings
-
-# Custom exception class
-class OCRError(Exception):
-    """Custom exception for OCR processing errors"""
-    pass
-
-# Import Streamlit first
 import streamlit as st
-import time
-import platform
-import os
-import psutil
-import json
 import pdfplumber
-import hashlib
-from concurrent.futures import ProcessPoolExecutor
-import sqlite3
-from pathlib import Path
-
-# Database configuration
-DB_PATH = "mammo_reports.db"
-BATCH_SIZE = 10
-
-def manage_caches():
-    """Auto-clear caches when memory usage exceeds 80%"""
-    process = psutil.Process()
-    mem_info = process.memory_info()
-    
-    if mem_info.rss / (1024 ** 3) > 0.8:  # 0.8GB threshold
-        ocr_utils.IMAGE_CACHE.clear()
-        ocr_utils.OCR_CACHE.clear()
-        st.rerun()
-# import streamlit_authenticator as stauth  # <- Comment this
-
-# Set page config immediately after import
-st.set_page_config(
-    page_title="Mammo AI Assistant",
-    page_icon="🩺",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# Then other imports
 import pandas as pd
 import numpy as np
-import torch
-from huggingface_hub import hf_hub_download
-from transformers.pipelines import pipeline
-from pdf2image import convert_from_path, convert_from_bytes
 from PIL import Image
-import cv2
-import pytesseract
-import ocr_utils, chatbot_utils
-from huggingface_hub import login
-import plotly.express as px
-from transformers import MarianTokenizer, MarianMTModel, AutoModel, AutoProcessor, VisionEncoderDecoderModel, DonutProcessor
-import concurrent.futures
-import logging
-from functools import partial
-import re
-from wordcloud import WordCloud
-import matplotlib.pyplot as plt
-from concurrent.futures import ThreadPoolExecutor
-from nltk.corpus import stopwords
-from groq import Groq
+import ocr_utils
+
+def process_pdf(uploaded_file):
+    """Process PDF with reliable page-by-page OCR"""
+    results = []
+    
+    with pdfplumber.open(uploaded_file) as pdf:
+        for page_num, page in enumerate(pdf.pages):
+            try:
+                # Extract text directly first
+                text = page.extract_text()
+                
+                # Fallback to OCR if needed
+                if not text or len(text) < 50:
+                    img = page.to_image(resolution=300).original
+                    text = ocr_utils.simple_ocr(np.array(img))
+                
+                # Extract structured fields
+                fields = ocr_utils.extract_medical_fields(text)
+                
+                results.append({
+                    'patient_name': fields['patient_name'].group(1) if fields['patient_name'] else 'Unknown',
+                    'exam_date': fields['exam_date'].group() if fields['exam_date'] else 'Unknown',
+                    'birads_score': int(fields['birads'].group(1)) if fields['birads'] else 0,
+                    'findings': text[:500],  # First 500 chars
+                    'source_file': uploaded_file.name,
+                    'page_number': page_num + 1
+                })
+                
+            except Exception as e:
+                st.error(f"Error processing page {page_num+1}: {str(e)}")
+                continue
+    
+    return pd.DataFrame(results)
+# Streamlit UI
+st.title("Medical Report Processor")
+
+uploaded_files = st.file_uploader("Upload PDFs", type="pdf", accept_multiple_files=True)
+
+if uploaded_files:
+    all_dfs = []
+    for file in uploaded_files:
+        with st.spinner(f"Processing {file.name}..."):
+            df = process_pdf(file)
+            all_dfs.append(df)
+    
+    final_df = pd.concat(all_dfs)
+    st.session_state.df = final_df
+    
+    st.success(f"Processed {len(final_df)} pages")
+    st.dataframe(final_df)
+    
+    if not final_df.empty:
+        st.download_button(
+            "Download Results",
+            final_df.to_csv(index=False),
+            "medical_data.csv",
+            "text/csv"
+        )
 
 # Define common medical stopwords to exclude
 STOP_WORDS = set(stopwords.words('english')).union({
