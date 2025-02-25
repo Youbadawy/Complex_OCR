@@ -9,6 +9,8 @@ import pandas as pd
 import numpy as np
 from PIL import Image
 import pytesseract
+import cv2
+import hashlib
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 import concurrent.futures
 import sqlite3
@@ -17,7 +19,7 @@ from nltk.corpus import stopwords
 import plotly.express as px
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
-from transformers import pipeline
+from transformers import pipeline, DonutProcessor, VisionEncoderDecoderModel
 import torch
 from huggingface_hub import login
 from groq import Groq
@@ -245,8 +247,8 @@ def process_page(page):
 
 def process_pdf(uploaded_file):
     """Process PDF with parallel page processing"""
-    manage_caches()  # Check memory before processing
-    file_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
+    # Remove memory cache check since manage_caches() is not defined
+    file_hash = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
     
     # Check cache
     if Path(DB_PATH).exists():
