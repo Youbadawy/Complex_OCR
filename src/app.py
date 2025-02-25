@@ -568,19 +568,30 @@ with tab1:
                     # Simple processing loop
                     if uploaded_files:
                         all_text = []
+                        total_pages = 0
+                        processed_pages = 0
+                        
+                        # First count total pages
+                        for uploaded_file in uploaded_files:
+                            with pdfplumber.open(uploaded_file) as pdf:
+                                total_pages += len(pdf.pages)
+                        
+                        # Then process pages
                         for uploaded_file in uploaded_files:
                             with pdfplumber.open(uploaded_file) as pdf:
                                 for page in pdf.pages:
                                     all_text.append(page.extract_text())
-                        processed_pages += 1
-                        progress = processed_pages / total_pages
-                        progress_bar.progress(min(progress, 1.0))
+                                    processed_pages += 1
+                                    progress = processed_pages / total_pages
+                                    progress_bar.progress(min(progress, 1.0))
                         
+                        # Process results
                         try:
-                            result = future.result()
-                            if 'error' in result:
-                                error_messages.append(result['error'])
-                            else:
+                            if all_text:  # Only process if we have extracted text
+                                result = {'text': '\n'.join(all_text)}
+                                if 'error' in result:
+                                    error_messages.append(result['error'])
+                                else:
                                 # Collect extracted data
                                 extracted_data.append(result)
                                 template_warnings.extend(result.get('template_warnings', []))
