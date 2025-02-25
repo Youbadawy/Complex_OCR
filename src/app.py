@@ -253,7 +253,7 @@ def process_single_page(image, page_num, uploaded_file):
         return {'error': str(e)}
 
         # Add error handling for empty OCR results
-        if not ocr_data['raw_text']:
+        if not text:
             logging.warning(f"No text extracted from page {page_num}")
             structured_data = ocr_utils.default_structured_output()
             warnings = ['OCR failed - no text detected']
@@ -266,10 +266,10 @@ def process_single_page(image, page_num, uploaded_file):
 
         # Enhanced Mixtral prompt with layout context
         prompt = f"""MEDICAL DOCUMENT STRUCTURE:
-        {layout_json}
+        No layout data available
 
         OCR TEXT:
-        {ocr_data['raw_text'][:3000]}
+        {text[:3000]}
 
         TASK: Extract and validate these fields:
         1. patient_name (title case)
@@ -337,7 +337,7 @@ def process_single_page(image, page_num, uploaded_file):
             'page_number': page_num + 1,
             'warnings': ', '.join(warnings) if warnings else 'None',
             'processing_confidence': 0.0,
-            'raw_ocr_text': ocr_data.get('raw_text', '')  # Safe access
+            'raw_ocr_text': text  # Direct text access
         }
         
         return {
@@ -565,11 +565,13 @@ with tab1:
                         'source': [f.name for f in uploaded_files]
                     })
 
-                    # Process results as they complete
-                    total_pages = len(futures)
-                    processed_pages = 0
-                    
-                    for future in concurrent.futures.as_completed(futures):
+                    # Simple processing loop
+                    if uploaded_files:
+                        all_text = []
+                        for uploaded_file in uploaded_files:
+                            with pdfplumber.open(uploaded_file) as pdf:
+                                for page in pdf.pages:
+                                    all_text.append(page.extract_text())
                         processed_pages += 1
                         progress = processed_pages / total_pages
                         progress_bar.progress(min(progress, 1.0))
