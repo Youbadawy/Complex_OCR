@@ -3,7 +3,31 @@ import pytesseract
 import re
 import numpy as np
 import logging
+import asyncio
+import json
+from functools import lru_cache
+from typing import Dict, Any, Optional
+from spellchecker import SpellChecker
+from pathlib import Path
 from pytesseract import Output
+
+# Constants and paths
+MEDICAL_TERMS_PATH = Path(__file__).parent / "medical_terms.txt"
+FRENCH_MEDICAL_TERMS_PATH = Path(__file__).parent / "french_medical_terms.txt"
+
+# Global caches
+IMAGE_CACHE = {}
+PRE_COMPILED_PATTERNS = {
+    'impression': re.compile(r'\bIMPRessiON\b', re.IGNORECASE),
+    'birads': re.compile(r'(?i)(bi-rads|birads)[\s:-]*(\d)'),
+    'date': re.compile(r'\b\d{4}-\d{2}-\d{2}\b'),
+    'medical_terms': re.compile(r'\b(birads|impression|mammogram|ultrasound)\b', re.IGNORECASE)
+}
+
+def _cache_key(image: np.ndarray) -> str:
+    """Generate cache key from image data"""
+    from hashlib import sha256
+    return sha256(image.tobytes()).hexdigest()
 
 def simple_ocr(image: np.ndarray) -> str:
     """Reliable OCR pipeline with basic preprocessing"""

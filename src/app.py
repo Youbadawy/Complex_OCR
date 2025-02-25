@@ -1,9 +1,32 @@
+import os
+import re
+import json
+import logging
+import platform
 import streamlit as st
 import pdfplumber
 import pandas as pd
 import numpy as np
 from PIL import Image
+import pytesseract
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+import concurrent.futures
+import sqlite3
+from pathlib import Path
+from nltk.corpus import stopwords
+import plotly.express as px
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
+from transformers import pipeline
+import torch
+from huggingface_hub import login
+from groq import Groq
 import ocr_utils
+import chatbot_utils
+
+# Constants
+DB_PATH = "mammo_reports.db"
+BATCH_SIZE = 10
 
 def process_pdf(uploaded_file):
     """Process PDF with reliable page-by-page OCR"""
