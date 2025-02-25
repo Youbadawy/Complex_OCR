@@ -555,14 +555,19 @@ with tab1:
                 # Simple processing loop
                 if uploaded_files:
                     all_text = []
+                    sources = []  # New list to track source per page
+                    
                     for uploaded_file in uploaded_files:
                         with pdfplumber.open(uploaded_file) as pdf:
+                            # Process each page and track its source file
                             for page in pdf.pages:
                                 all_text.append(page.extract_text())
+                                sources.append(uploaded_file.name)  # Add filename per page
                     
+                    # Create DataFrame with aligned arrays
                     st.session_state['df'] = pd.DataFrame({
                         'text': all_text,
-                        'source': [f.name for f in uploaded_files]
+                        'source': sources  # Now same length as all_text
                     })
 
                     # Simple processing loop
