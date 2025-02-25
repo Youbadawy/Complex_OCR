@@ -101,68 +101,7 @@ else:
 @st.cache_resource(show_spinner="Initializing OCR Engine...")
 def init_paddle():
     from paddleocr import PaddleOCR
-    import paddle
-    import os
-    
-    # Initialize model_dir first before any potential exceptions
-    model_dir = os.path.abspath(os.path.expanduser("~/.paddleocr"))
-    os.makedirs(model_dir, exist_ok=True)
-
-    try:
-        # Clear existing CUDA cache
-        if paddle.is_compiled_with_cuda():
-            paddle.device.cuda.empty_cache()
-        else:
-            paddle.device.cpu.empty_cache()
-
-        # Verify model files exist before initializing
-        det_model = hf_hub_download(
-            'PaddlePaddle/PaddleOCR', 
-            'en_PP-OCRv4_det_infer',
-            cache_dir=model_dir,
-            force_filename='en_PP-OCRv4_det_infer'
-        )
-        rec_model = hf_hub_download(
-            'PaddlePaddle/PaddleOCR',
-            'en_PP-OCRv4_rec_infer', 
-            cache_dir=model_dir,
-            force_filename='en_PP-OCRv4_rec_infer'
-        )
-        cls_model = hf_hub_download(
-            'PaddlePaddle/PaddleOCR',
-            'ch_ppocr_mobile_v2.0_cls_infer',
-            cache_dir=model_dir,
-            force_filename='ch_ppocr_mobile_v2.0_cls_infer'
-        )
-
-        # Initialize with verified paths
-        ocr = PaddleOCR(
-            lang='en',
-            use_gpu=False,
-            det_model_dir=os.path.dirname(det_model),
-            rec_model_dir=os.path.dirname(rec_model),
-            cls_model_dir=os.path.dirname(cls_model),
-            use_angle_cls=True,
-            show_log=True,  # Enable logging for debugging
-            enable_mkldnn=True,
-            drop_score=0.3  # Lower threshold for medical texts
-        )
-        
-        # Validate with medical text image
-        test_img = np.zeros((300, 600, 3), dtype=np.uint8)
-        cv2.putText(test_img, "BIRADS 2: Benign Findings", (50,150), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2)
-        result = ocr.ocr(test_img, cls=True)
-        
-        if not result or "Benign" not in str(result):
-            raise RuntimeError("PaddleOCR medical text validation failed")
-            
-        return ocr
-        
-    except Exception as e:
-        logging.critical(f"PaddleOCR init failed: {str(e)}", exc_info=True)
-        st.error(f"OCR Engine failed: {str(e)} - Check model files in {model_dir}")
-        return None
+    return PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False)
 
 # Add this after imports but before OCR processing
 if platform.system() == "Windows":
@@ -299,70 +238,19 @@ def process_pdf(uploaded_file):
 
 def process_single_page(image, page_num, uploaded_file):
     try:
-        img_array = np.array(image.convert('RGB'))
+        # Simple OCR processing
+        ocr = init_paddle()
+        result = ocr.ocr(np.array(image), cls=True)
+        text = ' '.join([line[1][0] for line in result[0]]) if result else ""
         
-        # Initialize OCR engines with fallback
-        paddle_ocr = init_paddle()
-        if paddle_ocr is None:
-            raise OCRError("PaddleOCR initialization failed")
-            
-        # Get OCR text with retry
-        ocr_text = ocr_utils.hybrid_ocr(img_array)
-        if not ocr_text.strip():
-            return {
-                'error': f"Page {page_num+1}: No text extracted",
-                'source_pdf': uploaded_file.name,
-                'page_number': page_num + 1
-            }
-            
-        # Initialize Donut with validation
-        processor, donut_model = init_donut()
-        if processor is None or donut_model is None:
-            raise OCRError("Document analysis model failed")
-            
-        # Validate medical content
-        if 'IMPRESSION' not in ocr_text and 'BIRADS' not in ocr_text:
-            logging.warning(f"Low medical content on page {page_num+1}")
-            
-        # Initialize Donut with null checks
-        processor, donut_model = init_donut()
-        
-        if processor is None or donut_model is None:
-            processor, donut_model = init_donut()
-            if processor is None or donut_model is None:
-                raise RuntimeError("Document analysis model failed to initialize")
-                
-        # Prepare image with device awareness
-        donut_image = processor(
-            image.convert("RGB"), 
-            return_tensors="pt"
-        ).pixel_values.to(donut_model.device)  # Add device alignment
-            
-        # Generate layout parse with error handling
-        try:
-            donut_output = donut_model.generate(
-                donut_image,
-                max_length=512,
-                early_stopping=True,
-                num_beams=3  # Required when using early_stopping
-            )
-            layout_info = processor.batch_decode(donut_output)[0]
-            layout_json = processor.token2json(layout_info)
-        except Exception as e:
-            logging.warning(f"Layout analysis failed, using fallback: {str(e)}")
-            layout_json = {"sections": [], "tables": []}
-
-        # Existing PaddleOCR processing
-        paddle_ocr = init_paddle()
-        result = paddle_ocr.ocr(np.array(image), cls=True)
-        
-        # Enhanced OCR data with layout context
-        ocr_data = {
-            'raw_text': '\n'.join([line[1][0] for line in result[0]]) if result and result[0] else '',
-            'layout': [(line[0], line[1][0]) for line in result[0]] if result and result[0] else [],
-            'document_structure': layout_json,
-            'confidence_scores': [line[1][1] for line in result[0]] if result and result[0] else []
+        # Basic field extraction
+        return {
+            'text': text,
+            'source_pdf': uploaded_file.name,
+            'page_number': page_num + 1
         }
+    except Exception as e:
+        return {'error': str(e)}
 
         # Add error handling for empty OCR results
         if not ocr_data['raw_text']:
@@ -664,29 +552,18 @@ with tab1:
                 if 'df' not in st.session_state:
                     st.session_state['df'] = pd.DataFrame()
 
-                # Process all files in parallel
-                with ThreadPoolExecutor(max_workers=os.cpu_count()*2) as file_executor:
-                    # Create futures for all files and pages
-                    futures = []
+                # Simple processing loop
+                if uploaded_files:
+                    all_text = []
                     for uploaded_file in uploaded_files:
-                        try:
-                            images = convert_from_bytes(uploaded_file.read(), dpi=300)
-                            for page_num, image in enumerate(images):
-                                future = file_executor.submit(
-                                    process_single_page,
-                                    image=image,
-                                    page_num=page_num,
-                                    uploaded_file=uploaded_file
-                                )
-                                futures.append(future)
-                        except Exception as e:
-                            error_msg = f"Failed to process {uploaded_file.name}: {str(e)}"
-                            logging.error(error_msg, exc_info=True)
-                            error_messages.append(error_msg)
-                        except Exception as e:
-                            error_msg = f"Failed to process {uploaded_file.name}: {str(e)}"
-                            logging.error(error_msg, exc_info=True)
-                            error_messages.append(error_msg)
+                        with pdfplumber.open(uploaded_file) as pdf:
+                            for page in pdf.pages:
+                                all_text.append(page.extract_text())
+                    
+                    st.session_state['df'] = pd.DataFrame({
+                        'text': all_text,
+                        'source': [f.name for f in uploaded_files]
+                    })
 
                     # Process results as they complete
                     total_pages = len(futures)
