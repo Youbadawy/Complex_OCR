@@ -1,4 +1,7 @@
 import pandas as pd
+from langdetect import detect
+from transformers import pipeline
+import re
 
 def analyze_csv(df, diagnosis_pipeline):
     analysis_results = []
@@ -47,3 +50,58 @@ def identify_alerts(analysis_results, diagnosis_pipeline):
         }
         alerts.append(alert)
     return alerts
+
+def generate_chatbot_context(df):
+    """Generate medical context summary from dataframe"""
+    context = {
+        'patient_count': len(df),
+        'common_birads': df['birads_score'].mode()[0] if 'birads_score' in df else None,
+        'date_range': (df['exam_date'].min(), df['exam_date'].max()) if 'exam_date' in df else None,
+        'frequent_findings': df['findings'].value_counts().nlargest(3).to_dict() if 'findings' in df else None,
+        'data_quality': {
+            'missing_birads': df['birads_score'].isna().sum(),
+            'missing_dates': df['exam_date'].isna().sum()
+        }
+    }
+    return context
+
+def generate_medical_response(query, context, chat_history):
+    """Generate context-aware medical response with language detection"""
+    try:
+        lang = detect(query)
+    except:
+        lang = 'en'  # default to English
+    
+    # Prepare language-specific prompt
+    if lang == 'fr':
+        prompt = f"[Contexte Médical]\n{context}\n\n[Historique]\n{chat_history}\n\n[Question] {query}\n[Réponse]"
+    else:
+        prompt = f"[Medical Context]\n{context}\n\n[History]\n{chat_history}\n\n[Question] {query}\n[Answer]"
+    
+    # Generate response
+    medical_qa = pipeline(
+        "text-generation", 
+        model="Medical-ChatBot",
+        max_length=512,
+        temperature=0.3
+    )
+    
+    response = medical_qa(
+        prompt,
+        max_new_tokens=200,
+        do_sample=True,
+        clean_up_tokenization_spaces=True
+    )[0]['generated_text']
+    
+    # Extract only the new response
+    return response.split("[Réponse]" if lang == 'fr' else "[Answer]")[-1].strip()
+
+def handle_user_feedback(feedback_type, details):
+    """Process user feedback about data inconsistencies"""
+    feedback_data = {
+        'timestamp': pd.Timestamp.now(),
+        'feedback_type': feedback_type,
+        'details': details
+    }
+    # Store feedback in database or logging system
+    return feedback_data

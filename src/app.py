@@ -13,9 +13,10 @@ import cv2
 import hashlib
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 import concurrent.futures
-import sqlite3
-from pathlib import Path
-from nltk.corpus import stopwords
+from sqlalchemy import create_engine, Column, String, Text, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+import datetime
 import plotly.express as px
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
@@ -25,10 +26,89 @@ from huggingface_hub import login
 from groq import Groq
 import ocr_utils
 import chatbot_utils
+from nltk.corpus import stopwords
+from pathlib import Path
 
 # Constants
-DB_PATH = "mammo_reports.db"
-BATCH_SIZE = 10
+DB_URL = "sqlite:///mammo_reports.db"  # SQLAlchemy connection string
+engine = create_engine(DB_URL)
+Base = declarative_base()
+Session = sessionmaker(bind=engine)
+
+# Define the database model
+class Report(Base):
+    __tablename__ = 'reports'
+    
+    md5_hash = Column(String, primary_key=True)
+    filename = Column(String)
+    processed_at = Column(DateTime, default=datetime.datetime.now)
+    patient_name = Column(String)
+    exam_date = Column(String)
+    findings = Column(Text)
+    report_metadata = Column(Text)
+    raw_ocr_text = Column(Text)
+    
+    def __repr__(self):
+        return f"<Report(filename='{self.filename}')>"
+
+# Add this near the top of your app.py, before any other Streamlit calls
+st.set_page_config(
+    page_title="Medical Report Processor",
+    page_icon="🏥",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': 'https://www.example.com/help',
+        'Report a bug': "https://www.example.com/bug",
+        'About': "# Medical Report Processor\nAI-powered analysis of medical reports."
+    }
+)
+
+def init_db():
+    """Initialize database with SQLAlchemy"""
+    Base.metadata.create_all(engine)
+
+def save_to_db(data: dict):
+    """Save processed results to database using SQLAlchemy"""
+    try:
+        session = Session()
+        
+        # Create a new report object
+        report = Report(
+            md5_hash=data['md5_hash'],
+            filename=data['filename'],
+            patient_name=data.get('patient_name', 'Not Available'),
+            exam_date=data.get('exam_date', 'Not Available'),
+            findings=json.dumps(data.get('findings', {})),
+            report_metadata=json.dumps(data.get('metadata', {})),
+            raw_ocr_text=data.get('raw_ocr_text', '')
+        )
+        
+        # Add and commit
+        session.merge(report)  # Use merge instead of add to handle updates
+        session.commit()
+        logging.info(f"Saved report to database: {data['filename']}")
+        
+    except Exception as e:
+        logging.error(f"Database error: {str(e)}")
+        if session:
+            session.rollback()
+    finally:
+        if session:
+            session.close()
+
+# Add a function to clear all caches
+def clear_all_caches():
+    """Clear all application caches"""
+    if hasattr(ocr_utils, 'IMAGE_CACHE'):
+        ocr_utils.IMAGE_CACHE.clear()
+    if hasattr(ocr_utils, 'OCR_CACHE'):
+        ocr_utils.OCR_CACHE.clear()
+    if hasattr(ocr_utils, 'LLM_CACHE'):
+        ocr_utils.LLM_CACHE.clear()
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    return True
 
 def process_pdf(uploaded_file):
     """Process PDF as a complete document with combined text from all pages"""
@@ -36,15 +116,20 @@ def process_pdf(uploaded_file):
         # Generate file hash for caching
         file_hash = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
         
-        # Check cache
-        if Path(DB_PATH).exists():
-            with sqlite3.connect(DB_PATH) as conn:
-                cached = conn.execute("""
-                    SELECT findings, metadata FROM reports
-                    WHERE md5_hash = ?
-                """, (file_hash,)).fetchone()
-                if cached:
-                    return json.loads(cached[0]), json.loads(cached[1])
+        # Check cache using SQLAlchemy
+        try:
+            session = Session()
+            cached_report = session.query(Report).filter_by(md5_hash=file_hash).first()
+            
+            if cached_report:
+                logging.info(f"Using cached results for {uploaded_file.name}")
+                return json.loads(cached_report.findings), json.loads(cached_report.report_metadata)
+                
+        except Exception as e:
+            logging.error(f"Cache lookup error: {str(e)}")
+        finally:
+            if 'session' in locals():
+                session.close()
         
         # Extract text from all pages
         all_text = []
@@ -54,41 +139,66 @@ def process_pdf(uploaded_file):
                 page_text = page.extract_text()
                 if page_text:
                     all_text.append(page_text)
+                    logging.info(f"Extracted text from page {len(all_text)} using pdfplumber")
                 else:
                     # Fallback to OCR if text extraction fails
                     img = page.to_image(resolution=300).original
                     ocr_text = ocr_utils.simple_ocr(np.array(img))
                     all_text.append(ocr_text)
+                    logging.info(f"Extracted text from page {len(all_text)} using OCR fallback")
         
         # Combine all text into a single document
         combined_text = "\n\n".join(all_text)
+        logging.info(f"Combined text length: {len(combined_text)} characters")
+        logging.info(f"Text sample: {combined_text[:200]}...")
         
         # Process the combined text to extract all fields
         structured_data = ocr_utils.process_document_text(combined_text)
+        
+        # Debug output
+        logging.info(f"Extraction results: {json.dumps({k: v for k, v in structured_data.items() if k != 'raw_ocr_text'})}")
+        
+        # Ensure raw OCR text is preserved
+        structured_data['raw_ocr_text'] = combined_text
         
         # Add metadata
         metadata = {
             "md5_hash": file_hash,
             "filename": uploaded_file.name,
             "pages": len(all_text),
-            "processing_date": pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
+            "processing_date": pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "is_deidentified": ocr_utils.is_deidentified_document(combined_text)
         }
         
-        # Save to database
-        save_to_db({
-            "md5_hash": file_hash,
-            "filename": uploaded_file.name,
-            "patient_name": structured_data.get('patient_name', 'Unknown'),
-            "exam_date": structured_data.get('exam_date', 'Unknown'),
-            "findings": json.dumps(structured_data),
-            "metadata": json.dumps(metadata)
-        })
+        # Only try to save to DB if the function exists
+        try:
+            save_to_db({
+                "md5_hash": file_hash,
+                "filename": uploaded_file.name,
+                "patient_name": structured_data.get('patient_name', 'Not Available'),
+                "exam_date": structured_data.get('exam_date', 'Not Available'),
+                "findings": json.dumps(structured_data),
+                "report_metadata": json.dumps(metadata),
+                "raw_ocr_text": combined_text  # Store raw text
+            })
+        except Exception as db_error:
+            logging.error(f"Database save error: {str(db_error)}")
+            # Continue processing even if DB save fails
+        
+        # Add more detailed logging
+        logging.info(f"Extraction complete for {uploaded_file.name}")
+        logging.info(f"Fields extracted: {list(structured_data.keys())}")
+        logging.info(f"Patient name: {structured_data.get('patient_name', 'Not Available')}")
+        logging.info(f"Exam date: {structured_data.get('exam_date', 'Not Available')}")
+        logging.info(f"BIRADS score: {structured_data.get('birads_score', 'Not Available')}")
         
         return structured_data, metadata
         
     except Exception as e:
         logging.error(f"PDF processing error: {str(e)}", exc_info=True)
-        return ocr_utils.default_structured_output(), {"error": str(e), "filename": uploaded_file.name}
+        default_output = ocr_utils.default_structured_output()
+        default_output['raw_ocr_text'] = f"Error during processing: {str(e)}"
+        return default_output, {"error": str(e), "filename": uploaded_file.name}
 
 # Streamlit UI
 st.title("Medical Report Processor")
@@ -102,15 +212,23 @@ if uploaded_files:
     progress_bar = st.progress(0)
     status_text = st.empty()
     
-    # Process each PDF as a complete document
-    for i, file in enumerate(uploaded_files):
-        status_text.text(f"Processing {file.name}...")
+    # Add direct debug output
+    st.subheader("Debug: Raw OCR Text")
+    debug_expander = st.expander("Show Raw OCR Text (for debugging)")
+    
+    # Process each file
+    for i, uploaded_file in enumerate(uploaded_files):
+        status_text.text(f"Processing {uploaded_file.name}...")
         
         # Process the PDF
-        structured_data, metadata = process_pdf(file)
+        result, metadata = process_pdf(uploaded_file)
+        
+        # Show raw text in debug expander
+        with debug_expander:
+            st.text_area(f"Raw text from {uploaded_file.name}", result.get('raw_ocr_text', 'No text extracted'), height=200)
         
         # Add to results
-        all_results.append(structured_data)
+        all_results.append(result)
         
         # Update progress
         progress = (i + 1) / len(uploaded_files)
@@ -123,7 +241,8 @@ if uploaded_files:
             'birads_score', 'document_date', 'document_type', 
             'electronically_signed_by', 'exam_date', 'impression_result', 
             'mammogram_results', 'patient_history', 'patient_name', 
-            'recommendation', 'testing_provider', 'ultrasound_results'
+            'recommendation', 'testing_provider', 'ultrasound_results',
+            'raw_ocr_text'  # Add raw OCR text column
         ]
         
         # Create DataFrame with consistent columns
@@ -132,22 +251,93 @@ if uploaded_files:
         # Add missing columns with default values
         for col in required_columns:
             if col not in df.columns:
-                df[col] = "Unknown"
+                df[col] = "Not Available"
+        
+        # Replace empty values with "Not Available"
+        df = df.fillna("Not Available")
         
         # Store in session state
         st.session_state.df = df
         
-        # Display results
-        st.success(f"Processed {len(df)} documents")
-        st.dataframe(df)
+        # Display results with tabs
+        tab1, tab2, tab3, tab4 = st.tabs(["Structured Data", "Raw OCR Text", "Debug Info", "Database"])
         
-        # Download button
-        st.download_button(
-            "Download Results",
-            df.to_csv(index=False),
-            "medical_data.csv",
-            "text/csv"
-        )
+        with tab1:
+            st.dataframe(df.drop(columns=['raw_ocr_text']), use_container_width=True)
+        
+        with tab2:
+            # Show raw OCR text for selected document
+            selected_doc = st.selectbox("Select document to view raw text:", df['patient_name'] + " - " + df['document_date'])
+            if selected_doc:
+                doc_idx = df.index[df['patient_name'] + " - " + df['document_date'] == selected_doc][0]
+                st.text_area("Raw OCR Text", df.iloc[doc_idx]['raw_ocr_text'], height=400)
+        
+        with tab3:
+            st.subheader("Extraction Debug Information")
+            st.write("Field extraction success rate:")
+            
+            # Calculate extraction success
+            extraction_stats = {}
+            for col in required_columns:
+                if col != 'raw_ocr_text':
+                    success_rate = (df[col] != "Not Available").mean() * 100
+                    extraction_stats[col] = success_rate
+            
+            # Display as bar chart
+            stats_df = pd.DataFrame(list(extraction_stats.items()), columns=['Field', 'Success Rate (%)'])
+            st.bar_chart(stats_df.set_index('Field'))
+
+        with tab4:
+            st.header("Database Management")
+            
+            # Show stored reports
+            try:
+                session = Session()
+                reports = session.query(Report).all()
+                
+                if reports:
+                    report_data = [{
+                        "Filename": r.filename,
+                        "Patient": r.patient_name,
+                        "Exam Date": r.exam_date,
+                        "Processed": r.processed_at.strftime("%Y-%m-%d %H:%M")
+                    } for r in reports]
+                    
+                    st.dataframe(pd.DataFrame(report_data))
+                    
+                    # Add export option
+                    if st.button("Export All Reports"):
+                        export_data = []
+                        for r in reports:
+                            report_dict = json.loads(r.findings)
+                            report_dict["filename"] = r.filename
+                            report_dict["processed_at"] = r.processed_at.strftime("%Y-%m-%d %H:%M")
+                            export_data.append(report_dict)
+                        
+                        export_df = pd.DataFrame(export_data)
+                        st.download_button(
+                            "Download Export",
+                            export_df.to_csv(index=False),
+                            "all_reports_export.csv",
+                            "text/csv"
+                        )
+                    
+                    # Add clear option
+                    if st.button("Clear Database"):
+                        if st.checkbox("I understand this will delete all stored reports"):
+                            session.query(Report).delete()
+                            session.commit()
+                            st.success("Database cleared successfully")
+                        else:
+                            st.warning("Please confirm deletion by checking the box")
+                else:
+                    st.info("No reports stored in database")
+            
+            except Exception as e:
+                st.error(f"Database error: {str(e)}")
+            finally:
+                if 'session' in locals():
+                    session.close()
 
 # Define common medical stopwords to exclude
 STOP_WORDS = set(stopwords.words('english')).union({
@@ -232,22 +422,6 @@ logging.basicConfig(
     force=True
 )
 
-# Database functions
-def init_db():
-    """Initialize SQLite database with schema"""
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS reports (
-                md5_hash TEXT PRIMARY KEY,
-                filename TEXT,
-                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                patient_name TEXT,
-                exam_date TEXT,
-                findings TEXT,
-                metadata TEXT
-            )
-        """)
-
 # Initialize Donut model
 @st.cache_resource
 def init_donut():
@@ -255,611 +429,17 @@ def init_donut():
     try:
         processor = DonutProcessor.from_pretrained(
             "naver-clova-ix/donut-base-finetuned-docvqa",
-            revision="official"  # Pin to stable version
+            device_map="cuda" if torch.cuda.is_available() else "cpu"
         )
         
         device = "cuda" if torch.cuda.is_available() else "cpu"
         if device == "cuda":
             torch.cuda.empty_cache()
             
-        model = VisionEncoderDeco # Ericsson/codechecker
-# -------------------------------------------------------------------------
-#
-#  Part of the CodeChecker project, under the Apache License v2.0 with
-#  LLVM Exceptions. See LICENSE for license information.
-#  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-#
-# -------------------------------------------------------------------------
-"""
-Defines the CodeChecker action for parsing a set of analysis results into a
-human-readable format.
-"""
-
-import argparse
-import os
-import sys
-
-from typing import Dict, List, Optional, Set, Tuple
-
-from codechecker_report_converter.report import report_file, \
-    reports as reports_helper
-from codechecker_report_converter.report.output import baseline, codeclimate, \
-    gerrit, json as report_to_json, plaintext
-from codechecker_report_converter.report.output.html import \
-    html as report_to_html
-from codechecker_report_converter.report.statistics import Statistics
-
-from codechecker_common import arg, logger
-from codechecker_common.skiplist_handler import SkipListHandler
-from codechecker_common.source_code_comment_handler import \
-    REVIEW_STATUS_VALUES, SourceCodeCommentHandler
-from codechecker_common.util import load_json
-
-LOG = logger.get_logger('system')
-
-
-def get_argparser_ctor_args():
-    """
-    This method returns a dict containing the kwargs for constructing an
-    argparse.ArgumentParser (either directly or as a subparser).
-    """
-
-    return {
-        'prog': 'CodeChecker parse',
-        'formatter_class': arg.RawDescriptionDefaultHelpFormatter,
-
-        # Description is shown when the command's help is queried directly
-        'description': """
-Parse and pretty-print the summary and results from one or more
-'codechecker-analyze' result files. Bugs which are commented by using
-"false_positive", "suppress" and "intentional" source code comments will not be
-printed by the `parse` command.""",
-
-        # Help is shown when the "parent" CodeChecker command lists the
-        # individual subcommands.
-        'help': "Print analysis summary and results in a human-readable format."
-    }
-
-
-def add_arguments_to_parser(parser):
-    """
-    Add the subcommand's arguments to the given argparse.ArgumentParser.
-    """
-
-    parser.add_argument('input',
-                        type=str,
-                        nargs='+',
-                        metavar='file/folder',
-                        help="The analysis result files and/or folders "
-                             "containing analysis results which should be "
-                             "parsed and printed.")
-
-    parser.add_argument('-t', '--type', '--input-format',
-                        dest="input_format",
-                        required=False,
-                        choices=['plist'],
-                        default='plist',
-                        help="Specify the format the analysis results were "
-                             "created as.")
-
-    output_opts = parser.add_argument_group("export arguments")
-    output_opts.add_argument('-e', '--export',
-                             dest="export",
-                             required=False,
-                             choices=['html', 'json', 'codeclimate', 'gerrit',
-                                      'baseline'],
-                             help="Specify extra output format type.")
-
-    output_opts.add_argument('-o', '--output',
-                             dest="output_path",
-                             default=argparse.SUPPRESS,
-                             help="Store the output in the given folder.")
-
-    output_opts.add_argument('--url',
-                             type=str,
-                             dest="trim_path_prefix",
-                             default=argparse.SUPPRESS,
-                             help="Path prefix to trim when generating "
-                                  "gerrit output.")
-
-    parser.add_argument('--suppress',
-                        type=str,
-                        dest="suppress",
-                        default=argparse.SUPPRESS,
-                        required=False,
-                        help="Path of the suppress file to use. Records in the "
-                             "suppress file are used to suppress the "
-                             "display of certain results when parsing the "
-                             "analyses' report. (Reports to an analysis "
-                             "result can also be suppressed in the source "
-                             "code -- please consult the manual on how to "
-                             "do so.) NOTE: The suppress file relies on the "
-                             "\"bug identifier\" generated by the analyzers "
-                             "which is experimental, take care when relying "
-                             "on it.")
-
-    parser.add_argument('--export-source-suppress',
-                        dest="create_suppress",
-                        action="store_true",
-                        required=False,
-                        default=argparse.SUPPRESS,
-                        help="Write suppress data from the suppression "
-                             "annotations found in the source files that were "
-                             "analyzed earlier that created the results. "
-                             "The suppression information will be written "
-                             "to the parameter of '--suppress'.")
-
-    parser.add_argument('--print-steps',
-                        dest="print_steps",
-                        action="store_true",
-                        required=False,
-                        default=argparse.SUPPRESS,
-                        help="Print the steps the analyzers took in finding "
-                             "the reported defect.")
-
-    parser.add_argument('--review-status',
-                        nargs='*',
-                        dest="review_status",
-                        metavar='REVIEW_STATUS',
-                        choices=REVIEW_STATUS_VALUES,
-                        default=["confirmed", "unreviewed"],
-                        help="Filter results by review statuses. Valid "
-                             f"values are: {', '.join(REVIEW_STATUS_VALUES)}.")
-
-    parser.add_argument('--trim-path-prefix',
-                        type=str,
-                        nargs='*',
-                        dest="trim_path_prefix",
-                        required=False,
-                        default=argparse.SUPPRESS,
-                        help="Removes leading path from files which will be "
-                             "printed. For instance if you analyze files "
-                             "'/home/jsmith/my_proj/x.cpp' and "
-                             "'/home/jsmith/my_proj/y.cpp', but would prefer "
-                             "to see just 'x.cpp' and 'y.cpp' in the output, "
-                             "this flag can help you. "
-                             "Use '--trim-path-prefix=/home/jsmith/my_proj/' "
-                             "to remove the leading path.")
-
-    parser.add_argument('--verbose',
-                        type=str,
-                        dest="verbosity",
-                        choices=['info', 'debug', 'debug_analyzer'],
-                        default=argparse.SUPPRESS,
-                        help="Set verbosity level.")
-
-    parser.add_argument('--skip',
-                        type=str,
-                        dest="skipfile",
-                        default=argparse.SUPPRESS,
-                        help="Path to the Skipfile dictating which project "
-                             "files should be omitted from analysis. Please "
-                             "consult the User guide on how a Skipfile "
-                             "should be laid out.")
-
-    parser.add_argument('--config',
-                        dest='config_file',
-                        required=False,
-                        help="R|Allow the configuration from an explicit JSON "
-                             "based configuration file. The values configured "
-                             "in the config file will overwrite the values "
-                             "set in the command line. The format of "
-                             "configuration file is:\n"
-                             "{\n"
-                             "  \"analyze\": [\n"
-                             "    \"--enable=core.DivideZero\",\n"
-                             "    \"--enable=core.CallAndMessage\",\n"
-                             "    \"--report-hash=context-free-v2\",\n"
-                             "    \"--verbose=debug\",\n"
-                             "    \"--skip=$HOME/project/skip.txt\",\n"
-                             "    \"--clean\"\n"
-                             "  ]\n"
-                             "}")
-
-    logger.add_verbose_arguments(parser)
-    parser.set_defaults(func=main)
-
-
-def parse(plist_file: str, metadata_dict: Dict, skip_handler: SkipListHandler,
-          trim_path_prefixes: Optional[List[str]] = None) -> \
-        Tuple[List, List, Dict, Dict, Dict, Dict, Dict, Dict]:
-    """
-    Parses a plist report file.
-    Returns:
-        - list of source files
-        - list of reports
-        - map of source files to reports
-        - report statistics
-        - map of source files to analyzer statistics
-        - map of source files to analyzer checkers
-        - map of source files to analyzer runtimes
-        - map of source files to analyzer failed checkers
-    """
-    files = []
-    reports = []
-    file_sources_map = {}
-    file_stats = {}
-    file_checkers_map = {}
-    file_runtime_map = {}
-    file_failed_checkers_map = {}
-
-    source_code_comment_handler = SourceCodeCommentHandler()
-
-    all_reports, metadata_dict, analyzer_statistics = \
-        report_file.get_report_data(plist_file, metadata_dict)
-
-    file_stats.update(analyzer_statistics)
-
-    for report in all_reports:
-        path = report.file_path
-
-        if path:
-            if skip_handler and skip_handler.should_skip(path):
-                continue
-
-            if trim_path_prefixes:
-                for prefix in trim_path_prefixes:
-                    if prefix and path.startswith(prefix):
-                        path = path[len(prefix):]
-                        break
-
-            report.trim_path_prefixes(trim_path_prefixes)
-
-            # Skip the report if it is a deduplication.
-            if report.main:
-                if path not in file_sources_map:
-                    try:
-                        with open(report.file_path,
-                                  encoding='utf-8',
-                                  errors='ignore') as source_file:
-                            source = source_file.read()
-                    except (OSError, IOError):
-                        source = ""
-                    file_sources_map[path] = source
-
-                if source_code_comment_handler.has_source_line_comments(
-                        report.file_path, report.line, file_sources_map):
-                    continue
-
-                report.review_status = \
-                    source_code_comment_handler.get_suppressed(
-                        report.file_path,
-                        report.line,
-                        report.checker_name,
-                        file_sources_map)
-
-                if report.review_status == 'false_positive':
-                    report.review_status = 'false positive'
-
-                if report.review_status == 'intentional':
-                    report.review_status = 'intentional'
-
-                reports.append(report)
-                files.append(path)
-
-    # Get report statistics.
-    statistics = Statistics()
-    statistics.num_of_analyzer_result_files = 1
-    statistics.num_of_reports = len(reports)
-    statistics.num_of_reports_with_source = len(reports)
-
-    for report in reports:
-        statistics.add_report(report)
-
-    # Get analyzer statistics.
-    statistics.num_of_analyzer_result_files = 1
-    for analyzer_type, res in metadata_dict.items():
-        analyzer_statistics = {}
-        analyzer_statistics['version'] = res.get('analyzer_statistics', {})
-        analyzer_statistics['failed'] = res.get('failed', {})
-        analyzer_statistics['successful'] = res.get('successful', {})
-        analyzer_statistics['runtime'] = res.get('runtime', {})
-
-        checkers = res.get('checkers', {})
-        analyzer_statistics['checkers'] = checkers
-
-        if metadata_dict and analyzer_type in metadata_dict and \
-                'analyzer_statistics' in metadata_dict[analyzer_type]:
-            metadata = metadata_dict[analyzer_type]
-            analyzer_statistics['analyzer_statistics'] = \
-                metadata.get('analyzer_statistics', {})
-
-            for curr_file, failed_checkers in metadata.get('failed', {}).items():
-                if curr_file not in file_failed_checkers_map:
-                    file_failed_checkers_map[curr_file] = {}
-
-                file_failed_checkers_map[curr_file][analyzer_type] = \
-                    failed_checkers
-
-            for curr_file, checker_names in metadata.get('checkers', {}).items():
-                if curr_file not in file_checkers_map:
-                    file_checkers_map[curr_file] = {}
-
-                file_checkers_map[curr_file][analyzer_type] = checker_names
-
-            for curr_file, runtime in metadata.get('runtime', {}).items():
-                if curr_file not in file_runtime_map:
-                    file_runtime_map[curr_file] = {}
-
-                file_runtime_map[curr_file][analyzer_type] = runtime
-
-    return (
-        files,
-        reports,
-        file_sources_map,
-        statistics.checker_statistics,
-        file_stats,
-        file_checkers_map,
-        file_runtime_map,
-        file_failed_checkers_map
-    )
-
-
-def main(args):
-    """
-    Entry point for parsing some analysis results and printing them to the
-    stdout in a human-readable format.
-    """
-    logger.setup_logger(args.verbose if 'verbose' in args else None)
-
-    # Load configuration file if given.
-    if 'config_file' in args:
-        cfg = load_json(args.config_file, default={})
-        if 'parse' in cfg:
-            for k, v in cfg['parse'].items():
-                # `args` object has priority over config file options.
-                if k not in args:
-                    setattr(args, k, v)
-
-    export = args.export if 'export' in args else None
-    if export == 'html' and 'output_path' not in args:
-        LOG.error("Argument --output is required if HTML output is used.")
-        sys.exit(1)
-
-    if export == 'gerrit' and 'trim_path_prefix' not in args:
-        LOG.error("Argument --url is required if gerrit output is used.")
-        sys.exit(1)
-
-    if export and export not in ['baseline', 'html', 'gerrit']:
-        output_path = args.output_path if 'output_path' in args else None
-        if output_path is None:
-            LOG.error("Argument --output is required if JSON output is used.")
-            sys.exit(1)
-
-    if 'trim_path_prefix' in args:
-        args.trim_path_prefix = \
-            [prefix.rstrip('/') for prefix in args.trim_path_prefix]
-    else:
-        args.trim_path_prefix = None
-
-    if 'suppress' in args:
-        if not os.path.isfile(args.suppress):
-            LOG.error("Suppress file '%s' given, but it does not exist",
-                      args.suppress)
-            sys.exit(1)
-
-    skip_handler = None
-    if 'skipfile' in args:
-        try:
-            with open(args.skipfile, encoding='utf-8', errors='ignore') as f:
-                skip_handler = SkipListHandler(f.read())
-        except (IOError, OSError) as err:
-            LOG.error("Failed to open skip file: %s", err)
-            sys.exit(1)
-
-    input_files = set()
-    for input_path in args.input:
-        input_path = os.path.abspath(input_path)
-        if os.path.isfile(input_path):
-            input_files.add(input_path)
-        elif os.path.isdir(input_path):
-            input_paths = []
-            try:
-                input_paths = [os.path.join(input_path, filename)
-                               for filename in os.listdir(input_path)]
-            except OSError as err:
-                LOG.error("Failed to get files from directory %s: %s",
-                          input_path, err)
-                sys.exit(1)
-
-            input_files.update(input_paths)
-
-    if not input_files:
-        LOG.error("No input file was given.")
-        sys.exit(1)
-
-    all_reports = []
-    statistics = Statistics()
-    file_sources_map = {}
-    file_stats = {}
-    file_checkers_map = {}
-    file_runtime_map = {}
-    file_failed_checkers_map = {}
-
-    metadata_dict = {}
-    for input_file in input_files:
-        if not os.path.exists(input_file):
-            LOG.warning("Input file does not exist: %s", input_file)
-            continue
-
-        if os.path.isdir(input_file):
-            LOG.warning("Input path is a directory: %s", input_file)
-            continue
-
-        LOG.debug("Parsing input file '%s'", input_file)
-
-        if args.input_format == 'plist':
-            try:
-                files, reports, sources_map, checker_statistics, stats, \
-                    checkers_map, runtime_map, failed_checkers_map = \
-                    parse(input_file, metadata_dict, skip_handler,
-                          args.trim_path_prefix)
-
-                all_reports.extend(reports)
-                statistics.num_of_analyzer_result_files += 1
-                statistics.num_of_reports += len(reports)
-                statistics.num_of_reports_with_source += len(reports)
-
-                for checker_name, res in checker_statistics.items():
-                    statistics.add_checker_statistics(checker_name, res)
-
-                file_sources_map.update(sources_map)
-                file_stats.update(stats)
-                file_checkers_map.update(checkers_map)
-                file_runtime_map.update(runtime_map)
-                file_failed_checkers_map.update(failed_checkers_map)
-            except Exception as ex:
-                LOG.error("Parsing the plist failed: %s", str(ex))
-        else:
-            LOG.error("Unsupported input format: %s", args.input_format)
-            sys.exit(1)
-
-    if 'review_status' in args:
-        all_reports = [r for r in all_reports
-                       if r.review_status in args.review_status]
-
-    all_reports = sorted(all_reports, key=lambda r: r.file_path)
-
-    # Create report dir if report_dir is set
-    if 'output_path' in args and args.output_path and not os.path.exists(
-            args.output_path):
-        os.makedirs(args.output_path)
-
-    if export == 'html':
-        output_path = os.path.abspath(args.output_path)
-
-        LOG.info("Generating HTML output files to file://%s/index.html",
-                 output_path)
-
-        report_to_html.convert(
-            all_reports,
-            output_path,
-            file_stats,
-            file_checkers_map,
-            file_runtime_map,
-            file_failed_checkers_map)
-
-        print("\n----==== Summary ====----")
-        print("Number of analyzed analyzer result files: ",
-              statistics.num_of_analyzer_result_files)
-        print("Number of analyzer reports:               ",
-              statistics.num_of_reports)
-        print("Number of analyzer reports with source:   ",
-              statistics.num_of_reports_with_source)
-
-        print("\nHTML files were generated in '%s' folder." % output_path)
-        return
-
-    if export == 'gerrit':
-        output_path = os.path.abspath(args.output_path) \
-            if 'output_path' in args else None
-
-        LOG.info("Generating Gerrit review files")
-
-        gerrit.convert(all_reports, args.trim_path_prefix[0], output_path)
-
-        print("\n----==== Summary ====----")
-        print("Number of analyzed analyzer result files: ",
-              statistics.num_of_analyzer_result_files)
-        print("Number of analyzer reports:               ",
-              statistics.num_of_reports)
-        print("Number of analyzer reports with source:   ",
-              statistics.num_of_reports_with_source)
-
-        if output_path:
-            print("\nGerrit review file was generated in '%s' folder." %
-                  output_path)
-        return
-
-    if export == 'json':
-        output_path = os.path.abspath(args.output_path)
-        LOG.info("Generating JSON output files to '%s'", output_path)
-
-        report_to_json.convert(
-            all_reports,
-            output_path,
-            file_stats,
-            file_checkers_map,
-            file_runtime_map,
-            file_failed_checkers_map)
-
-        print("\n----==== Summary ====----")
-        print("Number of analyzed analyzer result files: ",
-              statistics.num_of_analyzer_result_files)
-        print("Number of analyzer reports:               ",
-              statistics.num_of_reports)
-        print("Number of analyzer reports with source:   ",
-              statistics.num_of_reports_with_source)
-
-        print("\nJSON files were generated in '%s' folder." % output_path)
-        return
-
-    if export == 'codeclimate':
-        output_path = os.path.abspath(args.output_path)
-        LOG.info("Generating Code Climate output files to '%s'", output_path)
-        codeclimate.convert(all_reports, output_path)
-
-        print("\n----==== Summary ====----")
-        print("Number of analyzed analyzer result files: ",
-              statistics.num_of_analyzer_result_files)
-        print("Number of analyzer reports:               ",
-              statistics.num_of_reports)
-
-        print("\nCode Climate files were generated in '%s' folder." %
-              output_path)
-        return
-
-    if export == 'baseline':
-        output_path = os.path.abspath(args.output_path) \
-            if 'output_path' in args else None
-
-        LOG.info("Generating baseline output")
-        baseline.convert(all_reports, output_path)
-
-        print("\n----==== Summary ====----")
-        print("Number of analyzed analyzer result files: ",
-              statistics.num_of_analyzer_result_files)
-        print("Number of analyzer reports:               ",
-              statistics.num_of_reports)
-
-        if output_path:
-            print("\nBaseline file was generated in '%s' folder." % output_path)
-        return
-
-    if 'create_suppress' in args:
-        reports_helper.create_suppress_file(all_reports, args.suppress)
-        sys.exit(0)
-
-    reports_helper.dump_report_stats(statistics, file_stats, 'report')
-
-    print("\n----==== Summary ====----")
-    print("Number of processed analyzer result files: ",
-          statistics.num_of_analyzer_result_files)
-    print("Number of analyzer reports:                ",
-          statistics.num_of_reports)
-    print("Number of analyzer reports with source:    ",
-          statistics.num_of_reports_with_source)
-
-    if all_reports:
-        print("\n----==== Checker Statistics ====----")
-        statistics.print_checker_statistics()
-
-    # Print reports.
-    if all_reports:
-        for report in all_reports:
-            if 'print_steps' in args:
-                report.print_steps()
-            else:
-                print(report)
-    else:
-        print("\nNo report data was found.")
-        if 'review_status' in args:
-            print("Review status(es) given were: " +
-                  ', '.join(args.review_status))
-derModel.from_pretrained(
+        model = VisionEncoderDecoderModel.from_pretrained(
             "naver-clova-ix/donut-base-finetuned-docvqa",
-            revision="official"
-        ).to(device)
+            device_map="cuda" if torch.cuda.is_available() else "cpu"
+        )
         
         # Validate with test image
         test_img = Image.new('RGB', (300, 300), color=(255,255,255))
@@ -1026,7 +606,7 @@ def plot_temporal_trends(df):
     st.plotly_chart(fig, use_container_width=True)
 
 # Create main tabs
-tab1, tab2, tab3 = st.tabs(["OCR Processing", "Data Analysis", "Chatbot"])
+tab1, tab2, tab3, tab4 = st.tabs(["OCR Processing", "Data Analysis", "Chatbot", "Database"])
 
 with tab1:
     st.header("OCR Processing")
@@ -1038,6 +618,10 @@ with tab1:
         type="pdf",
         accept_multiple_files=True
     )
+    
+    # Add debug option
+    debug_mode = st.checkbox("Enable Debug Mode", value=True, 
+                            help="Show raw OCR text and extraction details")
     
     # Add to OCR Processing tab
     psm_mode = st.selectbox(
@@ -1069,10 +653,14 @@ with tab1:
                     status_text.text(f"Processing {file.name}...")
                     
                     # Process the PDF
-                    structured_data, metadata = process_pdf(file)
+                    result, metadata = process_pdf(file)
+                    
+                    # Show raw text in debug expander
+                    with debug_expander:
+                        st.text_area(f"Raw text from {file.name}", result.get('raw_ocr_text', 'No text extracted'), height=200)
                     
                     # Add to results
-                    all_results.append(structured_data)
+                    all_results.append(result)
                     
                     # Update progress
                     progress = (i + 1) / len(uploaded_files)
@@ -1085,7 +673,8 @@ with tab1:
                         'birads_score', 'document_date', 'document_type', 
                         'electronically_signed_by', 'exam_date', 'impression_result', 
                         'mammogram_results', 'patient_history', 'patient_name', 
-                        'recommendation', 'testing_provider', 'ultrasound_results'
+                        'recommendation', 'testing_provider', 'ultrasound_results',
+                        'raw_ocr_text'  # Add raw OCR text column
                     ]
                     
                     # Create DataFrame with consistent columns
@@ -1094,24 +683,103 @@ with tab1:
                     # Add missing columns with default values
                     for col in required_columns:
                         if col not in df.columns:
-                            df[col] = "Unknown"
+                            df[col] = "Not Available"
+                    
+                    # Replace empty values with "Not Available"
+                    df = df.fillna("Not Available")
                     
                     # Store in session state
                     st.session_state.df = df
                     
-                    # Display results
-                    st.success(f"Processed {len(df)} documents")
-                    st.dataframe(df)
+                    # Display results with tabs
+                    tab1, tab2, tab3, tab4 = st.tabs(["Structured Data", "Raw OCR Text", "Debug Info", "Database"])
                     
-                    # Download button
-                    st.download_button(
-                        "Download Results",
-                        df.to_csv(index=False),
-                        "medical_data.csv",
-                        "text/csv"
-                    )
+                    with tab1:
+                        st.dataframe(df.drop(columns=['raw_ocr_text']), use_container_width=True)
+                    
+                    with tab2:
+                        # Show raw OCR text for selected document
+                        selected_doc = st.selectbox("Select document to view raw text:", df['patient_name'] + " - " + df['document_date'])
+                        if selected_doc:
+                            doc_idx = df.index[df['patient_name'] + " - " + df['document_date'] == selected_doc][0]
+                            st.text_area("Raw OCR Text", df.iloc[doc_idx]['raw_ocr_text'], height=400)
+                    
+                    with tab3:
+                        st.subheader("Extraction Debug Information")
+                        st.write("Field extraction success rate:")
+                        
+                        # Calculate extraction success
+                        extraction_stats = {}
+                        for col in required_columns:
+                            if col != 'raw_ocr_text':
+                                success_rate = (df[col] != "Not Available").mean() * 100
+                                extraction_stats[col] = success_rate
+                        
+                        # Display as bar chart
+                        stats_df = pd.DataFrame(list(extraction_stats.items()), columns=['Field', 'Success Rate (%)'])
+                        st.bar_chart(stats_df.set_index('Field'))
+                    with tab4:
+                        st.header("Database Management")
+                        
+                        # Show stored reports
+                        try:
+                            session = Session()
+                            reports = session.query(Report).all()
+                            
+                            if reports:
+                                report_data = [{
+                                    "Filename": r.filename,
+                                    "Patient": r.patient_name,
+                                    "Exam Date": r.exam_date,
+                                    "Processed": r.processed_at.strftime("%Y-%m-%d %H:%M")
+                                } for r in reports]
+                                
+                                st.dataframe(pd.DataFrame(report_data))
+                                
+                                # Add export option
+                                if st.button("Export All Reports"):
+                                    export_data = []
+                                    for r in reports:
+                                        report_dict = json.loads(r.findings)
+                                        report_dict["filename"] = r.filename
+                                        report_dict["processed_at"] = r.processed_at.strftime("%Y-%m-%d %H:%M")
+                                        export_data.append(report_dict)
+                                    
+                                    export_df = pd.DataFrame(export_data)
+                                    st.download_button(
+                                        "Download Export",
+                                        export_df.to_csv(index=False),
+                                        "all_reports_export.csv",
+                                        "text/csv"
+                                    )
+                                
+                                # Add clear option
+                                if st.button("Clear Database"):
+                                    if st.checkbox("I understand this will delete all stored reports"):
+                                        session.query(Report).delete()
+                                        session.commit()
+                                        st.success("Database cleared successfully")
+                                    else:
+                                        st.warning("Please confirm deletion by checking the box")
+                            else:
+                                st.info("No reports stored in database")
+                        
+                        except Exception as e:
+                            st.error(f"Database error: {str(e)}")
+                        finally:
+                            if 'session' in locals():
+                                session.close()
                 else:
                     st.warning("No valid data extracted from PDFs")
+            
+            # If debug mode is enabled, show raw text immediately
+            if debug_mode and uploaded_files:
+                st.subheader("Raw OCR Text (Debug)")
+                for file in uploaded_files:
+                    with pdfplumber.open(file) as pdf:
+                        for i, page in enumerate(pdf.pages):
+                            page_text = page.extract_text() or "No text extracted with pdfplumber"
+                            st.text_area(f"{file.name} - Page {i+1}", page_text, height=200)
     
     # Display results
     if 'df' in st.session_state:
@@ -1138,6 +806,28 @@ with tab1:
             mime="text/csv",
             help="Includes all extracted fields and confidence scores"
         )
+
+    # Add this to the OCR Processing tab
+    if not ocr_utils.check_tesseract_installation():
+        st.error("""
+        ### Tesseract OCR is not installed or not in your PATH
+        
+        #### Windows Installation:
+        1. Download the installer from [UB-Mannheim](https://github.com/UB-Mannheim/tesseract/wiki)
+        2. Install with default options
+        3. Add to PATH: `C:\\Program Files\\Tesseract-OCR`
+        4. Restart the application
+        
+        #### Mac Installation:
+        ```
+        brew install tesseract
+        ```
+        
+        #### Linux Installation:
+        ```
+        sudo apt-get install tesseract-ocr
+        ```
+        """)
 
 with tab2:
     st.header("Data Analysis")
@@ -1522,48 +1212,40 @@ st.sidebar.markdown("- [Clinical Guidelines](https://example.com)")
 st.sidebar.markdown("- [Medical Knowledge Base](https://example.com)")
 st.sidebar.markdown("- [Emergency Protocols](https://example.com)")
 
-# Database functions
-def init_db():
-    """Initialize SQLite database with schema"""
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS reports (
-                md5_hash TEXT PRIMARY KEY,
-                filename TEXT,
-                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                patient_name TEXT,
-                exam_date TEXT,
-                findings TEXT,
-                metadata TEXT
-            )
-        """)
-
-def save_to_db(data: dict):
-    """Save processed results to database"""
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("""
-            INSERT OR REPLACE INTO reports 
-            (md5_hash, filename, patient_name, exam_date, findings, metadata)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            data['md5_hash'],
-            data['filename'],
-            data.get('patient_name'),
-            data.get('exam_date'),
-            json.dumps(data.get('findings')),
-            json.dumps(data.get('metadata'))
-        ))
-
 # Add to sidebar section at bottom of file
-st.sidebar.title("Mammogram Analysis Dashboard")
-st.sidebar.markdown("""
-**Clinical Decision Support System**  
-AI-powered analysis of mammogram reports with:
-- PDF OCR extraction
-- Medical NLP processing
-- BIRADS classification
-- Clinical insights generation
-""")
+with st.sidebar:
+    st.title("Mammogram Analysis Dashboard")
+    
+    # Theme toggle explanation
+    st.write("💡 **Tip:** Change between light/dark mode using the ⋮ menu in the top-right corner.")
+    
+    # Add cache clearing button
+    if st.button("Clear All Caches"):
+        if clear_all_caches():
+            st.success("All caches cleared successfully!")
+        else:
+            st.error("Failed to clear caches")
+    
+    # Rest of your sidebar content
+    st.markdown("""
+    **Clinical Decision Support System**  
+    AI-powered analysis of mammogram reports with:
+    - PDF OCR extraction
+    - Medical NLP processing
+    - BIRADS classification
+    - Clinical insights generation
+    """)
+
+    # Add database status
+    try:
+        session = Session()
+        report_count = session.query(Report).count()
+        st.success(f"Database connected: {report_count} reports stored")
+    except Exception as e:
+        st.error(f"Database error: {str(e)}")
+    finally:
+        if 'session' in locals():
+            session.close()
 
 @st.cache_resource
 def load_translation_model():
@@ -1572,6 +1254,25 @@ def load_translation_model():
         model="Helsinki-NLP/opus-mt-fr-en",
         device=0 if torch.cuda.is_available() else -1
     )
+
+# Initialize database at startup
+try:
+    init_db()
+    logging.info("Database initialized successfully")
+except Exception as e:
+    logging.error(f"Database initialization error: {str(e)}")
+
+# 4. Add error handling for missing nltk data
+def ensure_nltk_resources():
+    """Ensure NLTK resources are downloaded"""
+    import nltk
+    try:
+        nltk.data.find('corpora/stopwords')
+    except LookupError:
+        nltk.download('stopwords')
+
+# Call this function early in the app
+ensure_nltk_resources()
 
 if __name__ == "__main__":
     st.write("Medical AI Assistant is running...") 

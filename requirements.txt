@@ -1,0 +1,66 @@
+# Build tools
+setuptools>=65.0.0
+wheel>=0.37.0
+
+# Core dependencies
+numpy==1.26.4
+pandas==2.2.1
+pillow==10.3.0
+python-dotenv>=0.19.0
+pdfplumber>=0.10.0
+nltk>=3.8.1
+wordcloud>=1.9.3
+
+# Image processing
+opencv-python-headless==4.9.0.80
+scikit-image>=0.18.0
+
+# OCR engines
+pytesseract==0.3.10
+paddlepaddle==2.6.2
+paddleocr>=2.7.0.3
+pdf2image==1.17.0
+
+# Machine learning
+torch==2.2.2
+torchvision>=0.10.0
+transformers==4.40.0
+sentencepiece==0.2.0
+huggingface_hub>=0.25.1
+
+# NLP tools
+pyspellchecker==0.7.2
+langdetect>=1.0.9
+
+# API clients
+groq>=0.4.0
+
+# Visualization
+streamlit==1.32.0
+plotly>=5.3.0
+matplotlib>=3.4.0
+
+# Utility
+pyyaml>=5.4.0
+python-dateutil>=2.8.2
+tqdm>=4.62.0
+tenacity>=8.2.0
+aiohttp>=3.8.0
+pdfplumber
+
+# Testing
+pytest>=6.2.5
+pytest-cov>=2.12.0
+
+# Version constraints for compatibility
+protobuf>=3.20,<=3.20.3
+
+# Optional: GPU support
+# cupy-cuda11x  # Uncomment and specify correct CUDA version
+# torch-cuda  # Uncomment for GPU support
+
+# Added from the code block
+transformers[sentencepiece]==4.40.0
+
+# Database
+sqlalchemy>=2.0.0  # SQL toolkit and ORM

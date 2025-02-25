@@ -1,0 +1,10 @@
+BIRADS
+Mammography
+Diagnostic
+Screening
+Lesion
+Calcification
+Asymmetry
+Density
+Biopsy
+Tomosynthesis
