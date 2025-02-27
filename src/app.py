@@ -13,8 +13,8 @@ import cv2
 import hashlib
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 import concurrent.futures
-from sqlalchemy import create_engine, Column, String, Text, DateTime
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import create_engine, Column, String, Text, DateTime, inspect, text
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 import datetime
 import plotly.express as px
@@ -64,9 +64,56 @@ st.set_page_config(
     }
 )
 
+# Add the database schema migration function BEFORE init_db
+def migrate_database_schema():
+    """
+    Check and update database schema to match the current model.
+    Handles missing columns gracefully.
+    """
+    from sqlalchemy import inspect, MetaData, Table, Column, String, Text, text
+    
+    inspector = inspect(engine)
+    
+    # Check if table exists first
+    if not inspector.has_table('reports'):
+        logging.info("Reports table doesn't exist yet, will be created by Base.metadata.create_all")
+        return True
+        
+    existing_columns = [col['name'] for col in inspector.get_columns('reports')]
+    try:
+        # Check if report_metadata column exists
+        if 'report_metadata' not in existing_columns:
+            logging.info("Adding missing column 'report_metadata' to reports table")
+            # Use text SQL with execute for SQLAlchemy 2.0 compatibility
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE reports ADD COLUMN report_metadata TEXT"))
+                conn.commit()
+                logging.info("Successfully added 'report_metadata' column")
+                
+        # Check for any other missing columns from our model
+        expected_columns = ['md5_hash', 'filename', 'processed_at', 'patient_name', 
+                           'exam_date', 'findings', 'report_metadata', 'raw_ocr_text']
+        
+        for col in expected_columns:
+            if col not in existing_columns:
+                logging.info(f"Adding missing column '{col}' to reports table")
+                with engine.connect() as conn:
+                    conn.execute(text(f"ALTER TABLE reports ADD COLUMN {col} TEXT"))
+                    conn.commit()
+                    logging.info(f"Successfully added '{col}' column")
+        
+        return True
+        
+    except Exception as e:
+        logging.error(f"Database migration error: {str(e)}")
+        return False
+
+# Now define init_db AFTER migrate_database_schema is defined
 def init_db():
     """Initialize database with SQLAlchemy"""
     Base.metadata.create_all(engine)
+    # After creating tables, ensure all columns exist
+    migrate_database_schema()
 
 def save_to_db(data: dict):
     """Save processed results to database using SQLAlchemy"""
@@ -109,6 +156,147 @@ def clear_all_caches():
     st.cache_data.clear()
     st.cache_resource.clear()
     return True
+
+def validate_field_types(structured_data):
+    """
+    Validate and clean extracted fields to ensure proper types and prevent misidentification.
+    Returns the cleaned data dictionary.
+    """
+    # Create a copy to avoid modifying the original
+    cleaned_data = structured_data.copy()
+    
+    # 1. Validate patient name - look for specific contextual patterns
+    if 'patient_name' in cleaned_data:
+        patient_name = cleaned_data['patient_name']
+        
+        # Check if patient name appears to be a doctor/provider
+        doctor_indicators = [
+            'MD', 'DO', 'Dr.', 'Dr ', 'Doctor', 'Physician', 
+            'Requesting', 'Provider', 'Radiologist', 'Cardiologist',
+            'Ordered by', 'Ordered By', 'Referring', 'Attending',
+            'FRCPC', ',MD', ', MD', 'M.D.', 'Ph.D', 'PhD'
+        ]
+        
+        # Add pattern recognition for "Lastname, Firstname" format common for doctors
+        last_first_pattern = re.compile(r'^[A-Z][a-z]+\s*,\s*[A-Z][a-z]+$')
+        
+        # Check for doctor indicators in the patient name field
+        is_doctor = False
+        if any(indicator in patient_name for indicator in doctor_indicators):
+            is_doctor = True
+        # Check for lastname, firstname pattern which is common for doctors in reports
+        elif last_first_pattern.match(patient_name) and len(patient_name.split()) <= 3:
+            # This is likely a doctor written in "Last, First" format
+            # Get more context - look for this name in the raw text
+            if 'raw_ocr_text' in cleaned_data:
+                raw_text = cleaned_data['raw_ocr_text']
+                # Look for context around this name
+                name_context = re.search(r'(.{0,50}' + re.escape(patient_name) + r'.{0,50})', raw_text)
+                if name_context:
+                    context = name_context.group(1).lower()
+                    # If words like "dictated", "signed", "report by" appear near the name, it's likely a doctor
+                    doctor_context_words = ['dictated', 'signed', 'report by', 'reported by', 'read by', 'interpreted by']
+                    if any(word in context for word in doctor_context_words):
+                        is_doctor = True
+        
+        if is_doctor:
+            # This is probably a doctor, not a patient
+            if 'testing_provider' not in cleaned_data or cleaned_data['testing_provider'] == "Not Available":
+                cleaned_data['testing_provider'] = patient_name
+            cleaned_data['patient_name'] = "Not Available"
+            logging.info(f"Reclassified '{patient_name}' from patient to provider")
+    
+    # 2. Extract real patient name from raw text if we haven't found one
+    if cleaned_data.get('patient_name') == "Not Available" and 'raw_ocr_text' in cleaned_data:
+        # Try to find patient indicators
+        raw_text = cleaned_data['raw_ocr_text']
+        patient_indicators = [
+            r'(?:Patient|Name|Patient name|Patient ID)[:\s]+([A-Z][a-z]+\s+[A-Z][a-z]+)',
+            r'(?:Name|Patient)[:\s]+([A-Z][a-z]+(?:\s+[A-Z]\.?)?(?:\s+[A-Z][a-z]+)+)'
+        ]
+        
+        for pattern in patient_indicators:
+            matches = re.search(pattern, raw_text)
+            if matches:
+                potential_name = matches.group(1)
+                # Verify it's not a doctor name
+                if not any(indicator in potential_name for indicator in doctor_indicators):
+                    cleaned_data['patient_name'] = potential_name
+                    logging.info(f"Extracted patient name from context: {potential_name}")
+                    break
+    
+    # 3. Cross-validate testing_provider and electronically_signed_by
+    if ('testing_provider' in cleaned_data and 
+        'electronically_signed_by' in cleaned_data and
+        cleaned_data['testing_provider'] == cleaned_data['electronically_signed_by']):
+        # This suggests consistent extraction
+        logging.info("Provider and signature fields match, increasing confidence")
+    
+    # 4. Handle the specific "Higgs Riggs, Jillian" case and similar patterns
+    for field in ['patient_name', 'testing_provider', 'electronically_signed_by']:
+        if field in cleaned_data and cleaned_data[field]:
+            value = cleaned_data[field]
+            # If it matches the "Lastname, Firstname" pattern
+            if re.match(r'^[A-Z][a-z]+\s+[A-Z][a-z]+,\s*[A-Z][a-z]+$', value):
+                # This is likely a doctor, so move it to testing_provider if it's in patient_name
+                if field == 'patient_name':
+                    cleaned_data['testing_provider'] = value
+                    cleaned_data['patient_name'] = "Not Available"
+                    logging.info(f"Reclassified '{value}' from patient to provider (name format)")
+    
+    # 5. Ensure dates are properly formatted or marked unavailable
+    for date_field in ['exam_date', 'document_date']:
+        if date_field in cleaned_data:
+            # Try to extract and validate date format
+            date_value = cleaned_data[date_field]
+            
+            # Skip empty or already marked values
+            if not date_value or date_value == "Not Available":
+                cleaned_data[date_field] = "Not Available"
+                continue
+                
+            # Try to parse the date with multiple formats
+            try:
+                # Try common formats
+                for date_format in ['%Y-%m-%d', '%m/%d/%Y', '%d-%b-%Y', '%B %d, %Y', '%m-%d-%Y']:
+                    try:
+                        # Test if parseable
+                        pd.to_datetime(date_value, format=date_format)
+                        # If successful, keep the original string format but validated
+                        break
+                    except:
+                        continue
+                else:
+                    # If none of the formats work, try dateutil's parser
+                    parsed_date = pd.to_datetime(date_value)
+                    # If successful, standardize to ISO format
+                    cleaned_data[date_field] = parsed_date.strftime('%Y-%m-%d')
+            except:
+                # If parsing fails, mark as unavailable
+                logging.warning(f"Could not parse date: {date_value}")
+                cleaned_data[date_field] = "Not Available"
+    
+    # 6. Validate BIRADS scores
+    if 'birads_score' in cleaned_data:
+        birads = cleaned_data['birads_score']
+        if isinstance(birads, str):
+            # Extract just the numeric part if it exists
+            birads_match = re.search(r'(?:BIRADS|BI-RADS|Category|CAT)\s*[-:]*\s*([0-6])', birads, re.IGNORECASE)
+            if birads_match:
+                cleaned_data['birads_score'] = f"BIRADS {birads_match.group(1)}"
+            elif not re.search(r'[0-6]', birads):
+                cleaned_data['birads_score'] = "Not Available"
+    
+    # 7. Check for deidentified markers and handle appropriately
+    for field in ['patient_name', 'electronically_signed_by', 'testing_provider']:
+        if field in cleaned_data:
+            value = cleaned_data[field]
+            if isinstance(value, str):
+                # Check for common deidentification patterns
+                if re.search(r'(XXXX|____|\*\*\*\*|redacted|deidentified)', value, re.IGNORECASE):
+                    cleaned_data[field] = "Deidentified"
+    
+    return cleaned_data
 
 def process_pdf(uploaded_file):
     """Process PDF as a complete document with combined text from all pages"""
@@ -155,6 +343,9 @@ def process_pdf(uploaded_file):
         # Process the combined text to extract all fields
         structured_data = ocr_utils.process_document_text(combined_text)
         
+        # Apply validation to ensure field types are correct
+        structured_data = validate_field_types(structured_data)
+        
         # Debug output
         logging.info(f"Extraction results: {json.dumps({k: v for k, v in structured_data.items() if k != 'raw_ocr_text'})}")
         
@@ -177,20 +368,13 @@ def process_pdf(uploaded_file):
                 "filename": uploaded_file.name,
                 "patient_name": structured_data.get('patient_name', 'Not Available'),
                 "exam_date": structured_data.get('exam_date', 'Not Available'),
-                "findings": json.dumps(structured_data),
-                "report_metadata": json.dumps(metadata),
+                "findings": structured_data,
+                "metadata": metadata,
                 "raw_ocr_text": combined_text  # Store raw text
             })
         except Exception as db_error:
             logging.error(f"Database save error: {str(db_error)}")
             # Continue processing even if DB save fails
-        
-        # Add more detailed logging
-        logging.info(f"Extraction complete for {uploaded_file.name}")
-        logging.info(f"Fields extracted: {list(structured_data.keys())}")
-        logging.info(f"Patient name: {structured_data.get('patient_name', 'Not Available')}")
-        logging.info(f"Exam date: {structured_data.get('exam_date', 'Not Available')}")
-        logging.info(f"BIRADS score: {structured_data.get('birads_score', 'Not Available')}")
         
         return structured_data, metadata
         
@@ -203,141 +387,8 @@ def process_pdf(uploaded_file):
 # Streamlit UI
 st.title("Medical Report Processor")
 
-uploaded_files = st.file_uploader("Upload PDFs", type="pdf", accept_multiple_files=True)
-
-if uploaded_files:
-    all_results = []
-    
-    # Create progress bar
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    # Add direct debug output
-    st.subheader("Debug: Raw OCR Text")
-    debug_expander = st.expander("Show Raw OCR Text (for debugging)")
-    
-    # Process each file
-    for i, uploaded_file in enumerate(uploaded_files):
-        status_text.text(f"Processing {uploaded_file.name}...")
-        
-        # Process the PDF
-        result, metadata = process_pdf(uploaded_file)
-        
-        # Show raw text in debug expander
-        with debug_expander:
-            st.text_area(f"Raw text from {uploaded_file.name}", result.get('raw_ocr_text', 'No text extracted'), height=200)
-        
-        # Add to results
-        all_results.append(result)
-        
-        # Update progress
-        progress = (i + 1) / len(uploaded_files)
-        progress_bar.progress(progress)
-    
-    # Create DataFrame with one row per PDF
-    if all_results:
-        # Ensure consistent columns
-        required_columns = [
-            'birads_score', 'document_date', 'document_type', 
-            'electronically_signed_by', 'exam_date', 'impression_result', 
-            'mammogram_results', 'patient_history', 'patient_name', 
-            'recommendation', 'testing_provider', 'ultrasound_results',
-            'raw_ocr_text'  # Add raw OCR text column
-        ]
-        
-        # Create DataFrame with consistent columns
-        df = pd.DataFrame(all_results)
-        
-        # Add missing columns with default values
-        for col in required_columns:
-            if col not in df.columns:
-                df[col] = "Not Available"
-        
-        # Replace empty values with "Not Available"
-        df = df.fillna("Not Available")
-        
-        # Store in session state
-        st.session_state.df = df
-        
-        # Display results with tabs
-        tab1, tab2, tab3, tab4 = st.tabs(["Structured Data", "Raw OCR Text", "Debug Info", "Database"])
-        
-        with tab1:
-            st.dataframe(df.drop(columns=['raw_ocr_text']), use_container_width=True)
-        
-        with tab2:
-            # Show raw OCR text for selected document
-            selected_doc = st.selectbox("Select document to view raw text:", df['patient_name'] + " - " + df['document_date'])
-            if selected_doc:
-                doc_idx = df.index[df['patient_name'] + " - " + df['document_date'] == selected_doc][0]
-                st.text_area("Raw OCR Text", df.iloc[doc_idx]['raw_ocr_text'], height=400)
-        
-        with tab3:
-            st.subheader("Extraction Debug Information")
-            st.write("Field extraction success rate:")
-            
-            # Calculate extraction success
-            extraction_stats = {}
-            for col in required_columns:
-                if col != 'raw_ocr_text':
-                    success_rate = (df[col] != "Not Available").mean() * 100
-                    extraction_stats[col] = success_rate
-            
-            # Display as bar chart
-            stats_df = pd.DataFrame(list(extraction_stats.items()), columns=['Field', 'Success Rate (%)'])
-            st.bar_chart(stats_df.set_index('Field'))
-
-        with tab4:
-            st.header("Database Management")
-            
-            # Show stored reports
-            try:
-                session = Session()
-                reports = session.query(Report).all()
-                
-                if reports:
-                    report_data = [{
-                        "Filename": r.filename,
-                        "Patient": r.patient_name,
-                        "Exam Date": r.exam_date,
-                        "Processed": r.processed_at.strftime("%Y-%m-%d %H:%M")
-                    } for r in reports]
-                    
-                    st.dataframe(pd.DataFrame(report_data))
-                    
-                    # Add export option
-                    if st.button("Export All Reports"):
-                        export_data = []
-                        for r in reports:
-                            report_dict = json.loads(r.findings)
-                            report_dict["filename"] = r.filename
-                            report_dict["processed_at"] = r.processed_at.strftime("%Y-%m-%d %H:%M")
-                            export_data.append(report_dict)
-                        
-                        export_df = pd.DataFrame(export_data)
-                        st.download_button(
-                            "Download Export",
-                            export_df.to_csv(index=False),
-                            "all_reports_export.csv",
-                            "text/csv"
-                        )
-                    
-                    # Add clear option
-                    if st.button("Clear Database"):
-                        if st.checkbox("I understand this will delete all stored reports"):
-                            session.query(Report).delete()
-                            session.commit()
-                            st.success("Database cleared successfully")
-                        else:
-                            st.warning("Please confirm deletion by checking the box")
-                else:
-                    st.info("No reports stored in database")
-            
-            except Exception as e:
-                st.error(f"Database error: {str(e)}")
-            finally:
-                if 'session' in locals():
-                    session.close()
+# DELETED: Removing the duplicate OCR implementation from the main page
+# The OCR functionality is now fully contained within the tabs below
 
 # Define common medical stopwords to exclude
 STOP_WORDS = set(stopwords.words('english')).union({
@@ -572,38 +623,68 @@ def plot_findings_analysis(df):
     st.plotly_chart(fig, use_container_width=True)
 
 def plot_temporal_trends(df):
-    """Interactive temporal trends visualization"""
-    df['exam_date'] = pd.to_datetime(df['exam_date'])
-    df['year'] = df['exam_date'].dt.year
+    """Interactive temporal trends visualization with robust date handling"""
+    # Make a copy to avoid modifying the original dataframe
+    plot_df = df.copy()
     
-    # Year selection slider
-    years = sorted(df['year'].unique())
-    selected_year = st.slider(
-        "Select Year Range",
-        min_value=min(years),
-        max_value=max(years),
-        value=(min(years), max(years))
-    )
+    # Filter out non-date values before conversion
+    plot_df = plot_df[plot_df['exam_date'] != "Not Available"]
     
-    # Filter data
-    filtered = df[(df['year'] >= selected_year[0]) & (df['year'] <= selected_year[1])]
-    monthly_counts = filtered.resample('M', on='exam_date').size().reset_index(name='count')
+    # Skip if no valid dates
+    if plot_df.empty:
+        st.warning("No valid dates available for temporal analysis")
+        return
     
-    # Create interactive plot
-    fig = px.line(
-        monthly_counts,
-        x='exam_date',
-        y='count',
-        title=f"Exam Trends {selected_year[0]}-{selected_year[1]}",
-        labels={'exam_date': 'Date', 'count': 'Number of Exams'},
-        markers=True
-    )
-    fig.update_layout(
-        hovermode="x unified",
-        xaxis=dict(showgrid=True),
-        yaxis=dict(showgrid=True)
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    try:
+        # Convert dates with error handling
+        plot_df['exam_date'] = pd.to_datetime(plot_df['exam_date'], errors='coerce')
+        
+        # Drop null dates after conversion
+        plot_df = plot_df.dropna(subset=['exam_date'])
+        
+        if plot_df.empty:
+            st.warning("No valid dates found after conversion")
+            return
+            
+        plot_df['year'] = plot_df['exam_date'].dt.year
+        
+        # Year selection slider
+        years = sorted(plot_df['year'].unique())
+        selected_year = st.slider(
+            "Select Year Range",
+            min_value=int(min(years)),
+            max_value=int(max(years)),
+            value=(int(min(years)), int(max(years)))
+        )
+        
+        # Filter data
+        filtered = plot_df[(plot_df['year'] >= selected_year[0]) & (plot_df['year'] <= selected_year[1])]
+        
+        if filtered.empty:
+            st.info(f"No data available for the selected year range {selected_year[0]}-{selected_year[1]}")
+            return
+            
+        monthly_counts = filtered.resample('ME', on='exam_date').size().reset_index(name='count')
+        
+        # Create interactive plot
+        fig = px.line(
+            monthly_counts,
+            x='exam_date',
+            y='count',
+            title=f"Exam Trends {selected_year[0]}-{selected_year[1]}",
+            labels={'exam_date': 'Date', 'count': 'Number of Exams'},
+            markers=True
+        )
+        fig.update_layout(
+            hovermode="x unified",
+            xaxis=dict(showgrid=True),
+            yaxis=dict(showgrid=True)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+    except Exception as e:
+        st.error(f"Error generating temporal trends: {str(e)}")
+        logging.error(f"Temporal trends error: {str(e)}")
 
 # Create main tabs
 tab1, tab2, tab3, tab4 = st.tabs(["OCR Processing", "Data Analysis", "Chatbot", "Database"])
@@ -647,6 +728,9 @@ with tab1:
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
+                # Create debug expander
+                debug_expander = st.expander("Show Raw OCR Text (for debugging)")
+                
                 # Process each PDF as a complete document
                 all_results = []
                 for i, file in enumerate(uploaded_files):
@@ -657,7 +741,12 @@ with tab1:
                     
                     # Show raw text in debug expander
                     with debug_expander:
-                        st.text_area(f"Raw text from {file.name}", result.get('raw_ocr_text', 'No text extracted'), height=200)
+                        st.text_area(
+                            f"Raw text from {file.name}", 
+                            result.get('raw_ocr_text', 'No text extracted'), 
+                            height=200,
+                            key=f"ocr_debug_{i}"  # Add unique key based on index
+                        )
                     
                     # Add to results
                     all_results.append(result)
@@ -692,19 +781,24 @@ with tab1:
                     st.session_state.df = df
                     
                     # Display results with tabs
-                    tab1, tab2, tab3, tab4 = st.tabs(["Structured Data", "Raw OCR Text", "Debug Info", "Database"])
+                    subtab1, subtab2, subtab3, subtab4 = st.tabs(["Structured Data", "Raw OCR Text", "Debug Info", "Database"])
                     
-                    with tab1:
+                    with subtab1:
                         st.dataframe(df.drop(columns=['raw_ocr_text']), use_container_width=True)
                     
-                    with tab2:
+                    with subtab2:
                         # Show raw OCR text for selected document
                         selected_doc = st.selectbox("Select document to view raw text:", df['patient_name'] + " - " + df['document_date'])
                         if selected_doc:
                             doc_idx = df.index[df['patient_name'] + " - " + df['document_date'] == selected_doc][0]
-                            st.text_area("Raw OCR Text", df.iloc[doc_idx]['raw_ocr_text'], height=400)
+                            st.text_area(
+                                "Raw OCR Text", 
+                                df.iloc[doc_idx]['raw_ocr_text'], 
+                                height=400,
+                                key="selected_doc_ocr_text"  # Add unique key
+                            )
                     
-                    with tab3:
+                    with subtab3:
                         st.subheader("Extraction Debug Information")
                         st.write("Field extraction success rate:")
                         
@@ -718,7 +812,8 @@ with tab1:
                         # Display as bar chart
                         stats_df = pd.DataFrame(list(extraction_stats.items()), columns=['Field', 'Success Rate (%)'])
                         st.bar_chart(stats_df.set_index('Field'))
-                    with tab4:
+                    
+                    with subtab4:
                         st.header("Database Management")
                         
                         # Show stored reports
@@ -759,8 +854,6 @@ with tab1:
                                         session.query(Report).delete()
                                         session.commit()
                                         st.success("Database cleared successfully")
-                                    else:
-                                        st.warning("Please confirm deletion by checking the box")
                             else:
                                 st.info("No reports stored in database")
                         
@@ -775,11 +868,16 @@ with tab1:
             # If debug mode is enabled, show raw text immediately
             if debug_mode and uploaded_files:
                 st.subheader("Raw OCR Text (Debug)")
-                for file in uploaded_files:
+                for i, file in enumerate(uploaded_files):
                     with pdfplumber.open(file) as pdf:
-                        for i, page in enumerate(pdf.pages):
+                        for j, page in enumerate(pdf.pages):
                             page_text = page.extract_text() or "No text extracted with pdfplumber"
-                            st.text_area(f"{file.name} - Page {i+1}", page_text, height=200)
+                            st.text_area(
+                                f"{file.name} - Page {j+1}",
+                                page_text, 
+                                height=200,
+                                key=f"debug_text_{i}_{j}"  # Unique key combining file and page index
+                            )
     
     # Display results
     if 'df' in st.session_state:
@@ -828,6 +926,14 @@ with tab1:
         sudo apt-get install tesseract-ocr
         ```
         """)
+
+    # In the OCR Processing tab, add:
+    with st.expander("Debug OCR"):
+        if st.button("Run OCR Diagnostics"):
+            if uploaded_files:
+                debug_ocr_process(uploaded_files[0])
+            else:
+                st.warning("Please upload a PDF first")
 
 with tab2:
     st.header("Data Analysis")
@@ -919,7 +1025,7 @@ with tab2:
             st.metric("Total Reports", total_reports)
         with col3:
             latest_date = df['exam_date'].max() if 'exam_date' in df.columns else "N/A"
-            st.metric("Latest Exam Date", latest_date)
+            st.metric("Latest Exam Date", str(latest_date))
 
         # Exam type analysis
         if 'document_type' in df.columns:
@@ -1043,23 +1149,27 @@ with tab2:
                 
                 # Filter data
                 filtered = df[(df['year'] >= selected_year[0]) & (df['year'] <= selected_year[1])]
-                monthly_counts = filtered.resample('M', on='exam_date').size().reset_index(name='count')
                 
-                # Create interactive plot
-                fig = px.line(
-                    monthly_counts,
-                    x='exam_date',
-                    y='count',
-                    title=f"Exam Trends {selected_year[0]}-{selected_year[1]}",
-                    labels={'exam_date': 'Date', 'count': 'Number of Exams'},
-                    markers=True
-                )
-                fig.update_layout(
-                    hovermode="x unified",
-                    xaxis=dict(showgrid=True),
-                    yaxis=dict(showgrid=True)
-                )
-                st.plotly_chart(fig, use_container_width=True)
+                if filtered.empty:
+                    st.info(f"No data available for the selected year range {selected_year[0]}-{selected_year[1]}")
+                else:
+                    monthly_counts = filtered.resample('ME', on='exam_date').size().reset_index(name='count')
+                    
+                    # Create interactive plot
+                    fig = px.line(
+                        monthly_counts,
+                        x='exam_date',
+                        y='count',
+                        title=f"Exam Trends {selected_year[0]}-{selected_year[1]}",
+                        labels={'exam_date': 'Date', 'count': 'Number of Exams'},
+                        markers=True
+                    )
+                    fig.update_layout(
+                        hovermode="x unified",
+                        xaxis=dict(showgrid=True),
+                        yaxis=dict(showgrid=True)
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
                 
             except Exception as e:
                 st.warning(f"Could not analyze trends: {str(e)}")
@@ -1200,6 +1310,69 @@ with tab3:
         st.session_state.chat_history.append({'role': 'assistant', 'content': response})
         st.rerun()
 
+with tab4:
+    st.header("Database")
+    st.write("Manage your database of processed reports.")
+    
+    # Add option to fix database issues
+    st.subheader("Database Maintenance")
+    if st.button("Fix Database Issues"):
+        with st.spinner("Fixing database issues..."):
+            result = fix_database_issues()
+            st.success(result)
+    
+    # Display database status
+    try:
+        session = Session()
+        reports = session.query(Report).all()
+        
+        if reports:
+            report_data = [{
+                "Filename": r.filename,
+                "Patient": r.patient_name,
+                "Exam Date": r.exam_date,
+                "Processed": r.processed_at.strftime("%Y-%m-%d %H:%M")
+            } for r in reports]
+            
+            st.dataframe(pd.DataFrame(report_data))
+            
+            # Add export option
+            if st.button("Export All Reports"):
+                export_data = []
+                try:
+                    for r in reports:
+                        report_dict = json.loads(r.findings)
+                        report_dict["filename"] = r.filename
+                        report_dict["processed_at"] = r.processed_at.strftime("%Y-%m-%d %H:%M")
+                        export_data.append(report_dict)
+                    
+                    export_df = pd.DataFrame(export_data)
+                    st.download_button(
+                        "Download Export",
+                        export_df.to_csv(index=False),
+                        "all_reports_export.csv",
+                        "text/csv"
+                    )
+                except Exception as e:
+                    st.error(f"Export error: {str(e)}")
+            
+            # Add clear option
+            if st.button("Clear Database"):
+                if st.checkbox("I understand this will delete all stored reports"):
+                    session.query(Report).delete()
+                    session.commit()
+                    st.success("Database cleared successfully")
+                else:
+                    st.warning("Please confirm deletion by checking the box")
+        else:
+            st.info("No reports stored in database")
+    
+    except Exception as e:
+        st.error(f"Database error: {str(e)}")
+    finally:
+        if 'session' in locals():
+            session.close()
+
 # Add footer with resource links
 # Cache status display
 st.sidebar.markdown("### Cache Status")
@@ -1273,6 +1446,103 @@ def ensure_nltk_resources():
 
 # Call this function early in the app
 ensure_nltk_resources()
+
+def fix_database_issues():
+    """One-time function to fix database issues"""
+    try:
+        # 1. Check and fix schema
+        migrate_database_schema()
+        
+        # 2. Reconnect to updated schema
+        session = Session()
+        
+        # 3. Fix misidentified entities in existing records
+        reports = session.query(Report).all()
+        updates_made = 0
+        
+        for report in reports:
+            try:
+                # Parse the findings JSON
+                findings = json.loads(report.findings)
+                patient_name = findings.get('patient_name', 'Not Available')
+                
+                # Check if patient name appears to be a doctor
+                doctor_indicators = ['MD', 'DO', 'Dr.', 'Dr ', 'FRCPC', ',MD', ', MD', 'M.D.']
+                
+                if any(indicator in patient_name for indicator in doctor_indicators) or \
+                   re.match(r'^[A-Z][a-z]+\s*,\s*[A-Z][a-z]+$', patient_name):
+                    
+                    # Move to testing_provider if not already set
+                    if findings.get('testing_provider', '') == 'Not Available':
+                        findings['testing_provider'] = patient_name
+                    
+                    # Mark patient as Not Available
+                    findings['patient_name'] = 'Not Available'
+                    
+                    # Update the report
+                    report.findings = json.dumps(findings)
+                    report.patient_name = 'Not Available'
+                    updates_made += 1
+            except Exception as e:
+                logging.error(f"Error processing report {report.md5_hash}: {str(e)}")
+        
+        # Commit changes
+        session.commit()
+        return f"Database fixed successfully. Updated {updates_made} reports."
+        
+    except Exception as e:
+        logging.error(f"Database fix error: {str(e)}")
+        return f"Error fixing database: {str(e)}"
+    finally:
+        if 'session' in locals():
+            session.close()
+
+# Add this to help debug OCR errors
+def debug_ocr_process(uploaded_file):
+    """Debug OCR processing issues"""
+    st.write("### OCR Debugging")
+    
+    try:
+        # Test opening the PDF
+        st.write("1. Testing PDF opening...")
+        with pdfplumber.open(uploaded_file) as pdf:
+            st.write(f"✅ PDF opened successfully. Pages: {len(pdf.pages)}")
+            
+            # Test text extraction from first page
+            if len(pdf.pages) > 0:
+                st.write("2. Testing text extraction from first page...")
+                page_text = pdf.pages[0].extract_text()
+                if page_text:
+                    st.write("✅ Text extracted successfully")
+                    st.write(f"Sample text: {page_text[:100]}...")
+                else:
+                    st.write("⚠️ No text extracted with pdfplumber, will try OCR")
+                    
+                    # Test OCR fallback
+                    st.write("3. Testing OCR fallback...")
+                    try:
+                        img = pdf.pages[0].to_image(resolution=300).original
+                        st.write("✅ Image conversion successful")
+                        
+                        try:
+                            ocr_text = ocr_utils.simple_ocr(np.array(img))
+                            st.write("✅ OCR successful")
+                            st.write(f"Sample OCR text: {ocr_text[:100]}...")
+                        except Exception as ocr_error:
+                            st.write(f"❌ OCR failed: {str(ocr_error)}")
+                            # Check Tesseract installation
+                            st.write("4. Checking Tesseract installation...")
+                            if ocr_utils.check_tesseract_installation():
+                                st.write("✅ Tesseract is installed")
+                            else:
+                                st.write("❌ Tesseract is not installed or not in PATH")
+                    except Exception as img_error:
+                        st.write(f"❌ Image conversion failed: {str(img_error)}")
+        
+        return True
+    except Exception as e:
+        st.error(f"Debug OCR failed: {str(e)}")
+        return False
 
 if __name__ == "__main__":
     st.write("Medical AI Assistant is running...") 

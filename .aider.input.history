@@ -1,0 +1,3511 @@
+
+# 2025-02-20 14:59:53.008807
++yes
+
+# 2025-02-20 15:00:12.873575
++no
+
+# 2025-02-20 15:04:34.609497
++You are a senior developer. Your job is to do a thorough code review of this code. You should write it up and output markdown. Include line numbers, and contextual info. Your code review will be passed to another teammate, so be thorough. Think deeply  before writing the code review. Review every part, and don't hallucinate.
+
+# 2025-02-20 15:06:59.569746
++yes
+
+# 2025-02-21 07:49:45.943176
++Note that inside ./src/ folder we will build the new functionalities, Aider, please create two new files: `ocr_utils.py` and `chatbot_utils.py`.
++
++In `ocr_utils.py`, add the following functions from the provided OCR script: `preprocess_image`, `extract_text_tesseract`, `parse_extracted_text`, and `extract_fields_from_text`. Modify `extract_fields_from_text` to accept `medical_nlp` as an argument instead of creating the pipeline inside the function. Include necessary imports: `cv2`, `pytesseract`, `re`, `pandas as pd`, and `from pytesseract import Output`.
++
++In `chatbot_utils.py`, add the functions `analyze_csv` and `identify_alerts` from the provided chatbot script. Modify `identify_alerts` to accept `diagnosis_pipeline` as an argument instead of creating the pipeline inside the function. Include necessary imports: `pandas as pd`.
++
++These files will contain utility functions that we’ll call from the main Streamlit app.
+
+# 2025-02-21 07:51:40.790140
++yes
+
+# 2025-02-21 07:52:34.895760
++Aider, create a new file called `app.py`. In this file, set up a basic Streamlit dashboard with three tabs: "OCR Processing", "Data Analysis", and "Chatbot". Use `st.tabs` to create the tabs and add placeholder content in each tab, such as "This is the OCR Processing tab." Import necessary modules: `streamlit as st`, `pandas as pd`, `numpy as np`, `torch`, `huggingface_hub`, `transformers`, `pdf2image`, `PIL`, `cv2`, `pytesseract`, and the utility modules `ocr_utils` and `chatbot_utils`.
+
+# 2025-02-21 07:57:32.473243
++yes
+
+# 2025-02-21 07:57:43.619742
++Aider, in `app.py`, add code to load and cache the necessary models using `st.cache_resource`. Add the following at the top of the file, after imports:
++
++1. BioBERT pipeline for NER:
++   ```python
++   @st.cache_resource
++   def load_biobert():
++       return pipeline("ner", model="dmis-lab/biobert-base-cased-v1.1", device=0 if torch.cuda.is_available() else -1)
++   medical_nlp = load_biobert()
+
+# 2025-02-21 08:06:20.220676
++ls
+
+# 2025-02-21 08:11:45.916829
++/add ./src/*
+
+# 2025-02-21 08:12:23.668761
++/add *
+
+# 2025-02-21 08:12:40.039258
++/add app.py
+
+# 2025-02-21 08:14:13.101416
++no
+
+# 2025-02-21 08:23:15.798301
++ls
+
+# 2025-02-21 08:51:39.378538
++/ask
+
+# 2025-02-21 13:57:10.883060
++/add src\ocr_utils.py
+
+# 2025-02-21 13:57:20.566748
++/add src\app.py
+
+# 2025-02-21 14:06:03.696758
++/code
+
+# 2025-02-21 14:06:31.987866
++In the "Data Analysis" tab in `src/app.py`, enhance the data analysis section to include interactive visualizations using Plotly. Add a line chart for `exam_date` trends over time, a correlation heatmap for numeric fields like BIRADS scores (if present in `st.session_state['df']`), and a dropdown filter for patients by BIRADS score (e.g., select BIRADS 4/5 cases). Generate these visualizations from `st.session_state['df']` and handle cases where `df` is `None` or missing columns by displaying a warning message (e.g., "No data available for visualization").
+
+# 2025-02-21 14:08:51.336006
++yes
+
+# 2025-02-21 14:11:53.522255
++ywa
+
+# 2025-02-21 14:11:55.832192
++yes
+
+# 2025-02-21 14:11:55.852077
++/run pip install nltk && python -c "import nltk; nltk.download('stopwords')"
+
+# 2025-02-21 14:11:55.859669
++/run pip install nltk && python -c "import nltk; nltk.download('stopwords')"
+
+# 2025-02-21 14:12:09.895006
++yes
+
+# 2025-02-21 14:12:34.792268
++In the OCR processing section under the "OCR Processing" tab in `src/app.py`, replace the current OCR logic with the enhanced OCR script provided. Move the functions `preprocess_image`, `extract_text_tesseract`, `parse_extracted_text`, and `extract_fields_from_text` into `ocr_utils.py`. Update `process_single_page` in `src/main.py` to use these new functions from `ocr_utils.py`. Ensure the OCR pipeline handles poorly scanned PDFs by applying Gaussian blur and adaptive thresholding from `preprocess_image`, and extracts fields like patient name, exam date, and BIRADS scores using `extract_fields_from_text` with the medical NLP pipeline. Organize the extracted data into `st.session_state['df']` as a pandas DataFrame with columns matching the structured output (e.g., `patient_name`, `exam_date`, `birads_score`).
+
+# 2025-02-21 14:14:39.622183
++yes
+
+# 2025-02-21 14:16:37.217037
++Optimize the OCR processing in `src/app.py` to handle multi-page PDFs efficiently using `ThreadPoolExecutor` from the enhanced OCR script. Update `process_single_page` to process pages in parallel and append results to `st.session_state['df']` consistently, ensuring no data is overwritten across pages.
+
+# 2025-02-21 14:18:03.353465
++yes
+
+# 2025-02-21 14:18:03.376620
++/run pip install more-itertools  # Needed for efficient parallel processing
+
+# 2025-02-21 14:18:03.381729
++/run pip install more-itertools  # Needed for efficient parallel processing
+
+# 2025-02-21 14:18:11.973421
++yes
+
+# 2025-02-21 14:32:18.941221
++\add C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\Mammo AI\OCR_GPT_REV04.py
+
+# 2025-02-21 14:33:49.983384
++yes
+
+# 2025-02-21 14:33:50.010823
++/run pip install more-itertools
+
+# 2025-02-21 14:33:50.013596
++/run pip install more-itertools
+
+# 2025-02-21 14:34:38.651305
++yes
+
+# 2025-02-21 14:51:08.971511
++\add C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\Mammo AI\OCR_GPT_REV04.py
+
+# 2025-02-21 14:54:21.459894
++/add \src\OCR_GPT_REV04.py
+
+# 2025-02-21 14:54:24.919759
++no
+
+# 2025-02-21 14:54:48.322135
++/add \Mammo AI\OCR_GPT_REV04.py
+
+# 2025-02-21 14:54:52.435812
++no
+
+# 2025-02-21 14:55:29.959859
++/add Mammo AI\OCR_GPT_REV04.py
+
+# 2025-02-21 14:55:33.479791
++no
+
+# 2025-02-21 14:55:51.131287
++/add Mammo_AI\OCR_GPT_REV04.py
+
+# 2025-02-21 14:58:40.088732
++In `ocr_utils.py`, update the OCR utilities to match the enhanced OCR script’s effective approach:
++
++1. **Update `preprocess_image`:**
++   - Modify `preprocess_image` to accept a numpy array (e.g., from an uploaded file in Streamlit) instead of a file path.
++   - Implement the following steps:
++     - Convert the image to grayscale using `cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)`.
++     - Apply Otsu’s thresholding with `cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)` and capture the binary image from the second return value (`_, binary`).
++     - Return the binary image as a numpy array.
++   - Example implementation:
++     ```python
++     def preprocess_image(image):
++         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
++         _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
++         return binary
++     ```
++
++2. **Update `extract_fields_from_text`:**
++   - Replace the current field extraction logic with regex-based parsing from the enhanced script, targeting these fields:
++     - 'patient name'
++     - 'document date'
++     - 'exam type'
++     - 'exam date'
++     - 'clinical history'
++     - 'birads right'
++     - 'birads left'
++     - 'impressions'
++     - 'findings'
++     - 'follow-up recommendation'
++   - Use these regex patterns (case-insensitive, adjusted from the enhanced script):
++     - Patient name: `r'patient name[:\s]+([a-z\s]+)'`
++     - Document date: `r'(document date|date of exam)[:\s]+([0-9]{4}-[0-9]{2}-[0-9]{2})'`
++     - Exam type: `r'exam type[:\s]+([a-z\s]+)'`
++     - Exam date: `r'exam date[:\s]+([0-9]{4}-[0-9]{2}-[0-9]{2})'`
++     - Clinical history: `r'clinical history[:\s]+(.*?)\s+(impressions|findings|recommendation)'` (use re.DOTALL)
++     - BIRADS right: `r'birads right[:\s]+([0-6])'`
++     - BIRADS left: `r'birads left[:\s]+([0-6])'`
++     - Impressions: `r'(impressions|conclusion)[:\s]+(.*?)\s+(findings|recommendation)'` (use re.DOTALL)
++     - Findings: `r'findings[:\s]+(.*?)\s+(recommendation|follow-up)'` (use re.DOTALL)
++     - Follow-up recommendation: `r'(follow-up|recommendation)[:\s]+(.*?)\s+(signed|printed|end of document)'` (use re.DOTALL)
++   - Return a dictionary with all fields, defaulting to "unknown" if not found.
++   - Example implementation:
++     ```python
++     def extract_fields_from_text(text):
++         fields = {
++             'patient name': "unknown",
++             'document date': "unknown",
++             'exam type': "unknown",
++             'exam date': "unknown",
++             'clinical history': "unknown",
++             'birads right': "unknown",
++             'birads left': "unknown",
++             'impressions': "unknown",
++             'findings': "unknown",
++             'follow-up recommendation': "unknown"
++         }
++         text = text.lower()
++         import re
++         if match := re.search(r'patient name[:\s]+([a-z\s]+)', text, re.IGNORECASE):
++             fields['patient name'] = match.group(1).strip()
++         if match := re.search(r'(document date|date of exam)[:\s]+([0-9]{4}-[0-9]{2}-[0-9]{2})', text, re.IGNORECASE):
++             fields['document date'] = match.group(2)
++         if match := re.search(r'exam type[:\s]+([a-z\s]+)', text, re.IGNORECASE):
++             fields['exam type'] = match.group(1).strip()
++         if match := re.search(r'exam date[:\s]+([0-9]{4}-[0-9]{2}-[0-9]{2})', text, re.IGNORECASE):
++             fields['exam date'] = match.group(2)
++         if match := re.search(r'clinical history[:\s]+(.*?)\s+(impressions|findings|recommendation)', text, re.IGNORECASE | re.DOTALL):
++             fields['clinical history'] = match.group(1).strip()
++         if match := re.search(r'birads right[:\s]+([0-6])', text, re.IGNORECASE):
++             fields['birads right'] = match.group(1)
++         if match := re.search(r'birads left[:\s]+([0-6])', text, re.IGNORECASE):
++             fields['birads left'] = match.group(1)
++         if match := re.search(r'(impressions|conclusion)[:\s]+(.*?)\s+(findings|recommendation)', text, re.IGNORECASE | re.DOTALL):
++             fields['impressions'] = match.group(2).strip()
++         if match := re.search(r'findings[:\s]+(.*?)\s+(recommendation|follow-up)', text, re.IGNORECASE | re.DOTALL):
++             fields['findings'] = match.group(2).strip()
++         if match := re.search(r'(follow-up|recommendation)[:\s]+(.*?)\s+(signed|printed|end of document)', text, re.IGNORECASE | re.DOTALL):
++             fields['follow-up recommendation'] = match.group(2).strip()
++         return fields
++     ```
++   - Remove any existing NLP pipeline dependencies (e.g., BioBERT), as the regex approach from your enhanced script is sufficient and avoids GPU complexity in Streamlit.
+
+# 2025-02-21 15:00:16.478311
++yes
+
+# 2025-02-21 15:01:33.890367
++In `src/app.py`, under the "OCR Processing" tab or wherever OCR results are processed:
++- Locate the code that converts `extracted_data` (a list of dictionaries from `extract_fields_from_text`) into a DataFrame.
++- Replace any incorrect flattening (e.g., `df = pd.DataFrame([item for sublist in extracted_data for item in sublist])`) with:
++  ```python
++  df = pd.DataFrame(extracted_data)
+
+# 2025-02-21 15:03:09.828083
++In src/app.py, under the "OCR Processing" tab:
++
++    Update the display of OCR results to show the entire DataFrame:
++        Replace any limited display (e.g., st.write(df[['patient name', 'exam type', ...]])) with:
++        python
++
++    st.dataframe(st.session_state['df'])
++
++Ensure all ten fields are visible: 'patient name', 'document date', 'exam type', 'exam date', 'clinical history', 'birads right', 'birads left', 'impressions', 'findings', and 'follow-up recommendation'.
++Add the raw OCR text as a column for debugging:
++
++    Modify the processing loop to include raw text in extracted_data:
++    python
++
++        fields['raw ocr text'] = text
++        extracted_data.append(fields)
++
++        This helps verify if the OCR output contains the expected data
+
+# 2025-02-21 15:25:18.060606
++i got two errors, debug and fix these errors and improve on what we have, since you are experienced coders, think step by step as you are fixing this workspace and identify the issues and potential errors that might arise later. IndexError: single positional indexer is out-of-bounds
++Traceback:
++
++File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 293, in <module>
++    structured_data = ocr_utils.convert_to_structured_json(st.session_state['df'].iloc[0])  # Show first result
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\pandas\core\indexing.py", line 1103, in __getitem__
++    return self._getitem_axis(maybe_callable, axis=axis)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\pandas\core\indexing.py", line 1656, in _getitem_axis
++    self._validate_integer(key, axis)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\pandas\core\indexing.py", line 1589, in _validate_integer
++    raise IndexError("single positional indexer is out-of-bounds") Some pages failed to process:
++
++    Page 2: extract_fields_from_text() takes 1 positional argument but 3 were given
++
+
+# 2025-02-21 15:35:09.966493
++got a new error Some pages failed to process:
++
++    Page 2: 'str' object has no attribute 'get'
++
++    Page 1: 'str' object has no attribute 'get'
++
++    Page 1: 'str' object has no attribute 'get'
++2025-02-21 13:14:04,118 - ERROR - Field extraction failed: 'entity'
++2025-02-21 13:14:04,123 - ERROR - Error processing page 2 of Eng Example 2.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 65, in process_single_page
++    fields.update({
++AttributeError: 'tuple' object has no attribute 'update'
++2025-02-21 13:14:07,111 - ERROR - Field extraction failed: 'entity'
++2025-02-21 13:14:07,111 - ERROR - Error processing page 1 of Eng Example 2.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 65, in process_single_page
++    fields.update({
++AttributeError: 'tuple' object has no attribute 'update'
++2025-02-21 13:15:27,646 - ERROR - Field extraction failed: This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed in order to use this tokenizer.
++2025-02-21 13:15:27,647 - ERROR - Error processing page 2 of FR Example 3.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 65, in process_single_page
++    fields.update({
++AttributeError: 'tuple' object has no attribute 'update'
++2025-02-21 13:15:28,946 - ERROR - Field extraction failed: This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed in order to use this tokenizer.
++2025-02-21 13:15:28,946 - ERROR - Error processing page 1 of FR Example 3.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 65, in process_single_page
++    fields.update({
++AttributeError: 'tuple' object has no attribute 'update'
++2025-02-21 13:16:15,618 - ERROR - Field extraction failed: 'entity'
++2025-02-21 13:16:15,618 - ERROR - Error processing page 1 of FR Example 4.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 65, in process_single_page
++    fields.update({
++AttributeError: 'tuple' object has no attribute 'update'
++2025-02-21 13:17:30,283 - ERROR - Field extraction failed: 'entity'
++2025-02-21 13:17:30,298 - ERROR - Error processing page 2 of Eng Example 1.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 65, in process_single_page
++    fields.update({
++AttributeError: 'tuple' object has no attribute 'update'
++2025-02-21 13:17:41,475 - ERROR - Field extraction failed: 'entity'
++2025-02-21 13:17:41,475 - ERROR - Error processing page 1 of Eng Example 1.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 65, in process_single_page
++    fields.update({
++AttributeError: 'tuple' object has no attribute 'update'
++2025-02-21 13:25:09,346 - ERROR - Field extraction failed: 'entity'
++2025-02-21 13:25:15,668 - ERROR - Field extraction failed: 'entity'
++2025-02-21 13:25:55,895 - ERROR - Field extraction failed: 'entity'
++2025-02-21 13:26:01,434 - ERROR - Field extraction failed: 'entity'
++2025-02-21 13:27:01,234 - ERROR - Field extraction failed: This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed in order to use this tokenizer.
++2025-02-21 13:27:02,362 - ERROR - Field extraction failed: This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed in order to use this tokenizer.
++2025-02-21 13:27:42,754 - ERROR - Field extraction failed: 'entity'
++2025-02-21 13:38:56,652 - ERROR - Field extraction failed: 'entity'
++2025-02-21 13:38:57,417 - ERROR - Field extraction failed: 'entity'
++2025-02-21 13:40:14,973 - ERROR - Field extraction failed: This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed in order to use this tokenizer.
++2025-02-21 13:40:16,203 - ERROR - Field extraction failed: This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed in order to use this tokenizer.
++2025-02-21 13:40:52,438 - ERROR - Field extraction failed: 'entity'
++2025-02-21 13:42:14,326 - ERROR - Field extraction failed: 'entity'
++2025-02-21 13:42:31,854 - ERROR - Field extraction failed: 'entity'
++2025-02-21 14:01:19,117 - ERROR - Field extraction failed: 'entity'
++2025-02-21 14:01:29,816 - ERROR - Field extraction failed: 'entity'
++2025-02-21 14:02:24,326 - ERROR - Field extraction failed: 'entity'
++2025-02-21 14:02:24,510 - ERROR - Field extraction failed: 'entity'
++2025-02-21 14:03:35,283 - ERROR - Field extraction failed: This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed in order to use this tokenizer.
++2025-02-21 14:03:36,536 - ERROR - Field extraction failed: This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed in order to use this tokenizer.
++2025-02-21 14:04:17,186 - ERROR - Field extraction failed: 'entity'
++2025-02-21 14:21:46,586 - ERROR - Field extraction failed: 'entity'
++2025-02-21 14:21:46,601 - ERROR - Error processing page 2 of Eng Example 1.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 77, in process_single_page
++    'patient_name': structured_data.get('patient_info', [{}])[0].get('value', 'Unknown'),
++IndexError: list index out of range
++2025-02-21 14:21:46,840 - ERROR - Field extraction failed: 'entity'
++2025-02-21 14:21:46,856 - ERROR - Error processing page 2 of Eng Example 2.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 77, in process_single_page
++    'patient_name': structured_data.get('patient_info', [{}])[0].get('value', 'Unknown'),
++IndexError: list index out of range
++2025-02-21 14:21:49,500 - ERROR - Field extraction failed: 'entity'
++2025-02-21 14:21:49,500 - ERROR - Error processing page 1 of Eng Example 2.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 77, in process_single_page
++    'patient_name': structured_data.get('patient_info', [{}])[0].get('value', 'Unknown'),
++IndexError: list index out of range
++2025-02-21 14:21:59,095 - ERROR - Field extraction failed: 'entity'
++2025-02-21 14:21:59,095 - ERROR - Error processing page 1 of Eng Example 1.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 77, in process_single_page
++    'patient_name': structured_data.get('patient_info', [{}])[0].get('value', 'Unknown'),
++IndexError: list index out of range
++2025-02-21 14:24:02,818 - ERROR - Field extraction failed: This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed in order to use this tokenizer.
++2025-02-21 14:24:04,674 - ERROR - Field extraction failed: 'entity'
++2025-02-21 14:24:04,674 - ERROR - Error processing page 1 of FR Example 4.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 77, in process_single_page
++    'patient_name': structured_data.get('patient_info', [{}])[0].get('value', 'Unknown'),
++IndexError: list index out of range
++2025-02-21 14:24:04,821 - ERROR - Field extraction failed: This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed in order to use this tokenizer.
++2025-02-21 15:08:38,727 - ERROR - Error processing page 2 of Eng Example 2.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 73, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text, medical_nlp, img_array)
++TypeError: extract_fields_from_text() takes 1 positional argument but 3 were given
++2025-02-21 15:09:20,307 - ERROR - Error processing page 1 of Eng Example 2.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 73, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text, medical_nlp, img_array)
++TypeError: extract_fields_from_text() takes 1 positional argument but 3 were given
++2025-02-21 15:09:41,029 - ERROR - Error processing page 2 of FR Example 3.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 73, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text, medical_nlp, img_array)
++TypeError: extract_fields_from_text() takes 1 positional argument but 3 were given
++2025-02-21 15:09:51,077 - ERROR - Error processing page 1 of FR Example 3.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 73, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text, medical_nlp, img_array)
++TypeError: extract_fields_from_text() takes 1 positional argument but 3 were given
++2025-02-21 15:10:35,567 - ERROR - Error processing page 1 of FR Example 4.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 73, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text, medical_nlp, img_array)
++TypeError: extract_fields_from_text() takes 1 positional argument but 3 were given
++2025-02-21 15:11:56,087 - ERROR - Error processing page 2 of Eng Example 1.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 73, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text, medical_nlp, img_array)
++TypeError: extract_fields_from_text() takes 1 positional argument but 3 were given
++2025-02-21 15:12:22,967 - ERROR - Error processing page 1 of Eng Example 1.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 73, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text, medical_nlp, img_array)
++TypeError: extract_fields_from_text() takes 1 positional argument but 3 were given
++2025-02-21 15:30:24,123 - ERROR - Error processing page 1 of Eng Example 2.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 84, in process_single_page
++    'impressions': structured_data.get('findings', [{}])[0].get('value', 'Unknown'),
++AttributeError: 'str' object has no attribute 'get'
++2025-02-21 15:30:28,567 - ERROR - Error processing page 2 of Eng Example 1.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 84, in process_single_page
++    'impressions': structured_data.get('findings', [{}])[0].get('value', 'Unknown'),
++AttributeError: 'str' object has no attribute 'get'
++2025-02-21 15:30:31,396 - ERROR - Error processing page 2 of Eng Example 2.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 84, in process_single_page
++    'impressions': structured_data.get('findings', [{}])[0].get('value', 'Unknown'),
++AttributeError: 'str' object has no attribute 'get'
++2025-02-21 15:31:05,636 - ERROR - Error processing page 1 of Eng Example 1.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 84, in process_single_page
++    'impressions': structured_data.get('findings', [{}])[0].get('value', 'Unknown'),
++AttributeError: 'str' object has no attribute 'get'
++2025-02-21 15:32:15,326 - ERROR - Error processing page 2 of FR Example 3.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 84, in process_single_page
++    'impressions': structured_data.get('findings', [{}])[0].get('value', 'Unknown'),
++AttributeError: 'str' object has no attribute 'get'
++2025-02-21 15:32:30,781 - ERROR - Error processing page 1 of FR Example 3.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 84, in process_single_page
++    'impressions': structured_data.get('findings', [{}])[0].get('value', 'Unknown'),
++AttributeError: 'str' object has no attribute 'get'
++2025-02-21 15:32:39,276 - ERROR - Error processing page 1 of FR Example 4.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 84, in process_single_page
++    'impressions': structured_data.get('findings', [{}])[0].get('value', 'Unknown'),
++AttributeError: 'str' object has no attribute 'get'
++
+
+# 2025-02-21 15:36:41.458548
++y
+
+# 2025-02-21 15:36:41.476284
++/run pip install sentencepiece
+
+# 2025-02-21 15:36:41.486360
++/run pip install sentencepiece
+
+# 2025-02-21 15:36:45.816349
++y
+
+# 2025-02-21 16:10:55.973937
++In `ocr_utils.py`, enhance the `preprocess_image` function to include deskewing and adaptive thresholding:
++
++- Modify `preprocess_image` to accept a NumPy array (image) as input.
++- Implement the following steps:
++  1. Convert the image to grayscale using `cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)`.
++  2. Apply a light Gaussian blur with a 3x3 kernel using `cv2.GaussianBlur(gray, (3, 3), 0)`.
++  3. Deskew the image:
++     - Detect edges with `cv2.Canny(blur, 50, 150)`.
++     - Find lines using `cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=100, minLineLength=100, maxLineGap=10)`.
++     - Calculate the median angle of detected lines (in degrees).
++     - If lines are detected, compute the rotation matrix with `cv2.getRotationMatrix2D((width/2, height/2), median_angle, 1)` and rotate using `cv2.warpAffine`.
++     - If no lines are detected, skip rotation and use the blurred grayscale image.
++  4. Apply adaptive thresholding using `cv2.adaptiveThreshold(deskewed, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, blockSize=11, C=2)`.
++- Return the preprocessed binary image as a NumPy array.
++
++Ensure the function handles edge cases (e.g., no lines detected) by proceeding with the unrotated image.
+
+# 2025-02-21 16:20:39.583315
++In `ocr_utils.py`, update the `extract_fields_from_text` function to use regex patterns for extracting fields from OCR output:
++
++- Define regex patterns for common fields in mammogram reports (case-insensitive with `re.IGNORECASE`):
++  - 'patient name': `r'patient name[:\s]+([a-z\s]+)'`
++  - 'exam date': `r'exam date[:\s]+([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}/[0-9]{2}/[0-9]{4})'`
++  - 'exam type': `r'exam type[:\s]+([a-z\s]+)'`
++  - 'clinical history': `r'clinical history[:\s]+(.*?)\s+(impressions|findings|recommendation)'` (use `re.DOTALL`)
++  - 'birads right': `r'birads right[:\s]+([0-6])'`
++  - 'birads left': `r'birads left[:\s]+([0-6])'`
++  - 'impressions': `r'(impressions|conclusion)[:\s]+(.*?)\s+(findings|recommendation)'` (use `re.DOTALL`)
++  - 'findings': `r'findings[:\s]+(.*?)\s+(recommendation|follow-up)'` (use `re.DOTALL`)
++  - 'follow-up recommendation': `r'(follow-up|recommendation)[:\s]+(.*?)\s+(signed|printed|end of document)'` (use `re.DOTALL`)
++- Update the function to:
++  - Take the OCR-extracted text as input.
++  - Initialize an empty dictionary `fields`.
++  - Use `re.search(pattern, text, re.IGNORECASE)` for each pattern, storing matches in `fields` (e.g., `fields['patient_name'] = match.group(1)` if match).
++  - Handle cases where fields are not found by setting `fields[field_name] = None`.
++- Return the `fields` dictionary.
++
++This ensures robust extraction tailored to structured medical reports.
+
+# 2025-02-21 16:23:03.583244
++In `src/app.py`, ensure the Streamlit dashboard correctly creates and displays a DataFrame with all extracted fields:
++
++- After processing all pages/images:
++  - Collect extracted fields in a list `extracted_data`, where each item is a dictionary from `extract_fields_from_text`.
++  - Create a DataFrame with `df = pd.DataFrame(extracted_data)`.
++  - Store it in session state: `st.session_state['df'] = df`.
++- Display the full DataFrame using `st.dataframe(st.session_state['df'])` to verify all fields (e.g., 'patient name', 'exam date') are included.
++- If saving to CSV, use `df.to_csv('output.csv', index=False)`.
++
++This ensures all extracted data is properly structured and visible in the dashboard.
+
+# 2025-02-21 16:25:37.316774
++y
+
+# 2025-02-21 16:25:37.339746
++/run python -c "import pandas as pd; df = pd.read_csv('output.csv'); print(df.columns.tolist())"
+
+# 2025-02-21 16:25:37.343197
++/run python -c "import pandas as pd; df = pd.read_csv('output.csv'); print(df.columns.tolist())"
+
+# 2025-02-21 16:25:47.732967
++y
+
+# 2025-02-21 16:49:02.301652
++Integrate Groq’s API into the OCR tool for text parsing using an LLM:
++- Add a function `parse_text_with_llm(text)` that:
++  - Loads the Groq API key from a `.env` file using `dotenv`.
++  - Defines a prompt for the LLM to correct fused words and extract fields like 'patient name', 'exam date', 'BIRADS scores', etc., from the provided text.
++  - Sends the text and prompt to Groq’s API (e.g., using `requests.post` or Groq’s Python client).
++  - Parses the LLM’s response to extract structured fields.
++- Update `extract_fields_from_text` to use this function after initial regex attempts, or as a fallback if regex fails.
++- Ensure error handling for API calls (e.g., timeouts, API key issues).
+
+# 2025-02-21 16:52:24.861258
++yes
+
+# 2025-02-21 16:52:24.881326
++/run echo "GROQ_API_KEY=your_api_key_here" > .env
+
+# 2025-02-21 16:52:24.891446
++/run echo "GROQ_API_KEY=your_api_key_here" > .env
+
+# 2025-02-21 16:52:41.083215
++Modify `extract_fields_from_text` to use the LLM for field extraction:
++- Define a prompt like: "Extract the following fields from this medical report text: patient name, exam date, BIRADS right, BIRADS left, impressions, findings, follow-up recommendation. Return the results in JSON format."
++- Send the raw OCR text with this prompt to Groq’s API.
++- Parse the LLM’s response (assuming JSON) to extract the fields.
++- Fall back to regex if the LLM fails to extract certain fields.
+
+# 2025-02-21 16:54:16.121377
++yes
+
+# 2025-02-21 16:56:08.825033
++if this was not already done get it done. Enhance the `preprocess_image` function in `ocr_utils.py`:
++- Add deskewing:
++  - Detect edges with `cv2.Canny`.
++  - Find lines using `cv2.HoughLinesP`.
++  - Calculate the median angle and rotate the image using `cv2.getRotationMatrix2D` and `cv2.warpAffine`.
++- Replace Otsu’s thresholding with adaptive thresholding:
++  - Use `cv2.adaptiveThreshold` with `cv2.ADAPTIVE_THRESH_GAUSSIAN_C` and appropriate block size (e.g., 11).
++- Apply a light Gaussian blur (e.g., 3x3 kernel) before thresholding to reduce noise.
+
+# 2025-02-21 16:58:44.562767
++Implement a multi-OCR approach in `extract_text_tesseract`:
++- Run Tesseract with `--psm 3`, `--psm 6`, and `--psm 11`.
++- Collect the text and confidence scores for each.
++- Use the LLM to select the most coherent text by sending all outputs and asking which is the most accurate.
++- Alternatively, use the output with the highest average confidence.
+
+# 2025-02-21 16:59:48.080905
++yes
+
+# 2025-02-21 16:59:48.110884
++/run pip install sentencepiece  # If not already installed for LLM integration
+
+# 2025-02-21 16:59:48.115949
++/run pip install sentencepiece  # If not already installed for LLM integration
+
+# 2025-02-21 16:59:56.431029
++yes
+
+# 2025-02-21 16:59:58.951112
++Add robust error handling to the OCR tool:
++- Wrap API calls in try-except blocks to catch timeouts or API errors.
++- Log errors using Python’s `logging` module.
++- In Streamlit, display user-friendly error messages if OCR or parsing fails.
+
+# 2025-02-21 17:01:44.720998
++yes
+
+# 2025-02-21 17:29:37.584115
++In `ocr_utils.py`, add a function `parse_text_with_llm(text)` that integrates Groq’s API for text parsing:
++- Use `python-dotenv` to load the Groq API key from a `.env` file.
++- Define a prompt for the LLM to correct OCR errors (e.g., fused words) and extract specific fields: 'patient name', 'exam date', 'BIRADS right', 'BIRADS left', 'impressions', 'findings', 'follow-up recommendation'.
++- Send the OCR text and the prompt to Groq’s API using the Groq Python client.
++- Parse the LLM’s response (expecting JSON format) to extract the structured fields.
++- Handle exceptions for API failures (e.g., connection errors, invalid responses).
++
++Example implementation:
++```python
++from groq import Groq
++from dotenv import load_dotenv
++import os
++import json
++
++load_dotenv()
++GROQ_API_KEY = os.getenv("GROQ_API_KEY")
++client = Groq(api_key=GROQ_API_KEY)
++
++def parse_text_with_llm(text):
++    prompt = f"""Extract the following information from this mammogram report text:
++- Patient name
++- Exam date
++- BIRADS score for the right breast
++- BIRADS score for the left breast
++- Impressions
++- Findings
++- Follow-up recommendation
++
++The text may contain errors, such as fused words (e.g., "NationalODdifonse" should be "National Defence"). Correct them as best as you can. Provide the extracted information in valid JSON format with keys: "patient_name", "exam_date", "birads_right", "birads_left", "impressions", "findings", "follow_up_recommendation".
++
++Text:
++{text}"""
++    try:
++        response = client.chat.completions.create(
++            messages=[{"role": "user", "content": prompt}],
++            model="mixtral-8x7b-32768"
++        )
++        return json.loads(response.choices[0].message.content)
++    except Exception as e:
++        print(f"LLM parsing failed: {e}")
++        return {}
+
+# 2025-02-21 17:31:16.046241
++yes
+
+# 2025-02-21 17:32:11.061145
++/run pip install groq python-dotenv
+
+# 2025-02-21 17:32:11.069232
++/run pip install groq python-dotenv
+
+# 2025-02-21 17:32:24.048968
++yes
+
+# 2025-02-21 17:32:29.226006
++no
+
+# 2025-02-21 17:35:01.654065
++Modify the `parse_text_with_llm` function in `ocr_utils.py`:
++- Update the prompt to include a medical context preamble, instructing the LLM to prioritize mammogram-specific terms and formats.
++- Explicitly request confidence scores (0-1) for each extracted field to assess reliability.
++- Add a retry mechanism (up to 2 retries) if the response lacks required fields or fails JSON validation.
++- Increase `max_tokens` to 2000 for complex reports.
++
++Example updated function:
++```python
++def parse_text_with_llm(text: str) -> Dict[str, Any]:
++    dotenv.load_dotenv()
++    api_key = os.getenv("GROQ_API_KEY")
++    if not api_key:
++        raise OCRError("Groq API key not found")
++    
++    client = Groq(api_key=api_key)
++    prompt = f"""You are an expert in medical document processing, specializing in mammogram reports. Extract the following fields from the text below:
++- Patient name (title case, correct fused words like 'PatientName' to 'Patient Name')
++- Exam date (YYYY-MM-DD, correct formats like '23Dec2021')
++- BIRADS score for the right breast (0-6)
++- BIRADS score for the left breast (0-6)
++- Clinical impressions
++- Key findings
++- Follow-up recommendations
++
++Correct OCR errors (e.g., 'NationalODdifonse' to 'National Defence'), prioritize medical terminology, and handle varied labels (e.g., 'Exam:' or 'Date:'). For each field, provide a confidence score (0-1). Return valid JSON with keys: patient_name, exam_date, birads_right, birads_left, impressions, findings, follow_up_recommendation, and a 'confidence' sub-object.
++
++Text:
++{text[:3000]}"""
++
++    for attempt in range(3):
++        try:
++            response = client.chat.completions.create(
++                messages=[{"role": "user", "content": prompt}],
++                model="mixtral-8x7b-32768",
++                temperature=0.2,
++                max_tokens=2000,
++                response_format={"type": "json_object"}
++            )
++            result = json.loads(response.choices[0].message.content)
++            required = ['patient_name', 'exam_date', 'birads_right', 'birads_left', 
++                       'impressions', 'findings', 'follow_up_recommendation', 'confidence']
++            if all(k in result for k in required):
++                return result
++            logging.warning(f"Attempt {attempt + 1}: Missing fields in LLM response")
++        except Exception as e:
++            logging.error(f"Attempt {attempt + 1} failed: {str(e)}")
++    raise OCRError("Failed to extract fields after retries")
+
+# 2025-02-21 17:36:20.998996
++yes
+
+# 2025-02-21 17:37:50.768894
++### **Improvement 2: Adaptive Preprocessing with Noise Detection**
++Your `preprocess_image` function uses deskewing and adaptive thresholding but could better adapt to noisy or faded scans.
++
++#### **Aider Prompt**
++
++Enhance the preprocess_image function in ocr_utils.py:
++
++    Add noise detection using variance of Laplacian (contrast < 50 indicates noise).
++    If noisy, apply bilateral filtering before deskewing.
++    Add an optional sharpening step after thresholding for faded text.
++
++Example implementation:
++python
++
++def preprocess_image(image, apply_sharpen=True):
++    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
++    contrast = cv2.Laplacian(gray, cv2.CV_64F).var()
++    
++    # Noise reduction for low-contrast images
++    if contrast < 50:
++        gray = cv2.bilateralFilter(gray, 9, 75, 75)
++    
++    blur = cv2.GaussianBlur(gray, (3, 3), 0)
++    # Deskewing (keep existing logic)
++    height, width = blur.shape
++    edges = cv2.Canny(blur, 50, 150)
++    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100, 
++                           minLineLength=100, maxLineGap=10)
++    if lines is not None:
++        angles = [np.degrees(np.arctan2(y2 - y1, x2 - x1)) for x1, y1, x2, y2 in lines[:, 0]]
++        median_angle = np.median(angles)
++        rotation_matrix = cv2.getRotationMatrix2D((width/2, height/2), median_angle, 1)
++        deskewed = cv2.warpAffine(blur, rotation_matrix, (width, height), borderMode=cv2.BORDER_REPLICATE)
++    else:
++        deskewed = blur
++    
++    binary = cv2.adaptiveThreshold(deskewed, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
++                                  cv2.THRESH_BINARY, 11, 2)
++    if apply_sharpen:
++        kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
++        binary = cv2.filter2D(binary, -1, kernel)
++    return binary
+
+# 2025-02-21 17:38:55.414058
++Refine the select_best_ocr_result function in ocr_utils.py:
++
++    Combine LLM coherence scoring with confidence scores (weighted average: 70% LLM, 30% confidence).
++    Add a check for minimum field presence (e.g., 'patient', 'date', 'BIRADS') to reject poor options.
++
++Example implementation:
++python
++
++def select_best_ocr_result(results):
++    text_options = [f"Option {i+1} (PSM {r['psm']}): {' '.join(r['text'])}" 
++                    for i, r in enumerate(results)]
++    try:
++        llm_response = parse_text_with_llm(
++            f"Score each OCR option (1-10) for coherence and presence of fields like patient name, exam date, and BIRADS scores. Return JSON with 'scores': [int, ...].\n\n{'\n\n'.join(text_options)}"
++        )
++        llm_scores = llm_response.get('scores', [5] * len(results))
++        hybrid_scores = [(0.7 * llm + 0.3 * r['avg_conf'] / 100, i) 
++                         for i, (llm, r) in enumerate(zip(llm_scores, results))]
++        best_idx = max(hybrid_scores, key=lambda x: x[0])[1]
++        
++        # Check minimum field presence
++        text = ' '.join(results[best_idx]['text'])
++        if not any(kw in text.lower() for kw in ['patient', 'date', 'birads']):
++            logging.warning("Best OCR result lacks key fields, falling back to confidence")
++            best_idx = max(enumerate(results), key=lambda x: x[1]['avg_conf'])[0]
++        return results[best_idx]
++    except Exception:
++        return max(results, key=lambda x: x['avg_conf'])
++
++
++**Impact**: This balances LLM judgment with raw OCR confidence, ensuring better selection of coherent outputs.
++
+
+# 2025-02-21 17:39:20.372824
++no
+
+# 2025-02-21 17:39:31.398352
++yes
+
+# 2025-02-21 17:39:38.918717
++/code
+
+# 2025-02-21 17:39:56.108636
++/add src\app.py
+
+# 2025-02-21 17:40:04.078612
++/add src\ocr_utils.py
+
+# 2025-02-21 17:40:14.298527
++Refine the select_best_ocr_result function in ocr_utils.py:
++
++    Combine LLM coherence scoring with confidence scores (weighted average: 70% LLM, 30% confidence).
++    Add a check for minimum field presence (e.g., 'patient', 'date', 'BIRADS') to reject poor options.
++
++Example implementation:
++python
++
++def select_best_ocr_result(results):
++    text_options = [f"Option {i+1} (PSM {r['psm']}): {' '.join(r['text'])}" 
++                    for i, r in enumerate(results)]
++    try:
++        llm_response = parse_text_with_llm(
++            f"Score each OCR option (1-10) for coherence and presence of fields like patient name, exam date, and BIRADS scores. Return JSON with 'scores': [int, ...].\n\n{'\n\n'.join(text_options)}"
++        )
++        llm_scores = llm_response.get('scores', [5] * len(results))
++        hybrid_scores = [(0.7 * llm + 0.3 * r['avg_conf'] / 100, i) 
++                         for i, (llm, r) in enumerate(zip(llm_scores, results))]
++        best_idx = max(hybrid_scores, key=lambda x: x[0])[1]
++        
++        # Check minimum field presence
++        text = ' '.join(results[best_idx]['text'])
++        if not any(kw in text.lower() for kw in ['patient', 'date', 'birads']):
++            logging.warning("Best OCR result lacks key fields, falling back to confidence")
++            best_idx = max(enumerate(results), key=lambda x: x[1]['avg_conf'])[0]
++        return results[best_idx]
++    except Exception:
++        return max(results, key=lambda x: x['avg_conf'])
++
++
++**Impact**: This balances LLM judgment with raw OCR confidence, ensuring better selection of coherent outputs.
++
+
+# 2025-02-21 17:41:43.618640
++yes
+
+# 2025-02-21 17:43:24.048437
++Enhance the extract_fields_from_text function in ocr_utils.py:
++
++    Add multi-line regex patterns with lookaheads to capture fields across lines.
++    Include medical context keywords (e.g., 'mammogram', 'breast') to refine matches.
++
++Example update:
++python
++
++def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[str, Any]:
++    fields, _ = existing_function_logic_here()  # Keep existing LLM logic
++    
++    if missing_fields := [k for k, v in fields.items() if v is None]:
++        patterns = {
++            'patient_name': r'(?i)(?:patient|name)[:\s]*(.*?)(?=\n|$|\s+(?:date|exam))',
++            'exam_date': r'(?i)(?:exam|date)[:\s]*(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})',
++            'birads_right': r'(?i)birads[\s-]*right[:\s]*([0-6])',
++            'birads_left': r'(?i)birads[\s-]*left[:\s]*([0-6])',
++            'impressions': r'(?i)impressions[:\s]*(.*?)(?=\n\s*(?:findings|recommendation|$))',
++            'clinical_history': r'(?i)(?:history|clinical)[:\s]*(.*?)(?=\n\s*(?:impressions|findings|$))'
++        }
++        for field, pattern in patterns.items():
++            if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
++                fields[field] = match.group(1).strip()
++                if field == 'patient_name':
++                    fields[field] = fields[field].title()
++    return fields, []
++
++
++**Impact**: This captures fields more accurately across varied layouts and reduces misses.
++
+
+# 2025-02-21 17:45:06.619709
++yes
+
+# 2025-02-21 17:56:54.317611
++you have a errors, go over the project and debug any future issues we might encounter. prepare this project to run it SyntaxError: File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\.\src\ocr_utils.py", line 120 ) ^ SyntaxError: f-string expression part cannot include a backslash
++Traceback:
++
++File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 26, in <module>
++    import ocr_utils, chatbot_utils
+
+# 2025-02-21 18:01:52.049079
++no
+
+# 2025-02-21 18:07:05.346943
++Enter your token (input will not be visible):
++Add token as git credential? (Y/n) Y
++2025-02-21 18:06:35.562 Uncaught app execution
++Traceback (most recent call last):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\utils\_http.py", line 409, in hf_raise_for_status
++    response.raise_for_status()
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\requests\models.py", line 1024, in raise_for_status
++    raise HTTPError(http_error_msg, response=self)
++requests.exceptions.HTTPError: 400 Client Error: Bad Request for url: https://huggingface.co/api/whoami-v2
++
++The above exception was the direct cause of the following exception:
++
++Traceback (most recent call last):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\hf_api.py", line 1664, in whoami
++    hf_raise_for_status(r)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\utils\_http.py", line 464, in hf_raise_for_status
++    raise _format(BadRequestError, message, response) from e
++huggingface_hub.errors.BadRequestError: Bad request:
++
++The above exception was the direct cause of the following exception:
++
++Traceback (most recent call last):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\streamlit\runtime\scriptrunner\exec_code.py", line 121, in exec_func_with_error_handling
++    result = func()
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\streamlit\runtime\scriptrunner\script_runner.py", line 591, in code_to_exec
++    exec(code, module.__dict__)
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 52, in <module>
++    login(token=HF_TOKEN)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\utils\_deprecation.py", line 101, in inner_f
++    return f(*args, **kwargs)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\utils\_deprecation.py", line 31, in inner_f
++    return f(*args, **kwargs)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\_login.py", line 130, in login
++    interpreter_login(new_session=new_session)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\utils\_deprecation.py", line 101, in inner_f
++    return f(*args, **kwargs)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\utils\_deprecation.py", line 31, in inner_f
++    return f(*args, **kwargs)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\_login.py", line 290, in interpreter_login
++    _login(token=token, add_to_git_credential=add_to_git_credential)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\_login.py", line 404, in _login
++    token_info = whoami(token)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\utils\_validators.py", line 114, in _inner_fn
++    return fn(*args, **kwargs)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\hf_api.py", line 1677, in whoami
++    raise HTTPError(error_message, request=e.request, response=e.response) from e
++requests.exceptions.HTTPError: Invalid user token.Hugging Face API key not found in environment variables
++requests.exceptions.HTTPError: Invalid user token.
++Traceback:
++
++File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 52, in <module>
++    login(token=HF_TOKEN)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\utils\_deprecation.py", line 101, in inner_f
++    return f(*args, **kwargs)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\utils\_deprecation.py", line 31, in inner_f
++    return f(*args, **kwargs)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\_login.py", line 130, in login
++    interpreter_login(new_session=new_session)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\utils\_deprecation.py", line 101, in inner_f
++    return f(*args, **kwargs)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\utils\_deprecation.py", line 31, in inner_f
++    return f(*args, **kwargs)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\_login.py", line 290, in interpreter_login
++    _login(token=token, add_to_git_credential=add_to_git_credential)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\_login.py", line 404, in _login
++    token_info = whoami(token)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\utils\_validators.py", line 114, in _inner_fn
++    return fn(*args, **kwargs)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\huggingface_hub\hf_api.py", line 1677, in whoami
++    raise HTTPError(error_message, request=e.request, response=e.response) from e
+
+# 2025-02-21 18:07:08.942876
++NO
+
+# 2025-02-21 18:08:11.056863
++no
+
+# 2025-02-21 18:09:36.523605
++Hugging Face API key required
++
++    Get your token at https://huggingface.co/settings/tokens
++    Create a .env file in project root with: HF_API_KEY=your_token_here
++    Restart the app
++
+
+# 2025-02-21 18:10:02.549059
++debug why it is not reading my hugging face api that is in the .env, make sure it uses dotenv like groq
+
+# 2025-02-21 18:10:49.297060
++yes
+
+# 2025-02-21 18:10:49.320819
++/run type .env
+
+# 2025-02-21 18:10:49.320819
++/run type .env
+
+# 2025-02-21 18:10:54.179050
++yes
+
+# 2025-02-21 18:18:21.642014
++debug Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 96, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\.\src\ocr_utils.py", line 358, in extract_fields_from_text
++    if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 201, in search
++    return _compile(pattern, flags).search(string)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 304, in _compile
++    p = sre_compile.compile(pattern, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_compile.py", line 788, in compile
++    p = sre_parse.parse(p, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 955, in parse
++    p = _parse_sub(source, state, flags & SRE_FLAG_VERBOSE, 0)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 444, in _parse_sub
++    itemsappend(_parse(source, state, verbose, nested + 1,
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 843, in _parse
++    raise source.error("missing ), unterminated subpattern",
++re.error: missing ), unterminated subpattern at position 52
++2025-02-21 18:13:41,162 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
++2025-02-21 18:13:41,384 - ERROR - Attempt 1 API error: Error code: 429 - {'error': {'message': 'Rate limit reached for model `mixtral-8x7b-32768` in organization `org_01jjr06gvjepht8gfgh9726zm6` service tier `on_demand` on tokens per minute (TPM): Limit 5000, Used 4246, Requested 1677. Please try again in 11.072s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
++2025-02-21 18:13:41,749 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
++2025-02-21 18:13:41,860 - INFO - Retrying request to /openai/v1/chat/completions in 11.000000 seconds
++2025-02-21 18:13:54,736 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
++2025-02-21 18:13:54,798 - INFO - Retrying request to /openai/v1/chat/completions in 7.000000 seconds
++2025-02-21 18:13:55,226 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:14:02,666 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
++2025-02-21 18:14:02,794 - INFO - Retrying request to /openai/v1/chat/completions in 7.000000 seconds
++2025-02-21 18:14:11,777 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:14:12,332 - ERROR - Error processing page 1 of Eng Example 2.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 96, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\.\src\ocr_utils.py", line 358, in extract_fields_from_text
++    if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 201, in search
++    return _compile(pattern, flags).search(string)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 304, in _compile
++    p = sre_compile.compile(pattern, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_compile.py", line 788, in compile
++    p = sre_parse.parse(p, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 955, in parse
++    p = _parse_sub(source, state, flags & SRE_FLAG_VERBOSE, 0)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 444, in _parse_sub
++    itemsappend(_parse(source, state, verbose, nested + 1,
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 843, in _parse
++    raise source.error("missing ), unterminated subpattern",
++re.error: missing ), unterminated subpattern at position 52
++2025-02-21 18:14:38,043 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:14:38,518 - ERROR - Error processing page 2 of FR Example 3.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 96, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\.\src\ocr_utils.py", line 358, in extract_fields_from_text
++    if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 201, in search
++    return _compile(pattern, flags).search(string)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 304, in _compile
++    p = sre_compile.compile(pattern, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_compile.py", line 788, in compile
++    p = sre_parse.parse(p, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 955, in parse
++    p = _parse_sub(source, state, flags & SRE_FLAG_VERBOSE, 0)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 444, in _parse_sub
++    itemsappend(_parse(source, state, verbose, nested + 1,
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 843, in _parse
++    raise source.error("missing ), unterminated subpattern",
++re.error: missing ), unterminated subpattern at position 52
++2025-02-21 18:15:07,656 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:15:07,766 - ERROR - Error processing page 1 of Eng Example 1.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 96, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\.\src\ocr_utils.py", line 358, in extract_fields_from_text
++    if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 201, in search
++    return _compile(pattern, flags).search(string)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 304, in _compile
++    p = sre_compile.compile(pattern, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_compile.py", line 788, in compile
++    p = sre_parse.parse(p, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 955, in parse
++    p = _parse_sub(source, state, flags & SRE_FLAG_VERBOSE, 0)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 444, in _parse_sub
++    itemsappend(_parse(source, state, verbose, nested + 1,
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 843, in _parse
++    raise source.error("missing ), unterminated subpattern",
++re.error: missing ), unterminated subpattern at position 52
++2025-02-21 18:15:36,481 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:15:36,559 - ERROR - Error processing page 1 of FR Example 4.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 96, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\.\src\ocr_utils.py", line 358, in extract_fields_from_text
++    if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 201, in search
++    return _compile(pattern, flags).search(string)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 304, in _compile
++    p = sre_compile.compile(pattern, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_compile.py", line 788, in compile
++    p = sre_parse.parse(p, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 955, in parse
++    p = _parse_sub(source, state, flags & SRE_FLAG_VERBOSE, 0)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 444, in _parse_sub
++    itemsappend(_parse(source, state, verbose, nested + 1,
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 843, in _parse
++    raise source.error("missing ), unterminated subpattern",
++re.error: missing ), unterminated subpattern at position 52
++2025-02-21 18:15:42,626 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:15:42,626 - ERROR - Error processing page 1 of FR Example 3.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 96, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\.\src\ocr_utils.py", line 358, in extract_fields_from_text
++    if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 201, in search
++    return _compile(pattern, flags).search(string)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 304, in _compile
++    p = sre_compile.compile(pattern, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_compile.py", line 788, in compile
++    p = sre_parse.parse(p, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 955, in parse
++    p = _parse_sub(source, state, flags & SRE_FLAG_VERBOSE, 0)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 444, in _parse_sub
++    itemsappend(_parse(source, state, verbose, nested + 1,
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 843, in _parse
++    raise source.error("missing ), unterminated subpattern",
++re.error: missing ), unterminated subpattern at position 52
++
+
+# 2025-02-21 18:18:24.236120
++no
+
+# 2025-02-21 18:26:06.959264
++debug the same error that happened 2025-02-21 18:21:25,242 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:21:25,278 - WARNING - Hybrid selection failed: Failed to extract fields after 3 attempts
++2025-02-21 18:21:37,019 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:21:37,100 - WARNING - Hybrid selection failed: Failed to extract fields after 3 attempts
++2025-02-21 18:21:43,341 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:21:43,469 - WARNING - Hybrid selection failed: Failed to extract fields after 3 attempts
++2025-02-21 18:21:45,411 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
++2025-02-21 18:21:45,506 - INFO - Retrying request to /openai/v1/chat/completions in 6.000000 seconds
++2025-02-21 18:21:45,935 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
++2025-02-21 18:21:45,965 - INFO - Retrying request to /openai/v1/chat/completions in 9.000000 seconds
++2025-02-21 18:21:52,931 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:21:53,027 - WARNING - Hybrid selection failed: Failed to extract fields after 3 attempts
++2025-02-21 18:21:56,381 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
++2025-02-21 18:21:56,381 - INFO - Retrying request to /openai/v1/chat/completions in 20.000000 seconds
++2025-02-21 18:22:09,757 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:22:11,710 - WARNING - LLM extraction failed: Failed to extract fields after 3 attempts
++2025-02-21 18:22:11,726 - ERROR - Error processing page 2 of Eng Example 2.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 96, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\.\src\ocr_utils.py", line 368, in extract_fields_from_text
++    if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 201, in search
++    return _compile(pattern, flags).search(string)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 304, in _compile
++    p = sre_compile.compile(pattern, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_compile.py", line 788, in compile
++    p = sre_parse.parse(p, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 955, in parse
++    p = _parse_sub(source, state, flags & SRE_FLAG_VERBOSE, 0)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 444, in _parse_sub
++    itemsappend(_parse(source, state, verbose, nested + 1,
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 843, in _parse
++    raise source.error("missing ), unterminated subpattern",
++re.error: missing ), unterminated subpattern at position 41
++2025-02-21 18:22:15,457 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
++2025-02-21 18:22:15,457 - INFO - Retrying request to /openai/v1/chat/completions in 11.000000 seconds
++2025-02-21 18:22:17,207 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
++2025-02-21 18:22:17,240 - WARNING - Rate limited. Waiting 10 seconds before retry...
++2025-02-21 18:22:23,329 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
++2025-02-21 18:22:23,393 - INFO - Retrying request to /openai/v1/chat/completions in 4.000000 seconds
++2025-02-21 18:22:27,885 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
++2025-02-21 18:22:27,996 - INFO - Retrying request to /openai/v1/chat/completions in 19.000000 seconds
++2025-02-21 18:22:28,043 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:22:28,524 - WARNING - Hybrid selection failed: Failed to extract fields after 3 attempts
++2025-02-21 18:22:28,841 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
++2025-02-21 18:22:28,984 - INFO - Retrying request to /openai/v1/chat/completions in 24.000000 seconds
++2025-02-21 18:22:48,206 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
++2025-02-21 18:22:48,206 - WARNING - Rate limited. Waiting 10 seconds before retry...
++2025-02-21 18:22:54,637 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:22:55,095 - WARNING - Hybrid selection failed: Failed to extract fields after 3 attempts
++2025-02-21 18:22:59,842 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
++2025-02-21 18:23:00,021 - INFO - Retrying request to /openai/v1/chat/completions in 15.000000 seconds
++2025-02-21 18:23:17,921 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:23:18,603 - WARNING - Hybrid selection failed: Failed to extract fields after 3 attempts
++2025-02-21 18:23:37,745 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:23:38,175 - WARNING - LLM extraction failed: Failed to extract fields after 3 attempts
++2025-02-21 18:23:38,239 - ERROR - Error processing page 2 of Eng Example 1.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 96, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\.\src\ocr_utils.py", line 368, in extract_fields_from_text
++    if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 201, in search
++    return _compile(pattern, flags).search(string)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 304, in _compile
++    p = sre_compile.compile(pattern, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_compile.py", line 788, in compile
++    p = sre_parse.parse(p, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 955, in parse
++    p = _parse_sub(source, state, flags & SRE_FLAG_VERBOSE, 0)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 444, in _parse_sub
++    itemsappend(_parse(source, state, verbose, nested + 1,
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 843, in _parse
++    raise source.error("missing ), unterminated subpattern",
++re.error: missing ), unterminated subpattern at position 41
++2025-02-21 18:23:56,201 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:23:56,503 - WARNING - LLM extraction failed: Failed to extract fields after 3 attempts
++2025-02-21 18:23:56,567 - ERROR - Error processing page 1 of Eng Example 2.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 96, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\.\src\ocr_utils.py", line 368, in extract_fields_from_text
++    if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 201, in search
++    return _compile(pattern, flags).search(string)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 304, in _compile
++    p = sre_compile.compile(pattern, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_compile.py", line 788, in compile
++    p = sre_parse.parse(p, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 955, in parse
++    p = _parse_sub(source, state, flags & SRE_FLAG_VERBOSE, 0)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 444, in _parse_sub
++    itemsappend(_parse(source, state, verbose, nested + 1,
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 843, in _parse
++    raise source.error("missing ), unterminated subpattern",
++re.error: missing ), unterminated subpattern at position 41
++2025-02-21 18:24:40,729 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:24:41,205 - WARNING - LLM extraction failed: Failed to extract fields after 3 attempts
++2025-02-21 18:24:41,205 - ERROR - Error processing page 1 of Eng Example 1.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 96, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\.\src\ocr_utils.py", line 368, in extract_fields_from_text
++    if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 201, in search
++    return _compile(pattern, flags).search(string)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 304, in _compile
++    p = sre_compile.compile(pattern, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_compile.py", line 788, in compile
++    p = sre_parse.parse(p, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 955, in parse
++    p = _parse_sub(source, state, flags & SRE_FLAG_VERBOSE, 0)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 444, in _parse_sub
++    itemsappend(_parse(source, state, verbose, nested + 1,
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 843, in _parse
++    raise source.error("missing ), unterminated subpattern",
++re.error: missing ), unterminated subpattern at position 41
++2025-02-21 18:24:54,245 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:24:54,661 - WARNING - LLM extraction failed: Failed to extract fields after 3 attempts
++2025-02-21 18:24:54,676 - ERROR - Error processing page 2 of FR Example 3.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 96, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\.\src\ocr_utils.py", line 368, in extract_fields_from_text
++    if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 201, in search
++    return _compile(pattern, flags).search(string)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 304, in _compile
++    p = sre_compile.compile(pattern, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_compile.py", line 788, in compile
++    p = sre_parse.parse(p, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 955, in parse
++    p = _parse_sub(source, state, flags & SRE_FLAG_VERBOSE, 0)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 444, in _parse_sub
++    itemsappend(_parse(source, state, verbose, nested + 1,
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 843, in _parse
++    raise source.error("missing ), unterminated subpattern",
++re.error: missing ), unterminated subpattern at position 41
++2025-02-21 18:25:00,919 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:25:01,061 - WARNING - LLM extraction failed: Failed to extract fields after 3 attempts
++2025-02-21 18:25:01,077 - ERROR - Error processing page 1 of FR Example 4.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 96, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\.\src\ocr_utils.py", line 368, in extract_fields_from_text
++    if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 201, in search
++    return _compile(pattern, flags).search(string)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 304, in _compile
++    p = sre_compile.compile(pattern, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_compile.py", line 788, in compile
++    p = sre_parse.parse(p, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 955, in parse
++    p = _parse_sub(source, state, flags & SRE_FLAG_VERBOSE, 0)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 444, in _parse_sub
++    itemsappend(_parse(source, state, verbose, nested + 1,
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 843, in _parse
++    raise source.error("missing ), unterminated subpattern",
++re.error: missing ), unterminated subpattern at position 41
++2025-02-21 18:25:10,785 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
++2025-02-21 18:25:10,785 - WARNING - LLM extraction failed: Failed to extract fields after 3 attempts
++2025-02-21 18:25:10,785 - ERROR - Error processing page 1 of FR Example 3.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 96, in process_single_page
++    structured_data, warnings = ocr_utils.extract_fields_from_text(extracted_text)
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\.\src\ocr_utils.py", line 368, in extract_fields_from_text
++    if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 201, in search
++    return _compile(pattern, flags).search(string)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\re.py", line 304, in _compile
++    p = sre_compile.compile(pattern, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_compile.py", line 788, in compile
++    p = sre_parse.parse(p, flags)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 955, in parse
++    p = _parse_sub(source, state, flags & SRE_FLAG_VERBOSE, 0)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 444, in _parse_sub
++    itemsappend(_parse(source, state, verbose, nested + 1,
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\sre_parse.py", line 843, in _parse
++    raise source.error("missing ), unterminated subpattern",
++re.error: missing ), unterminated subpattern at position 41
++
+
+# 2025-02-21 18:27:51.465977
++yes
+
+# 2025-02-21 18:29:17.985914
++no
+
+# 2025-02-21 18:39:16.339814
++Aider, I need to handle rate limiting more effectively when calling the Groq API. The current retry logic isn't sufficient, as I'm still hitting rate limits. Can you modify the code to use the `tenacity` library for retries with exponential backoff? Specifically, for the `client.chat.completions.create` call, set it to retry up to 5 times with an initial wait of 5 seconds, doubling each time.
++
++Why this works:
++
++    The tenacity library is excellent for managing retries with exponential backoff, preventing the application from overwhelming the API.
++    Exponential backoff (starting with a 5-second wait that doubles on each retry) helps respect the API's rate limits while allowing the tool to recover gracefully.
++    This addresses the "429 Too Many Requests" errors and rate limit exceeded messages (e.g., "Limit 5000, Used 5123, Requested 1588").
+
+# 2025-02-21 18:41:34.830542
++yes
+
+# 2025-02-21 18:43:14.894644
++/run pip install tenacity
+
+# 2025-02-21 18:43:14.904766
++/run pip install tenacity
+
+# 2025-02-21 18:43:19.764851
++yes
+
+# 2025-02-21 18:43:27.704608
++Aider, there's an error in how the Groq API response is being handled. The code is trying to call `raise_for_status` on a `ChatCompletion` object, which doesn't have that method. Instead, check if the response contains valid data by ensuring `response.choices` is not empty. If it's empty or if there's an error, log the issue and handle it appropriately.
++
++Why this works:
++
++    The Groq API returns a ChatCompletion object, not an HTTP response object. Attempting to call raise_for_status (an HTTP response method) on it causes the error 'ChatCompletion' object has no attribute 'raise_for_status'.
++    Checking response.choices ensures the response contains the expected data. If response.choices is empty or there's an error, logging the issue and handling it appropriately prevents crashes and improves debugging.
++    This addresses the recurring "API error: 'ChatCompletion' object has no attribute 'raise_for_status'" errors.
+
+# 2025-02-21 18:45:00.011173
++Aider, to debug the field extraction failures, add logging to capture the exact prompt and text sent to the Groq API in the `parse_text_with_llm` function. Also, log the full response received from the API. This will help me understand if the issue is with the input or the API's processing.
++
++Why this works:
++
++    The warnings "Hybrid selection failed: Failed to extract fields after 3 attempts" and "LLM extraction failed: Failed to extract fields after 3 attempts" suggest issues with the field extraction logic.
++    Capturing the prompt, input text, and API response in logs helps identify whether failures are due to malformed inputs, improper text formatting, or API issues.
++    Detailed logs make it easier to pinpoint and resolve extraction failures, improving the tool's reliability.
+
+# 2025-02-21 18:46:31.949188
++no
+
+# 2025-02-21 18:47:34.104308
++Aider, there's a syntax error in one of the regex patterns in the `extract_fields_from_text` function. The error is "missing ), unterminated subpattern at position 41". Please review the regex patterns in that function and correct any unmatched parentheses or syntax issues. Pay attention to patterns with nested groups or lookaheads.
++
++Why this works:
++
++    The error re.error: missing ), unterminated subpattern at position 41 indicates a syntax error in a regex pattern, likely due to an unmatched parenthesis.
++    Reviewing and correcting the regex patterns in the extract_fields_from_text function, especially those with nested groups or lookaheads, ensures the patterns are valid.
++    This addresses the recurring tracebacks in ocr_utils.py (e.g., lines 368 and 376) that crash the tool when processing pages.
+
+# 2025-02-21 19:37:41.285496
++Aider, enhance the OCR Processing tab in `src/app.py` to handle random PDF documents like the attached medical report  Implement a hybrid OCR pipeline using **PaddleOCR** for initial text extraction and layout detection, followed by **Mixtral 8x7B** (available on Groq) for contextual correction and structured field extraction. The pipeline should:
++
++- Use PaddleOCR to extract raw text and identify basic layout elements (e.g., sections like "HISTORY" and "IMPRESSION" in Image 0, table grids like "Eng Exam" in Image 1).
++- Pass the raw text to Mixtral 8x7B to:
++  - Correct OCR errors (e.g., "intermittentpaininrightbreast" to "intermittent pain in right breast" in Image 0, or "Oesaeee" to a plausible term in Image 1).
++  - Infer missing context (e.g., medical terms in Image 0, table headers in Image 1).
++  - Extract structured fields
++- Output the results in JSON format for both document types.
++- Ensure the pipeline is flexible for varied document structures and fully open-source.
++
++Integrate this pipeline into the `process_single_page` function, replacing the current Tesseract-based approach. Use Groq’s API for Mixtral 8x7B and ensure error handling for API calls. Provide code snippets for:
++- Installing PaddleOCR (`pip install paddleocr`).
++- Updating the processing logic to combine PaddleOCR and Mixtral outputs.
+
+# 2025-02-21 19:39:54.949909
++yes
+
+# 2025-02-21 19:41:53.919342
++/run pip install paddleocr
+
+# 2025-02-21 19:41:53.924393
++/run pip install paddleocr
+
+# 2025-02-21 19:43:39.989506
++yes
+
+# 2025-02-21 19:43:52.339579
++no
+
+# 2025-02-21 19:44:57.079142
++Aider, integrate **Donut** or **LayoutLMv3** from Hugging Face into the OCR pipeline in `src/app.py` to improve layout analysis for random PDF documents like the attached medical report  The model should:
++
++- Identify document sections (e.g., "HISTORY," "IMPRESSION" in Image 0).
++- Recognize table structures 
++- Pass the layout information to Mixtral 8x7B to enhance contextual correction and field extraction.
++
++Choose Donut for its general document understanding capabilities or LayoutLMv3 for its strength in structured data extraction. Ensure the model is fine-tuned for medical reports and tables. Update the `process_single_page` function to:
++
++- Use PaddleOCR for initial text extraction.
++- Apply Donut or LayoutLMv3 for layout analysis.
++- Feed the combined output to Mixtral 8x7B for final structuring.
++
++Provide code for:
++- Loading the model from Hugging Face (e.g., `from transformers import AutoModel, AutoProcessor; model = AutoModel.from_pretrained("naver-clova-ix/donut-base")`).
++- Processing the images and integrating the layout data into the pipeline.
+
+# 2025-02-21 19:47:58.303321
++debug and fix the below errors Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 112, in process_single_page
++    paddle_ocr = PaddleOCR(
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\paddleocr.py", line 669, in __init__
++    maybe_download(params.det_model_dir, det_url)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 114, in maybe_download
++    download_with_progressbar(url, tmp_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 41, in download_with_progressbar
++    _download(url, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 99, in _download
++    shutil.move(tmp_file, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\shutil.py", line 846, in move
++    os.unlink(src)
++PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar.tmp'
++2025-02-21 19:45:49,568 - ERROR - Error processing page 3 of Eng Example 5.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\shutil.py", line 825, in move
++    os.rename(src, real_dst)
++PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar.tmp' -> 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar'
++
++During handling of the above exception, another exception occurred:
++
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 112, in process_single_page
++    paddle_ocr = PaddleOCR(
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\paddleocr.py", line 669, in __init__
++    maybe_download(params.det_model_dir, det_url)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 114, in maybe_download
++    download_with_progressbar(url, tmp_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 41, in download_with_progressbar
++    _download(url, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 99, in _download
++    shutil.move(tmp_file, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\shutil.py", line 846, in move
++    os.unlink(src)
++PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar.tmp'
++2025-02-21 19:45:49,824 - ERROR - Error processing page 1 of Eng Example 1.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\shutil.py", line 825, in move
++    os.rename(src, real_dst)
++PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar.tmp' -> 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar'
++
++During handling of the above exception, another exception occurred:
++
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 112, in process_single_page
++    paddle_ocr = PaddleOCR(
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\paddleocr.py", line 669, in __init__
++    maybe_download(params.det_model_dir, det_url)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 114, in maybe_download
++    download_with_progressbar(url, tmp_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 41, in download_with_progressbar
++    _download(url, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 99, in _download
++    shutil.move(tmp_file, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\shutil.py", line 846, in move
++    os.unlink(src)
++PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar.tmp'
++2025-02-21 19:45:49,849 - ERROR - Error processing page 1 of Eng Example 5.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\shutil.py", line 825, in move
++    os.rename(src, real_dst)
++PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar.tmp' -> 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar'
++
++During handling of the above exception, another exception occurred:
++
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 112, in process_single_page
++    paddle_ocr = PaddleOCR(
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\paddleocr.py", line 669, in __init__
++    maybe_download(params.det_model_dir, det_url)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 114, in maybe_download
++    download_with_progressbar(url, tmp_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 41, in download_with_progressbar
++    _download(url, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 99, in _download
++    shutil.move(tmp_file, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\shutil.py", line 846, in move
++    os.unlink(src)
++PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar.tmp'
++2025-02-21 19:45:50,029 - ERROR - Error processing page 1 of Example 5.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\shutil.py", line 825, in move
++    os.rename(src, real_dst)
++PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar.tmp' -> 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar'
++
++During handling of the above exception, another exception occurred:
++
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 112, in process_single_page
++    paddle_ocr = PaddleOCR(
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\paddleocr.py", line 669, in __init__
++    maybe_download(params.det_model_dir, det_url)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 114, in maybe_download
++    download_with_progressbar(url, tmp_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 41, in download_with_progressbar
++    _download(url, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 99, in _download
++    shutil.move(tmp_file, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\shutil.py", line 846, in move
++    os.unlink(src)
++PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar.tmp'
++2025-02-21 19:45:50,061 - ERROR - Error processing page 1 of FR Example 4.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\shutil.py", line 825, in move
++    os.rename(src, real_dst)
++PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar.tmp' -> 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar'
++
++During handling of the above exception, another exception occurred:
++
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 112, in process_single_page
++    paddle_ocr = PaddleOCR(
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\paddleocr.py", line 669, in __init__
++    maybe_download(params.det_model_dir, det_url)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 114, in maybe_download
++    download_with_progressbar(url, tmp_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 41, in download_with_progressbar
++    _download(url, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 99, in _download
++    shutil.move(tmp_file, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\shutil.py", line 846, in move
++    os.unlink(src)
++PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar.tmp'
++2025-02-21 19:45:50,105 - ERROR - Error processing page 4 of Eng Example 5.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\shutil.py", line 825, in move
++    os.rename(src, real_dst)
++PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar.tmp' -> 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar'
++
++During handling of the above exception, another exception occurred:
++
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 112, in process_single_page
++    paddle_ocr = PaddleOCR(
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\paddleocr.py", line 669, in __init__
++    maybe_download(params.det_model_dir, det_url)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 114, in maybe_download
++    download_with_progressbar(url, tmp_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 41, in download_with_progressbar
++    _download(url, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 99, in _download
++    shutil.move(tmp_file, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\shutil.py", line 846, in move
++    os.unlink(src)
++PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar.tmp'
++2025-02-21 19:45:50,299 - ERROR - Error processing page 2 of Eng Example 1.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\shutil.py", line 825, in move
++    os.rename(src, real_dst)
++PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar.tmp' -> 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar'
++
++During handling of the above exception, another exception occurred:
++
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 112, in process_single_page
++    paddle_ocr = PaddleOCR(
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\paddleocr.py", line 669, in __init__
++    maybe_download(params.det_model_dir, det_url)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 114, in maybe_download
++    download_with_progressbar(url, tmp_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 41, in download_with_progressbar
++    _download(url, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\paddleocr\ppocr\utils\network.py", line 99, in _download
++    shutil.move(tmp_file, save_path)
++  File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\shutil.py", line 846, in move
++    os.unlink(src)
++PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'en_PP-OCRv4_det_infer\\en_PP-OCRv3_det_infer.tar.tmp'
++2025-02-21 19:46:36,024 - ERROR - Error processing page 1 of Example 8.pdf
++Traceback (most recent call last):
++  File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 130, in process_single_page
++    groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
++NameError: name 'Groq' is not defined
+
+# 2025-02-21 19:51:16.668557
++Aider, integrate **Donut** or **LayoutLMv3** from Hugging Face into the OCR pipeline in `src/app.py` to improve layout analysis for random PDF documents like the attached medical report  The model should:
++
++- Identify document sections (e.g., "HISTORY," "IMPRESSION" in Image 0).
++- Recognize table structures 
++- Pass the layout information to Mixtral 8x7B to enhance contextual correction and field extraction.
++
++Choose Donut for its general document understanding capabilities or LayoutLMv3 for its strength in structured data extraction. Ensure the model is fine-tuned for medical reports and tables. Update the `process_single_page` function to:
++
++- Use PaddleOCR for initial text extraction.
++- Apply Donut or LayoutLMv3 for layout analysis.
++- Feed the combined output to Mixtral 8x7B for final structuring.
++
++Provide code for:
++- Loading the model from Hugging Face (e.g., `from transformers import AutoModel, AutoProcessor; model = AutoModel.from_pretrained("naver-clova-ix/donut-base")`).
++- Processing the images and integrating the layout data into the pipeline.
+
+# 2025-02-21 19:52:26.442246
++/code
+
+# 2025-02-21 19:52:30.837086
++Aider, integrate **Donut** or **LayoutLMv3** from Hugging Face into the OCR pipeline in `src/app.py` to improve layout analysis for random PDF documents like the attached medical report  The model should:
++
++- Identify document sections (e.g., "HISTORY," "IMPRESSION" in Image 0).
++- Recognize table structures 
++- Pass the layout information to Mixtral 8x7B to enhance contextual correction and field extraction.
++
++Choose Donut for its general document understanding capabilities or LayoutLMv3 for its strength in structured data extraction. Ensure the model is fine-tuned for medical reports and tables. Update the `process_single_page` function to:
++
++- Use PaddleOCR for initial text extraction.
++- Apply Donut or LayoutLMv3 for layout analysis.
++- Feed the combined output to Mixtral 8x7B for final structuring.
++
++Provide code for:
++- Loading the model from Hugging Face (e.g., `from transformers import AutoModel, AutoProcessor; model = AutoModel.from_pretrained("naver-clova-ix/donut-base")`).
++- Processing the images and integrating the layout data into the pipeline.
+
+# 2025-02-21 19:57:34.154367
++Some pages failed to process:
++
++    Page 2: 'text'
++
++    Page 1: 'text'
++
++    Page 3: 'text'
++
+
+# 2025-02-21 19:57:45.842228
++[2025/02/21 19:55:32] ppocr WARNING: Since the angle classifier is not initialized, it will not be used during the forward process
+
+# 2025-02-21 19:57:58.738456
++2025-02-21 19:55:32.928 Thread 'ThreadPoolExecutor-1_7': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+
+# 2025-02-21 19:58:55.868199
++[2025/02/21 19:55:32] ppocr WARNING: Since the angle classifier is not initialized, it will not be used during the forward process
++2025-02-21 19:55:32.928 Thread 'ThreadPoolExecutor-1_7': missing ScriptRunContext! This warning can be ignored when running in bare mode.
++[2025/02/21 19:55:33] ppocr WARNING: Since the angle classifier is not initialized, it will not be used during the forward process
++[2025/02/21 19:55:33] ppocr WARNING: Since the angle classifier is not initialized, it will not be used during the forward process
++[2025/02/21 19:55:33] ppocr WARNING: Since the angle classifier is not initialized, it will not be used during the forward process
++[2025/02/21 19:55:33] ppocr WARNING: Since the angle classifier is not initialized, it will not be used during the forward process
++[2025/02/21 19:55:33] ppocr WARNING: Since the angle classifier is not initialized, it will not be used during the forward process
++[2025/02/21 19:55:33] ppocr WARNING: Since the angle classifier is not initialized, it will not be used during the forward process
++[2025/02/21 19:55:33] ppocr WARNING: Since the angle classifier is not initialized, it will not be used during the forward process debug and fix
+
+# 2025-02-21 20:00:28.458842
++yes
+
+# 2025-02-21 20:02:25.511588
++/run paddleocr --lang en --cls true --use_gpu false
+
+# 2025-02-21 20:02:25.517874
++/run paddleocr --lang en --cls true --use_gpu false
+
+# 2025-02-21 20:02:44.188083
++yes
+
+# 2025-02-21 20:02:51.818093
++> Aider, integrate **Donut** or **LayoutLMv3** from Hugging Face into the OCR pipeline in `src/app.py` to improve layou
++. t analysis for random PDF documents like the attached medical report  The model should:
++.
++. - Identify document sections (e.g., "HISTORY," "IMPRESSION" in Image 0).
++. - Recognize table structures
++. - Pass the layout information to Mixtral 8x7B to enhance contextual correction and field extraction.
++.
++. Choose Donut for its general document understanding capabilities or LayoutLMv3 for its strength in structured data ex
++. traction. Ensure the model is fine-tuned for medical reports and tables. Update the `process_single_page` function to
++. :
++.
++. - Use PaddleOCR for initial text extraction.
++. - Apply Donut or LayoutLMv3 for layout analysis.
++. - Feed the combined output to Mixtral 8x7B for final structuring.
++.
++. Provide code for:
++. - Loading the model from Hugging Face (e.g., `from transformers import AutoModel, AutoProcessor; model = AutoModel.fr
++. om_pretrained("naver-clova-ix/donut-base")`).
++. - Processing the images and integrating the layout data into the pipeline.
+
+# 2025-02-24 08:11:12.412771
++Aider, I need you to thoroughly analyze my Streamlit-based mammogram analysis project to identify and implement improvements for an extremely accurate OCR tool, robust data analysis, and a highly effective chatbot. Use DeepSeek R1 as the AI model for reasoning and Claude Sonnet as the editor for code modifications. The project includes three main components: OCR processing, data analysis, and a chatbot, with files like `app.py`, `ocr_utils.py`, and `chatbot_utils.py`. Here are the specific issues and goals:
++
++### Project Overview
++- The tool processes scanned mammogram PDFs, extracts data using OCR (currently using Tesseract and PaddleOCR), and outputs results to a CSV for analysis. It also includes a data analysis tab for identifying abnormalities and a chatbot for insights.
++- The project supports bilingual (English/French) documents and uses models like BioBERT, RadBERT, and a Medical-ChatBot for NLP tasks.
++
++### Current Issues and Console Log Details
++- **Console Logs:**
++  - Warnings about uninitialized weights for models like `BertForTokenClassification` (BioBERT), `RobertaForSequenceClassification` (RadBERT), and `CamembertForTokenClassification` (DrBERT), indicating they need fine-tuning for better predictions.
++  - Tensor-related errors: "Tensor holds no memory. Call Tensor::mutable_data firstly" and "index 59 is out of bounds for axis 0 with size 59," likely in PaddleOCR or model processing.
++  - Streamlit warnings: "missing ScriptRunContext! This warning can be ignored when running in bare mode."
++  - Other logs show model configurations (e.g., DonutSwin, MBart) and PaddleOCR downloading models, suggesting heavy reliance on computer vision models.
++- **OCR Output Issues:**
++  - The extracted text is cleaner, but errors persist (e.g., "IMPRessiON" instead of "IMPRESSION," "aimost" instead of "almost," "IMPLANTSE" instead of "IMPLANTS").
++  - Data extraction from `raw_ocr_text` is incomplete (e.g., missing fields like Recommendation). Example row shows:
++    - `Impression`: "IMPRessiON: No mammographic or sonographic evidence of malignancy. No worrisome abnormality to account for the patient's concerns."
++    - `BIRADS`: "BI-RADS: 1: Negative."
++    - `Mammogram`: "Mammogram: This is a baseline study. The background breast parenchyma is aimost entirely fat replaced (ACR category A) Bilateral retropectoral silicone implants are seen. These appear intact with a normal. contour. No suspicious mass, architectural distortion, or suspicious microcalcifications in either. breast."
++    - `History`: "HISTORy: Intermittent pain in right breast. History augmentation BILATERAL DIAGNOSTIC MAMMOGRAPHY WITH TOMOSYNTHESIS - IMPLANTSE ULTRASOUND RIGHT BREAST o'clock the last six months. No personal or family history of breast cancer."
++    - `Ultrasound`: "Ultrasound: Ultrasound of the patient's area of pain demonstrates normal breast tissue with no. suspicious abnormality."
++    - `Document Date`: "Diagnostic Document Date: 2021-12-23 12/23/202 348 18"
++    - `Exam Location`: "CFB - Edmonton PO BOX 10500 STN FORCESE Edmonton,AB T5J 4J5"
++    - `Electronically Signed`: "Dr. Hector Aguilar"
++  - The tool struggles with processing multiple PDFs, potentially due to computer vision model issues (e.g., PaddleOCR).
+
+# 2025-02-24 08:11:14.632792
++yes
+
+# 2025-02-24 08:50:31.335837
++debug the below error TypeError: sequence item 0: expected str instance, dict found
++Traceback:
++
++File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 545, in <module>
++    findings_text = " ".join(df['findings'].dropna())
+
+# 2025-02-24 08:59:44.585786
++Aider, I need you to analyze my Streamlit-based mammogram analysis project to fix a `TypeError: sequence item 0: expected str instance, dict found` error occurring in `app.py`. Use DeepSeek R1 as the AI model for reasoning and Claude Sonnet as the editor for code modifications. The error is in the following line in `app.py`:
++
++```python
++findings_text = " ".join(df['findings'].dropna())
++
++The findings column in the DataFrame contains dictionaries or JSON-like structures, such as:
++python
++
++[{'position': 'right breast', 'description': "thinly septated cyst in the 10 o'clock position measuring 8.6'x 11.8 mm.", 'type': 'cyst'}, ...]
++
++Tasks:
++
++    Review app.py, ocr_utils.py, and chatbot_utils.py to understand how the findings column is generated and processed.
++    Fix the TypeError by creating a function extract_findings_text in app.py or ocr_utils.py to convert dictionary entries in df['findings'] into strings. Use this function to preprocess the findings column before joining:
++    python
++
++import json
++
++def extract_findings_text(findings):
++    if isinstance(findings, str):
++        try:
++            findings_list = json.loads(findings)
++        except json.JSONDecodeError:
++            return findings
++    else:
++        findings_list = findings
++
++    if isinstance(findings_list, list):
++        descriptions = [item.get('description', '') for item in findings_list if isinstance(item, dict)]
++        return " ".join(descriptions)
++    return str(findings_list)  # Fallback for unexpected formats
++
++# Update the code in app.py:
++df['findings_text'] = df['findings'].dropna().apply(extract_findings_text)
++findings_text = " ".join(df['findings_text'])
++
++Add error handling to skip or log problematic entries without crashing the app.
++Test the fix with the example row provided:
++
++    1	Patient Name: Unknown	2016-06-10	Unknown	2016-06-10	year-old patient with right breast mass on ultrasound. Question duct ectasia. No change since the previous examination.	3	0	• No mammographic or sonographic evidence of malignancy.	"[{'position': 'right breast', 'description': "thinly septated cyst in the 10 o'clock position measuring 8.6'x 11.8 mm.", 'type': 'cyst'}, {'position': 'right breast', 'description': 'fined nypoechoic avascular nodules, one measuring 11 x 4.9 x 7.9 and another measuring 10.8 x 5.3 x 11.4 mm.', 'type': 'fibroadenomas'}, {'position': 'left breast', 'description': 'Ultrasound left breast is unremarkable with no solid or cystic lesion.', 'type': 'none'}]"	Unknown	Example 1.pdf	1	Low confidence flags	0	...
++
++    Ensure the Data Analysis tab in app.py correctly displays and visualizes the processed findings_text.
++
++Files to Work On:
++
++    app.py
++    ocr_utils.py (if needed for data preprocessing)
++
++Output:
++
++    Provide a detailed report of the changes made, including comments in the code for clarity.
++    Commit changes incrementally with descriptive messages (e.g., "Fixed TypeError in findings processing").
+
+# 2025-02-24 09:03:27.994728
++yes
+
+# 2025-02-24 09:16:05.067722
++DEBUG WHY CHATBOT GIVES ME THIS ERROR CSV processing failed: CSV missing required medical columns
+
+# 2025-02-24 09:17:25.115261
++#### **Prompt 2: Optimize OCR Accuracy and Data Extraction**
++
++Aider, improve the OCR accuracy and data extraction in my mammogram analysis project to ensure clean, structured output. Use DeepSeek R1 as the AI model for reasoning and Claude Sonnet as the editor for code modifications. Focus on ocr_utils.py and app.py to address the following:
++Current Issues:
++
++    OCR errors persist (e.g., "IMPRessiON" → "IMPRESSION," "aimost" → "almost," "IMPLANTSE" → "IMPLANTS").
++    Data extraction from raw_ocr_text is incomplete or inconsistent (e.g., missing fields like Patient Name, Recommendation).
++
++Goals:
++
++    Enhance ocr_utils.py to optimize PaddleOCR for bilingual (English/French) support:
++        Set PaddleOCR’s language parameter to lang="en" with an option for French (lang="fr" or lang="en+fr" if supported).
++        Improve image preprocessing (e.g., increase contrast, remove noise) using OpenCV:
++        python
++
++        image = cv2.convertScaleAbs(image, alpha=1.5, beta=0)  # Adjust contrast
++
++        Use a fast image processor: use_fast=True in PaddleOCR initialization.
++    Implement post-processing in extract_fields_from_text to correct OCR errors:
++        Use pyspellchecker or a domain-specific spell checker for medical terms.
++        Use regex patterns to extract specific fields from raw_ocr_text:
++            Impression: r"IMPR[Ee]?[Ss]{1,2}ION:.*?(?=\n|$|[A-Z]{2,}:)"
++            BIRADS: r"BI-RADS:.*?(?=\n|$|[A-Z]{2,}:)"
++            Mammogram: r"Mammogram:.*?(?=\n|$|[A-Z]{2,}:)"
++            History: r"HISTOR[Yy]:.*?(?=\n|$|[A-Z]{2,}:)"
++            Ultrasound: r"Ultrasound:.*?(?=\n|$|[A-Z]{2,}:)"
++            Document Date: r"Document Date:.*?(\d{4}-\d{2}-\d{2})"
++            Exam Location: r"NP Patricia Malott CFB - Edmonton PO BOX 10500 STN FORCESE (.*?),.*?"
++            Electronically Signed: r"Electronically Signed: Dr\..*?(?=\n|$|[A-Z]{2,}:)"
++        Handle missing fields (e.g., Patient Name, Recommendation) gracefully, displaying "Not Available" or "No recommendation provided."
++    Use fine-tuned NER models (e.g., BioBERT, RadBERT) to improve field extraction accuracy for medical reports, replacing or fine-tuning current models if needed.
++    Test with the example row to ensure accurate extraction of fields like Impression, BIRADS, Mammogram, History, Ultrasound, Document Date, Exam Location, and Electronically Signed.
++
++Files to Work On:
++
++    ocr_utils.py
++    app.py (for displaying extracted data)
++
++Output:
++
++    Document all changes with comments and commit them with messages like "Optimized OCR accuracy with post-processing and regex."
++    Verify that the OCR output is clean and fields are correctly extracted and displayed in the Streamlit app.
+
+# 2025-02-24 09:19:39.505347
++Aider, improve OCR accuracy in ocr_utils.py and app.py for mammogram reports. Use DeepSeek R1 for reasoning and Claude Sonnet for editing. Address OCR errors (e.g., "IMPRessiON" → "IMPRESSION," "aimost" → "almost"). Enhance PaddleOCR:
++
++    Set lang="en" with French support option (lang="en+fr" if possible).
++    Add preprocessing: cv2.convertScaleAbs(image, alpha=1.5, beta=0) for contrast.
++    Use use_fast=True in PaddleOCR.
++    Correct errors with pyspellchecker or regex for fields (Impression, BIRADS, Mammogram, History, Ultrasound, Document Date, Exam Location, Electronically Signed).
++    Use fine-tuned NER (e.g., BioBERT, RadBERT) for medical extraction. Test with the example row. Files: ocr_utils.py, app.py.
+
+# 2025-02-24 09:21:00.285432
++yes
+
+# 2025-02-24 09:52:07.082395
++#### **Prompt 3: Handle Multiple PDFs Efficiently**
++
++Aider, optimize app.py and ocr_utils.py to process multiple PDFs efficiently without quality loss. Use DeepSeek R1 for reasoning and Claude Sonnet for editing. Implement:
++
++    Batch processing (10 PDFs per batch):
++    python
++
++pdf_files = glob("path/to/pdfs/*.pdf")
++for i in range(0, len(pdf_files), 10):
++    batch = pdf_files[i:i + 10]
++    process_pdf_batch(batch)
++
++Parallel processing with ProcessPoolExecutor:
++python
++
++from concurrent.futures import ProcessPoolExecutor
++with ProcessPoolExecutor() as pool:
++    results = pool.map(process_pdf, pdf_files)
++
++Streaming PDFs with pdfplumber:
++python
++
++with pdfplumber.open(pdf_file) as pdf:
++    for page in pdf.pages:
++        text = page.extract_text()
++
++Caching with hashlib.md5 and summarizing findings. Save results to SQLite or Parquet. Test with multiple PDFs. Files: app.py, ocr_utils.py.
+
+# 2025-02-24 09:56:40.096697
++yes
+
+# 2025-02-24 10:02:25.293001
++y
+
+# 2025-02-24 10:06:21.687459
++
++#### **Prompt 4: Enhance Data Analysis and Chatbot**
++
++Aider, enhance data analysis and chatbot in app.py and chatbot_utils.py. Use DeepSeek R1 for reasoning and Claude Sonnet for editing. For Data Analysis:
++
++    Validate fields (dates, BI-RADS scores), handle missing data (e.g., "Not Available"), and improve Plotly visualizations for BI-RADS, mammogram, and ultrasound findings.
++    Add user feedback for inconsistencies.
++
++For Chatbot:
++
++    Make it context-aware using Medical-ChatBot, summarizing fields (Mammogram, Impression, additional_information).
++    Support bilingual (English/French) queries with langdetect. Test with sample queries. Files: app.py, chatbot_utils.py.
+
+# 2025-02-24 10:06:24.058983
++yes
+
+# 2025-02-24 10:09:15.587424
++
++#### **Prompt 4: Enhance Data Analysis and Chatbot**
++
++Aider, enhance data analysis and chatbot in app.py and chatbot_utils.py. Use DeepSeek R1 for reasoning and Claude Sonnet for editing. For Data Analysis:
++
++    Validate fields (dates, BI-RADS scores), handle missing data (e.g., "Not Available"), and improve Plotly visualizations for BI-RADS, mammogram, and ultrasound findings.
++    Add user feedback for inconsistencies.
++
++For Chatbot:
++
++    Make it context-aware using Medical-ChatBot, summarizing fields (Mammogram, Impression, additional_information).
++    Support bilingual (English/French) queries with langdetect. Test with sample queries. Files: app.py, chatbot_utils.py.
+
+# 2025-02-24 11:14:08.294777
++identify the reason for this error and fix NameError: name 'plot_findings_analysis' is not defined
++Traceback:
++
++File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 620, in <module>
++    plot_findings_analysis(df)
+
+# 2025-02-24 11:18:42.710202
++yes
+
+# 2025-02-24 12:11:46.602662
++3. Enhance Parallel Processing
++Parallel processing is already used in extract_with_template_matching, but it can be extended to other areas.
++
++    Adjust ThreadPoolExecutor in extract_with_template_matching:
++        The function uses ThreadPoolExecutor for multi-scale template matching, which is good. Adjust the number of workers based on system resources (e.g., set max_workers to os.cpu_count() or a lower value if memory is constrained).
++        Reduce the number of scales (e.g., from 5 to 3) if the templates are relatively consistent, as this reduces computation without affecting accuracy.
++    Implement Asynchronous LLM Calls in parse_text_with_llm:
++        Use asyncio or aiohttp to make asynchronous LLM API calls, reducing waiting time. This is particularly useful if processing multiple documents, as it allows other tasks to proceed while waiting for the API response.
++        Ensure parallel processing does not overload the system by limiting the number of concurrent API calls.
++    Process Multiple Pages in Parallel:
++        If the script is extended to handle multi-page documents, use multiprocessing to process pages concurrently. Limit the number of workers based on CPU cores to avoid overloading the system, as OCR and image processing are CPU-intensive.
++        If running on a GPU-enabled machine, consider leveraging GPU acceleration for image processing (e.g., OpenCV with CUDA) or GPU-enabled OCR engines, but ensure compatibility with Tesseract and PaddleOCR.
+
+# 2025-02-24 12:14:17.667594
++yes
+
+# 2025-02-24 12:16:15.372799
++y
+
+# 2025-02-24 12:17:16.322767
++4. Streamline Preprocessing and Validation
++Optimize preprocessing and validation steps to reduce unnecessary computations.
++
++    Optimize preprocess_image:
++        Profile the function to identify slow operations (e.g., bilateral filtering, deskewing). Implement lazy loading or conditional preprocessing:
++            Skip deskewing if angles are negligible (e.g., < 1 degree).
++            Use faster noise reduction (e.g., median blur) instead of bilateral filtering for low-contrast images.
++        Consider downscaling high-resolution images before preprocessing, but test for OCR accuracy impact.
++    Optimize Regex and Spell Checking in parse_extracted_text:
++        Compile regex patterns once and reuse them to avoid repeated compilation overhead. For example:
++        python
++
++DATE_PATTERN = re.compile(r'...', re.IGNORECASE)
++
++Spell checking with SpellChecker is slow for long texts. Optimize by:
++
++    Only checking words likely to be misspelled (e.g., not in MEDICAL_TERMS).
++    Using a faster spell-checking library (e.g., pyspellchecker with a preloaded medical dictionary).
++
++Minimize regex substitutions by prioritizing essential corrections (e.g., medical terms like "BIRADS," "IMPRESSION").
+
+# 2025-02-24 12:18:38.252876
++yes
+
+# 2025-02-24 12:19:34.932893
++y
+
+# 2025-02-24 12:20:13.125487
++5. Implement Caching
++Caching can avoid redundant computations, especially for similar documents or repeated processing.
++
++    Cache Preprocessed Images in preprocess_image:
++        Use a dictionary to cache preprocessed images based on image hashes (e.g., using hashlib.sha256). Check the cache before preprocessing to skip redundant operations.
++        Example:
++        python
++
++    from hashlib import sha256
++    IMAGE_CACHE = {}
++    def preprocess_image(image, apply_sharpen=True):
++        image_hash = sha256(image.tobytes()).hexdigest()
++        if image_hash in IMAGE_CACHE:
++            return IMAGE_CACHE[image_hash]
++        # Preprocess and cache result
++        result = ...
++        IMAGE_CACHE[image_hash] = result
++        return result
++
++Cache OCR Results in hybrid_ocr:
++
++    Cache OCR outputs based on image hashes to avoid reprocessing identical images. This is useful for multi-page documents with similar layouts.
++    Example:
++    python
++
++    OCR_CACHE = {}
++    def hybrid_ocr(image):
++        image_hash = sha256(image.tobytes()).hexdigest()
++        if image_hash in OCR_CACHE:
++            return OCR_CACHE[image_hash]
++        result = ...
++        OCR_CACHE[image_hash] = result
++        return result
++
++Cache Template Matching Results in extract_with_template_matching:
++
++    Cache template matching results for fields with consistent layouts (e.g., document_date, exam_type). This reduces computation for similar documents.
++    Ensure caching is efficient and does not consume excessive memory (e.g., limit cache size with functools.lru_cache or manual pruning).
++
++Cache LLM Responses in parse_text_with_llm:
++
++    Cache LLM responses based on input text hashes to avoid redundant API calls for identical or similar texts. This is particularly useful if documents have overlapping content.
++    Example:
++    python
++
++from functools import lru_cache
++@lru_cache(maxsize=100)
++def parse_text_with_llm_cached(text):
++    return parse_text_with_llm(text)
+
+# 2025-02-24 12:24:32.213520
++5. Implement Caching
++Caching can avoid redundant computations, especially for similar documents or repeated processing.
++
++    Cache Preprocessed Images in preprocess_image:
++        Use a dictionary to cache preprocessed images based on image hashes (e.g., using hashlib.sha256). Check the cache before preprocessing to skip redundant operations.
++        Example:
++
++Cache OCR Results in hybrid_ocr:
++
++    Cache OCR outputs based on image hashes to avoid reprocessing identical images. This is useful for multi-page documents with similar layouts.
++    Example:
++
++Cache Template Matching Results in extract_with_template_matching:
++
++    Cache template matching results for fields with consistent layouts (e.g., document_date, exam_type). This reduces computation for similar documents.
++    Ensure caching is efficient and does not consume excessive memory (e.g., limit cache size with functools.lru_cache or manual pruning).
++
++Cache LLM Responses in parse_text_with_llm:
++
++    Cache LLM responses based on input text hashes to avoid redundant API calls for identical or similar texts. This is particularly useful if documents have overlapping content.
++    Example:
+
+# 2025-02-24 12:26:18.405235
++y
+
+# 2025-02-24 12:29:40.773551
++debug and fix FileNotFoundError: [Errno 2] No such file or directory: 'french_medical_terms.txt'
++Traceback:
++
++File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 47, in <module>
++    import ocr_utils, chatbot_utils
++File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\./src\ocr_utils.py", line 32, in <module>
++    MEDICAL_DICT.word_frequency.load_text_file('french_medical_terms.txt')
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\spellchecker\spellchecker.py", line 436, in load_text_file
++    with load_file(filename, encoding=encoding) as data:
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\contextlib.py", line 119, in __enter__
++    return next(self.gen)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\spellchecker\utils.py", line 109, in load_file
++    with open(filename, encoding=encoding) as fobj:
+
+# 2025-02-24 12:31:02.773469
++y
+
+# 2025-02-24 12:32:46.977874
++debug and fix UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe9 in position 14: invalid continuation byte
++Traceback:
++
++File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 47, in <module>
++    import ocr_utils, chatbot_utils
++File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\./src\ocr_utils.py", line 59, in <module>
++    MEDICAL_DICT.word_frequency.load_text_file(str(FRENCH_MEDICAL_TERMS_PATH))
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\spellchecker\spellchecker.py", line 436, in load_text_file
++    with load_file(filename, encoding=encoding) as data:
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\contextlib.py", line 119, in __enter__
++    return next(self.gen)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\spellchecker\utils.py", line 110, in load_file
++    yield fobj.read()
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\codecs.py", line 322, in decode
++    (result, consumed) = self._buffer_decode(data, self.errors, final)
+
+# 2025-02-24 12:33:45.059541
++y
+
+# 2025-02-24 12:42:27.884261
++Solution to the TypeError
++To fix the TypeError and ensure the 'findings' column contains only strings, follow these steps:
++
++    Inspect the 'findings' Column
++        Before the join() operation, add a debugging step to check the contents of the 'findings' column:
++        python
++
++print(df['findings'].head())  # View the first few entries
++print(df['findings'].apply(type).value_counts())  # Count the data types
++
++This will reveal whether the column contains dictionaries, strings, or a mix of types.
+
+# 2025-02-24 12:43:34.214313
++y
+
+# 2025-02-24 12:44:12.967794
++Convert Dictionaries to Strings
++
++    Apply a function to the 'findings' column to handle different data types and ensure all entries are strings. Here’s a robust solution:
++    python
++
++def convert_to_str(item):
++    if isinstance(item, dict):
++        # If it’s a dictionary, extract the relevant text or convert it to a string
++        return item.get('text', '')  # Adjust 'text' to the actual key if known
++    elif isinstance(item, str):
++        return item  # Already a string, no change needed
++    else:
++        return str(item)  # Convert other types (e.g., int, float) to strings
++
++# Apply the conversion and join
++df['findings'] = df['findings'].apply(convert_to_str)
++findings_text = ' '.join(df['findings'].dropna())
++
++Explanation:
++
++    If the item is a dictionary, it tries to extract a value from a key (e.g., 'text'). You’ll need to adjust this key based on your data’s structure—check the debug output from step 1 to see the dictionary format.
++    If the item is already a string, it’s left unchanged.
++    For other types (e.g., numbers), it converts them to strings as a fallback.
++
++This ensures all entries are strings before the join() operation.
+
+# 2025-02-24 12:45:04.884136
++y
+
+# 2025-02-24 12:45:48.494064
++erify Data Extraction
++
++    The presence of dictionaries suggests an issue in how data is extracted or loaded into the DataFrame. Review the part of your code (e.g., in app.py before line 714) where the DataFrame df is populated:
++        Are you parsing documents (e.g., PDFs, JSON) into the DataFrame?
++        Is the 'findings' column being assigned dictionary-like objects instead of text?
++    Modify the extraction logic to store only text in 'findings'. For example:
++    python
++
++    # Hypothetical extraction example
++    findings_data = extract_findings_from_document(doc)  # Returns a dict
++    df['findings'] = findings_data['text']  # Store only the text value
++
++Test the Fix
++
++    After applying the conversion, rerun your application and confirm that plot_findings_analysis(df) executes without the TypeError. Check that all pages process successfully.
+
+# 2025-02-24 12:47:06.024400
++y
+
+# 2025-02-24 13:00:04.824671
++Tensor Errors (Tensor holds no memory)
++
++    Cause: These errors suggest that a machine learning model (likely using PaddlePaddle, given the file path paddle\phi\core\dense_tensor_impl.cc) is trying to operate on uninitialized tensors.
++    Solution:
++        Ensure tensors are properly initialized before use. For example:
++        python
++
++import paddle
++tensor = paddle.Tensor()  # Incorrect: uninitialized
++tensor = paddle.zeros([10, 10])  # Correct: initialized with memory
++tensor.mutable_data()  # Ensure memory is allocated if needed
++
++Review your model loading or inference code (possibly tied to document processing) and confirm that tensors are allocated memory before operations.
++If using a pre-trained model, ensure it’s loaded correctly with all weights initialized.
+
+# 2025-02-24 13:04:06.724642
++y
+
+# 2025-02-24 13:29:17.195627
++2. Simplify LLM Usage
++The LLM API calls in parse_text_with_llm are slow due to network latency and the complexity of the prompt. Optimize this by reducing reliance on the LLM for straightforward fields and simplifying the prompt for complex fields.
++
++    Use Regex First for Simple Fields in extract_fields_from_text:
++        Currently, the function uses the LLM first and falls back to regex for missing fields. Reverse this approach to use regex first for straightforward fields like:
++            patient_name (e.g., using patterns to match names with titles and credentials).
++            exam_date (e.g., standardized to YYYY-MM-DD using existing date patterns).
++            birads_right and birads_left (e.g., extract numbers 0-6 following "BIRADS" or "right/left").
++        Use the existing regex patterns in extract_fields_from_text to extract these fields. This reduces the load on the LLM and speeds up processing.
++    Use LLM Only for Complex Fields:
++        Reserve the LLM for fields requiring contextual understanding, such as:
++            impressions (clinical impressions from the report).
++            findings (key findings, including measurements and locations).
++            follow_up_recommendation (follow-up recommendations).
++        Modify extract_fields_from_text to first extract simple fields with regex, then use the LLM only for these complex fields.
++    Simplify the LLM Prompt in parse_text_with_llm:
++        The current prompt asks for multiple fields and confidence scores, which increases processing time. Since regex handles simple fields, adjust the prompt to focus only on complex fields:
++
++    Extract the clinical impressions, key findings, and follow-up recommendations from this medical report text. Correct OCR errors, prioritize medical terminology, and handle varied labels. Return valid JSON with keys: impressions, findings, follow_up_recommendation, and a 'confidence' sub-object with scores for each field.
++
++    Text:
++    {text[:3000]}
++
++    This reduces the complexity of the LLM task, potentially speeding up the response without affecting accuracy.
++
++Batch LLM Requests for Multiple Documents:
++
++    If processing multiple documents, batch multiple LLM requests into a single API call to reduce network overhead. However, since the script processes one image at a time, this may not apply unless the calling application (e.g., Streamlit) handles multiple PDFs concurrently.
+
+# 2025-02-24 13:30:18.882024
++yes
+
+# 2025-02-24 13:37:04.042301
++y
+
+# 2025-02-24 13:52:23.922272
++revert to 3 revisions prior
+
+# 2025-02-24 14:07:37.448995
++yes
+
+# 2025-02-24 14:56:35.158782
++show me the different versions
+
+# 2025-02-24 15:03:53.455838
++yes
+
+# 2025-02-24 15:14:23.143206
++go back to Commit 367dc39 fix: Resolve undefined names and add missing functions in OCR pipeline
+
+# 2025-02-24 15:16:08.354333
++yes
+
+# 2025-02-24 15:24:48.800892
++go back to this commit Commit 7411d77 feat: add robust findings text extraction with error handling
+
+# 2025-02-24 15:25:56.741003
++yes
+
+# 2025-02-24 15:45:56.845900
++/add src\*
+
+# 2025-02-24 15:46:05.391833
++make sure to revert all changes back to > Commit 7411d77 feat: add robust findings text extraction with error handling
+
+# 2025-02-24 15:48:45.544587
++yes
+
+# 2025-02-24 16:15:15.512650
++Why the Dataframe Might Be Empty
++The screenshot you provided shows a medical data interface with fields like birads_score, exam_date, mammogram_results, and others. Notably, the patient_name field is blank, which could be a clue to why the dataframe is empty. Here are some potential reasons and fixes:
++
++    Data Extraction Failure:
++        Problem: If the script relies on certain fields (e.g., patient_name) to populate the dataframe, a missing value could cause the row to be dropped or the extraction to fail silently.
++        Fix:Modify the extraction logic to handle missing fields gracefully. For example, in extract_fields_from_text, ensure that missing fields don’t halt processing:
++        python
++
++def extract_fields_from_text(text: str) -> dict:
++    fields = {}
++    patterns = {
++        'exam_date': r'(exam date|date of exam)[:\s]+(\d{4}-\d{2}-\d{2})',
++        'birads_right': r'birads right[:\s]+(\d)',
++        'patient_name': r'patient name[:\s]+([A-Za-z\s]+)',  # Add pattern if applicable
++    }
++    for field, pattern in patterns.items():
++        match = re.search(pattern, text, re.IGNORECASE)
++        fields[field] = match.group(1) if match else "Not Found"
++    # LLM for complex fields
++    if not all(k in fields for k in ['impression', 'findings']):
++        fields.update(parse_text_with_llm(text))
++    return fields
++
++This ensures every field has a value, even if it’s a placeholder like "Not Found".
+
+# 2025-02-24 16:16:02.016565
++Structured Medical Data
++
++No structured data available - DataFrame is empty Some pages failed to process: Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.48, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
++2025-02-24 16:13:23.977 Thread 'Thread-20': missing ScriptRunContext! This warning can be ignored when running in bare mode.
++2025-02-24 16:13:24.040 Thread 'Thread-20': missing ScriptRunContext! This warning can be ignored when running in bare mode.
++Config of the encoder: <class 'transformers.models.donut.modeling_donut_swin.DonutSwinModel'> is overwritten by shared encoder config: DonutSwinConfig {
++  "attention_probs_dropout_prob": 0.0,
++  "depths": [
++    2,
++    2,
++    14,
++    2
++  ],
++  "drop_path_rate": 0.1,
++  "embed_dim": 128,
++  "hidden_act": "gelu",
++  "hidden_dropout_prob": 0.0,
++  "hidden_size": 1024,
++  "image_size": [
++    2560,
++    1920
++  ],
++  "initializer_range": 0.02,
++  "layer_norm_eps": 1e-05,
++  "mlp_ratio": 4.0,
++  "model_type": "donut-swin",
++  "num_channels": 3,
++  "num_heads": [
++    4,
++    8,
++    16,
++    32
++  ],
++  "num_layers": 4,
++  "patch_size": 4,
++  "path_norm": true,
++  "qkv_bias": true,
++  "torch_dtype": "float32",
++  "transformers_version": "4.49.0",
++  "use_absolute_embeddings": false,
++  "window_size": 10
++}
++
++Config of the decoder: <class 'transformers.models.mbart.modeling_mbart.MBartForCausalLM'> is overwritten by shared decoder config: MBartConfig {
++  "activation_dropout": 0.0,
++  "activation_function": "gelu",
++  "add_cross_attention": true,
++  "add_final_layer_norm": true,
++  "attention_dropout": 0.0,
++  "bos_token_id": 0,
++  "classifier_dropout": 0.0,
++  "d_model": 1024,
++  "decoder_attention_heads": 16,
++  "decoder_ffn_dim": 4096,
++  "decoder_layerdrop": 0.0,
++  "decoder_layers": 4,
++  "dropout": 0.1,
++  "encoder_attention_heads": 16,
++  "encoder_ffn_dim": 4096,
++  "encoder_layerdrop": 0.0,
++  "encoder_layers": 12,
++  "eos_token_id": 2,
++  "forced_eos_token_id": 2,
++  "init_std": 0.02,
++  "is_decoder": true,
++  "is_encoder_decoder": false,
++  "max_position_embeddings": 128,
++  "model_type": "mbart",
++  "num_hidden_layers": 12,
++  "pad_token_id": 1,
++  "scale_embedding": true,
++  "torch_dtype": "float32",
++  "transformers_version": "4.49.0",
++  "use_cache": true,
++  "vocab_size": 57532
++}
++
++2025-02-24 16:13:26.395 Thread 'ThreadPoolExecutor-1_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
++2025-02-24 16:13:26.396 Thread 'ThreadPoolExecutor-1_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
++Legacy behavior is being used. The current behavior will be deprecated in version 5.0.0. In the new behavior, if both images and text are provided, the default value of `add_special_tokens` will be changed to `False` when calling the tokenizer if `add_special_tokens` is unset. To test the new behavior, set `legacy=False`as a processor call argument.
++C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\transformers\generation\configuration_utils.py:677: UserWarning: `num_beams` is set to 1. However, `early_stopping` is set to `True` -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `early_stopping`.
++  warnings.warn(
++2025-02-24 16:13:57.724 Thread 'ThreadPoolExecutor-1_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
++2025-02-24 16:13:57.725 Thread 'ThreadPoolExecutor-1_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
++2025-02-24 16:13:57.725 Thread 'ThreadPoolExecutor-1_0': missing ScriptRunContext! This warning can be ignored when running in bare mode.
++2025-02-24 16:13:58.231 Thread 'Thread-21': missing ScriptRunContext! This warning can be ignored when running in bare mode.
++2025-02-24 16:13:58.232 Thread 'Thread-21': missing ScriptRunContext! This warning can be ignored when running in bare mode. debug and fix
+
+# 2025-02-24 16:17:22.906801
++yes
+
+# 2025-02-24 16:18:27.915293
++y
+
+# 2025-02-24 16:20:24.563082
++Some pages failed to process:
++
++    Page 1: VisionEncoderDecoderModel does not support device_map='auto'. To implement support, the model class needs to implement the _no_split_modules attribute.
++
++Check mammo_ai.log for full details No structured data available - DataFrame is empty
+
+# 2025-02-24 16:21:39.384267
++y
+
+# 2025-02-24 17:21:26.240843
++Some pages failed to process:
++
++    Page 1: PaddlePaddle initialization error
++
++    Page 2: PaddlePaddle initialization error
++No structured data available - DataFrame is empty debug where is the hybrid approach when one tool fails
+
+# 2025-02-24 17:22:16.168760
++yes
+
+# 2025-02-24 17:23:33.456798
++yyy
+
+# 2025-02-24 17:23:36.401207
++y
+
+# 2025-02-24 17:32:40.496733
++No structured data available - DataFrame is empty, it seems the changes we've made to our earlier implementation, I would say atleast 15 revisions ago, is not working at all. download https://paddleocr.bj.bcebos.com/PP-OCRv3/english/en_PP-OCRv3_det_infer.tar to C:\Users\ybada/.paddleocr/whl\det\en\en_PP-OCRv3_det_infer\en_PP-OCRv3_det_infer.tardownload https://paddleocr.bj.bcebos.com/PP-OCRv3/english/en_PP-OCRv3_det_infer.tar to C:\Users\ybada/.paddleocr/whl\det\en\en_PP-OCRv3_det_infer\en_PP-OCRv3_det_infer.tar    
++
++100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3910/3910 [00:11<00:00, 341.28it/s]
++100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3910/3910 [00:33<00:00, 117.48it/s]
++download https://paddleocr.bj.bcebos.com/PP-OCRv4/english/en_PP-OCRv4_rec_infer.tar to C:\Users\ybada/.paddleocr/whl\rec\en\en_PP-OCRv4_rec_infer\en_PP-OCRv4_rec_infer.tar
++100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 10000/10000 [00:13<00:00, 731.53it/s]
++[2025/02/24 17:29:57] ppocr DEBUG: Namespace(help='==SUPPRESS==', use_gpu=False, use_xpu=False, use_npu=False, use_mlu=False, ir_optim=True, use_tensorrt=False, min_subgraph_size=15, precision='fp32', gpu_mem=500, gpu_id=0, image_dir=None, page_num=0, det_algorithm='DB', det_model_dir='C:\\Users\\ybada/.paddleocr/whl\\det\\en\\en_PP-OCRv3_det_infer', det_limit_side_len=960, det_limit_type='max', det_box_type='quad', det_db_thresh=0.3, det_db_box_thresh=0.6, det_db_unclip_ratio=1.5, max_batch_size=10, use_dilation=False, det_db_score_mode='fast', det_east_score_thresh=0.8, det_east_cover_thresh=0.1, det_east_nms_thresh=0.2, det_sast_score_thresh=0.5, det_sast_nms_thresh=0.2, det_pse_thresh=0, det_pse_box_thresh=0.85, det_pse_min_area=16, det_pse_scale=1, scales=[8, 16, 32], alpha=1.0, beta=1.0, fourier_degree=5, rec_algorithm='SVTR_LCNet', rec_model_dir='C:\\Users\\ybada/.paddleocr/whl\\rec\\en\\en_PP-OCRv4_rec_infer', rec_image_inverse=True, rec_image_shape='3, 48, 320', rec_batch_num=6, max_text_length=25, rec_char_dict_path='C:\\Users\\ybada\\anaconda3\\envs\\mammo_ai\\lib\\site-packages\\paddleocr\\ppocr\\utils\\en_dict.txt', use_space_char=True, vis_font_path='./doc/fonts/simfang.ttf', drop_score=0.5, e2e_algorithm='PGNet', e2e_model_dir=None, e2e_limit_side_len=768, e2e_limit_type='max', e2e_pgnet_score_thresh=0.5, e2e_char_dict_path='./ppocr/utils/ic15_dict.txt', e2e_pgnet_valid_set='totaltext', e2e_pgnet_mode='fast', use_angle_cls=True, cls_model_dir='C:\\Users\\ybada/.paddleocr/whl\\cls\\ch_ppocr_mobile_v2.0_cls_infer', cls_image_shape='3, 48, 192', label_list=['0', '180'], cls_batch_num=6, cls_thresh=0.9, enable_mkldnn=True, cpu_threads=10, use_pdserving=False, warmup=False, sr_model_dir=None, sr_image_shape='3, 32, 128', sr_batch_num=1, draw_img_save_dir='./inference_results', save_crop_res=False, crop_res_save_dir='./output', use_mp=False, total_process_num=1, process_id=0, benchmark=False, save_log_path='./log_output/', show_log=True, use_onnx=False, return_word_box=False, output='./output', table_max_len=488, table_algorithm='TableAttn', table_model_dir=None, merge_no_span_structure=True, table_char_dict_path=None, formula_algorithm='LaTeXOCR', formula_model_dir=None, formula_char_dict_path=None, formula_batch_num=1, layout_model_dir=None, layout_dict_path=None, layout_score_threshold=0.5, layout_nms_threshold=0.5, kie_algorithm='LayoutXLM', ser_model_dir=None, re_model_dir=None, use_visual_backbone=True, ser_dict_path='../train_data/XFUND/class_list_xfun.txt', ocr_order_method=None, mode='structure', image_orientation=False, layout=True, table=True, formula=False, ocr=True, recovery=False, recovery_to_markdown=False, use_pdf2docx_api=False, invert=False, binarize=False, alphacolor=(255, 255, 255), lang='en', det=True, rec=True, type='ocr', savefile=False, ocr_version='PP-OCRv4', structure_version='PP-StructureV2')
++[2025/02/24 17:30:01] ppocr DEBUG: dt_boxes num : 0, elapsed : 0.36678361892700195
++[2025/02/24 17:30:01] ppocr DEBUG: cls num  : 0, elapsed : 0
++[2025/02/24 17:30:01] ppocr DEBUG: rec_res num  : 0, elapsed : 0.0
++[2025/02/24 17:30:08] ppocr DEBUG: Namespace(help='==SUPPRESS==', use_gpu=False, use_xpu=False, use_npu=False, use_mlu=False, ir_optim=True, use_tensorrt=False, min_subgraph_size=15, precision='fp32', gpu_mem=500, gpu_id=0, image_dir=None, page_num=0, det_algorithm='DB', det_model_dir='C:\\Users\\ybada/.paddleocr/whl\\det\\en\\en_PP-OCRv3_det_infer', det_limit_side_len=960, det_limit_type='max', det_box_type='quad', det_db_thresh=0.3, det_db_box_thresh=0.6, det_db_unclip_ratio=1.5, max_batch_size=10, use_dilation=False, det_db_score_mode='fast', det_east_score_thresh=0.8, det_east_cover_thresh=0.1, det_east_nms_thresh=0.2, det_sast_score_thresh=0.5, det_sast_nms_thresh=0.2, det_pse_thresh=0, det_pse_box_thresh=0.85, det_pse_min_area=16, det_pse_scale=1, scales=[8, 16, 32], alpha=1.0, beta=1.0, fourier_degree=5, rec_algorithm='SVTR_LCNet', rec_model_dir='C:\\Users\\ybada/.paddleocr/whl\\rec\\en\\en_PP-OCRv4_rec_infer', rec_image_inverse=True, rec_image_shape='3, 48, 320', rec_batch_num=6, max_text_length=25, rec_char_dict_path='C:\\Users\\ybada\\anaconda3\\envs\\mammo_ai\\lib\\site-packages\\paddleocr\\ppocr\\utils\\en_dict.txt', use_space_char=True, vis_font_path='./doc/fonts/simfang.ttf', drop_score=0.5, e2e_algorithm='PGNet', e2e_model_dir=None, e2e_limit_side_len=768, e2e_limit_type='max', e2e_pgnet_score_thresh=0.5, e2e_char_dict_path='./ppocr/utils/ic15_dict.txt', e2e_pgnet_valid_set='totaltext', e2e_pgnet_mode='fast', use_angle_cls=True, cls_model_dir='C:\\Users\\ybada/.paddleocr/whl\\cls\\ch_ppocr_mobile_v2.0_cls_infer', cls_image_shape='3, 48, 192', label_list=['0', '180'], cls_batch_num=6, cls_thresh=0.9, enable_mkldnn=True, cpu_threads=10, use_pdserving=False, warmup=False, sr_model_dir=None, sr_image_shape='3, 32, 128', sr_batch_num=1, draw_img_save_dir='./inference_results', save_crop_res=False, crop_res_save_dir='./output', use_mp=False, total_process_num=1, process_id=0, benchmark=False, save_log_path='./log_output/', show_log=True, use_onnx=False, return_word_box=False, output='./output', table_max_len=488, table_algorithm='TableAttn', table_model_dir=None, merge_no_span_structure=True, table_char_dict_path=None, formula_algorithm='LaTeXOCR', formula_model_dir=None, formula_char_dict_path=None, formula_batch_num=1, layout_model_dir=None, layout_dict_path=None, layout_score_threshold=0.5, layout_nms_threshold=0.5, kie_algorithm='LayoutXLM', ser_model_dir=None, re_model_dir=None, use_visual_backbone=True, ser_dict_path='../train_data/XFUND/class_list_xfun.txt', ocr_order_method=None, mode='structure', image_orientation=False, layout=True, table=True, formula=False, ocr=True, recovery=False, recovery_to_markdown=False, use_pdf2docx_api=False, invert=False, binarize=False, alphacolor=(255, 255, 255), lang='en', det=True, rec=True, type='ocr', savefile=False, ocr_version='PP-OCRv4', structure_version='PP-StructureV2')
++[2025/02/24 17:30:10] ppocr DEBUG: dt_boxes num : 0, elapsed : 0.2956044673919678
++[2025/02/24 17:30:10] ppocr DEBUG: cls num  : 0, elapsed : 0
++[2025/02/24 17:30:10] ppocr DEBUG: rec_res num  : 0, elapsed : 0.0
++[2025/02/24 17:30:12] ppocr DEBUG: dt_boxes num : 75, elapsed : 1.4701268672943115
++[2025/02/24 17:30:12] ppocr DEBUG: cls num  : 75, elapsed : 0.4367644786834717
++[2025/02/24 17:30:18] ppocr DEBUG: rec_res num  : 75, elapsed : 6.1169373989105225
++[2025/02/24 17:30:25] ppocr DEBUG: dt_boxes num : 0, elapsed : 0.0220334529876709
++[2025/02/24 17:30:25] ppocr DEBUG: cls num  : 0, elapsed : 0
++[2025/02/24 17:30:25] ppocr DEBUG: rec_res num  : 0, elapsed : 0.0
++[2025/02/24 17:30:25] ppocr DEBUG: dt_boxes num : 53, elapsed : 0.21783232688903809
++[2025/02/24 17:30:26] ppocr DEBUG: cls num  : 53, elapsed : 0.2350919246673584
++[2025/02/24 17:30:29] ppocr DEBUG: rec_res num  : 53, elapsed : 3.2572567462921143 
+
+# 2025-02-24 17:32:42.963673
++no
+
+# 2025-02-24 17:33:57.326899
++yes
+
+# 2025-02-24 17:35:17.470186
++y
+
+# 2025-02-24 17:39:25.184740
++bring back this implementation import cv2
++import pytesseract
++import re
++import pandas as pd
++from pytesseract import Output
++import os
++import numpy as np
++import dotenv
++import json
++import requests
++from typing import Dict, Any
++from groq import Groq
++from langdetect import detect, LangDetectException
++from transformers import MarianMTModel, MarianTokenizer, pipeline as tf_pipeline
++import torch
++from spellchecker import SpellChecker
++import logging
++from concurrent.futures import ThreadPoolExecutor
++import concurrent.futures
++from tenacity import retry, stop_after_attempt, wait_fixed
++
++# Constants for medical term validation
++MEDICAL_TERMS = {"birads", "impression", "mammogram", "ultrasound"}
++
++def hybrid_ocr(image: np.ndarray) -> str:
++    """Hybrid OCR pipeline with text validation"""
++    # Preprocessing
++    enhanced = cv2.convertScaleAbs(image, alpha=1.5, beta=0)
++    processed = preprocess_image(enhanced)
++    
++    # Multi-engine OCR
++    paddle_text = extract_text_paddle(processed)
++    tesseract_text = extract_text_tesseract(processed)
++    
++    # Validate and combine
++    validated = validate_results({
++        "paddle": paddle_text,
++        "tesseract": tesseract_text
++    })
++    
++    return validated
++
++def validate_results(texts: dict) -> str:
++    """Validate OCR results against medical terms"""
++    corrections = {
++        r"\bIMPRessiON\b": "IMPRESSION",
++        r"\baimost\b": "almost",
++        r"\bMamm0gram\b": "Mammogram"
++    }
++    
++    best_text = max(texts.values(), key=lambda t: medical_term_score(t))
++    
++    # Apply regex corrections
++    for pattern, replacement in corrections.items():
++        best_text = re.sub(pattern, replacement, best_text, flags=re.IGNORECASE)
++        
++    return best_text
++
++def medical_term_score(text: str) -> int:
++    """Score text based on medical term presence"""
++    return sum(
++        1 for term in MEDICAL_TERMS
++        if re.search(rf"\b{term}\b", text, re.IGNORECASE)
++    )
++
++def extract_text_paddle(image: np.ndarray) -> str:
++    """Extract text using PaddleOCR"""
++    try:
++        from paddleocr import PaddleOCR
++        ocr = PaddleOCR(use_angle_cls=True, lang='en')
++        result = ocr.ocr(image, cls=True)
++        if result and result[0]:
++            return ' '.join([line[1][0] for line in result[0]])
++        return ''
++    except Exception as e:
++        logging.error(f"PaddleOCR failed: {str(e)}")
++        return ''
++
++def preprocess_image(image, apply_sharpen=True):
++    """Preprocess image with adaptive noise handling and enhancement"""
++    # Convert to grayscale and measure contrast
++    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
++    contrast = cv2.Laplacian(gray, cv2.CV_64F).var()
++    
++    # Adaptive noise reduction for low-contrast images
++    if contrast < 50:  # Indicates noisy/poor quality image
++        gray = cv2.bilateralFilter(gray, 9, 75, 75)
++    
++    blur = cv2.GaussianBlur(gray, (3, 3), 0)
++    
++    # Deskewing logic
++    height, width = blur.shape
++    edges = cv2.Canny(blur, 50, 150)
++    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100,
++                          minLineLength=100, maxLineGap=10)
++    
++    angles = []
++    if lines is not None:
++        for line in lines:
++            x1, y1, x2, y2 = line[0]
++            angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
++            angles.append(angle)
++            
++        median_angle = np.median(angles)
++        rotation_matrix = cv2.getRotationMatrix2D((width/2, height/2), median_angle, 1)
++        deskewed = cv2.warpAffine(blur, rotation_matrix, (width, height),
++                                 borderMode=cv2.BORDER_REPLICATE)
++    else:
++        deskewed = blur
++    
++    # Adaptive thresholding
++    binary = cv2.adaptiveThreshold(deskewed, 255, 
++                                  cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
++                                  cv2.THRESH_BINARY, 11, 2)
++    
++    # Optional sharpening for faded text
++    if apply_sharpen:
++        kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
++        binary = cv2.filter2D(binary, -1, kernel)
++        
++    return binary
++
++@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
++def extract_text_tesseract(image):
++    """Run Tesseract with multiple page segmentation modes and select best result"""
++    psms = ['3', '6', '11']  # Auto, Single Block, Sparse Text
++    all_results = []
++    
++    for psm in psms:
++        try:
++            data = pytesseract.image_to_data(
++                image,
++                output_type=Output.DICT,
++                lang='fra+eng',
++                timeout=30,  # Set 30 second timeout per PSM
++                config=(
++                    f'--psm {psm} '
++                    '-c tessedit_char_whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-:.()%éèàçêâôûùîÉÈÀÇÊÂÔÛÙÎ" '
++                    '--oem 3'
++                )
++            )
++        except pytesseract.TesseractError as e:
++            logging.warning(f"Tesseract PSM {psm} failed: {str(e)}")
++            all_results.append({
++                'text': [],
++                'confidence': [],
++                'psm': psm,
++                'avg_conf': 0
++            })
++            continue
++            
++        # Calculate average confidence for this PSM
++        valid_confs = [c for c in data['conf'] if c != -1]
++        avg_conf = sum(valid_confs)/len(valid_confs) if valid_confs else 0
++        all_results.append({
++            'text': data['text'],
++            'confidence': data['conf'],
++            'psm': psm,
++            'avg_conf': avg_conf
++        })
++    
++    # Add validation for empty results
++    if not all_results or all(r['avg_conf'] == 0 for r in all_results):
++        logging.error("All Tesseract PSMs failed")
++        return {'text': [], 'confidence': [], 'psm': '0'}
++    
++    # Select best result with confidence check
++    best_result = max(all_results, key=lambda x: x['avg_conf'])
++    if best_result['avg_conf'] < 20:  # Minimum confidence threshold
++        raise OCRError("Low confidence OCR result")
++    
++    return {
++        'text': best_result['text'],
++        'confidence': best_result['confidence'],
++        'psm': best_result['psm']
++    }
++
++def select_best_ocr_result(results):
++    """Select best OCR result using hybrid scoring (70% LLM coherence, 30% confidence)"""
++    text_options = [f"Option {i+1} (PSM {r['psm']}): {' '.join(r['text'])}" 
++                   for i, r in enumerate(results)]
++    
++    try:
++        # Get LLM scores for each option
++        llm_response = parse_text_with_llm(
++            f"Score each OCR option (1-10) for coherence and medical field presence. "
++            f"Return JSON with 'scores': [int, ...].\n\n" + '\n\n'.join(text_options)
++        )
++        llm_scores = llm_response.get('scores', [5] * len(results))  # Default to mid-score if missing
++        
++        # Calculate hybrid scores (LLM 70% + Confidence 30%)
++        hybrid_scores = [
++            (0.7 * (llm / 10) + 0.3 * (r['avg_conf'] / 100), i)  # Normalize both to 0-1 scale
++            for i, (llm, r) in enumerate(zip(llm_scores, results))
++        ]
++        
++        # Get best index from hybrid scores
++        best_idx = max(hybrid_scores, key=lambda x: x[0])[1]
++        best_result = results[best_idx]
++        
++        # Verify minimum field presence
++        text = ' '.join(best_result['text']).lower()
++        required_terms = r'(patient|date|birads)'
++        if not re.search(required_terms, text):
++            logging.warning("Best OCR result lacks required fields, using confidence fallback")
++            return max(results, key=lambda x: x['avg_conf'])
++            
++        return best_result
++        
++    except Exception as e:
++        logging.warning(f"Hybrid selection failed: {str(e)}")
++        return max(results, key=lambda x: x['avg_conf'])
++
++def parse_extracted_text(ocr_result):
++    raw_text = ' '.join([t for t, c in zip(ocr_result['text'], ocr_result['confidence']) if c != -1])
++    
++    # Enhanced medical spell checking
++    spell = SpellChecker(language=None)
++    spell.word_frequency.load_text_file('medical_terms.txt')
++    spell.word_frequency.load_text_file('french_medical_terms.txt')
++    
++    # Add common OCR error mappings
++    ocr_corrections = {
++        'aimost': 'almost', 'IMPRessiON': 'IMPRESSION',
++        'IMPLANTSE': 'IMPLANTS', 'HISTORy': 'HISTORY'
++    }
++    
++    # Context-aware correction
++    corrected_words = []
++    for word in raw_text.split():
++        # Apply direct substitutions first
++        word = ocr_corrections.get(word, word)
++        
++        # Medical term validation
++        if word.lower() not in spell and len(word) > 3:
++            candidates = spell.candidates(word)
++            if candidates:
++                best = max(candidates, key=lambda x: spell.word_usage_frequency(x))
++                word = best
++                
++        corrected_words.append(word)
++    
++    # Add structured field validation
++    structured_text = '\n'.join(corrected_words)
++    structured_text = re.sub(
++        r'(?i)(BIRADS|IMPRESSION|MAMMOGRAM|HISTORY|ULTRASOUND):',
++        lambda m: f"\n{m.group(1).upper()}:\n",
++        structured_text
++    )
++    
++    # Clean and structure text from complex layouts
++    lines = []
++    current_line = []
++    for i, word in enumerate(raw_text.split()):
++        # Correct spelling
++        corrected = spell.correction(word)
++        if corrected and corrected != word:
++            word = corrected
++        
++        if word.isupper() and len(current_line) > 0:
++            lines.append(' '.join(current_line))
++            current_line = [word]
++        else:
++            current_line.append(word)
++    lines.append(' '.join(current_line))
++    
++    cleaned_text = '\n'.join(filter(None, [
++        line.strip(' -•*®©™§¶†‡')
++        for line in lines
++        if line.strip() and len(line.strip()) > 2
++    ]))
++    
++    # Standardize medical terms
++    cleaned_text = re.sub(r'(?i)bi-rads', 'BIRADS', cleaned_text)
++    cleaned_text = re.sub(r'(?i)mammo\s*-?\s*', 'MAMMO - ', cleaned_text)
++    
++    # Improved date validation
++    date_matches = re.finditer(
++        r'\b(20\d{2}(?:-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?)?)\b'  # YYYY-MM-DD
++        r'|(0?[1-9]|1[0-2])[/-](0[1-9]|[12][0-9]|3[01])[/-](20\d{2})'  # MM/DD/YYYY
++        r'|(0[1-9]|[12][0-9]|3[01])[-/](0[1-9]|1[0-2])[-/](20\d{2})',  # DD-MM-YYYY
++        cleaned_text
++    )
++    
++    for match in date_matches:
++        try:
++            std_date = pd.to_datetime(match.group()).strftime('%Y-%m-%d')
++            cleaned_text = cleaned_text.replace(match.group(), std_date)
++        except pd.errors.OutOfBoundsDatetime:
++            logging.warning(f"Invalid date format: {match.group()}")
++            continue
++    
++    return cleaned_text
++
++def load_templates():
++    """Load templates with path validation"""
++    current_dir = os.path.dirname(os.path.abspath(__file__))
++    template_dir = os.path.join(current_dir, "templates")
++    
++    if not os.path.exists(template_dir):
++        logging.error(f"Template directory not found: {template_dir}")
++        return {}
++    
++    templates = {}
++    for filename in os.listdir(template_dir):
++        if filename.endswith(".png"):
++            path = os.path.join(template_dir, filename)
++            try:
++                template = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
++                if template is None:
++                    raise ValueError("Invalid template image")
++                key = filename.replace("_template.png", "")
++                templates[key] = template
++            except Exception as e:
++                logging.warning(f"Failed to load {filename}: {str(e)}")
++                
++    return templates
++
++TEMPLATES = load_templates()
++
++class OCRError(Exception):
++    """Custom exception for OCR processing errors"""
++    pass
++
++from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
++from groq import Groq
++
++@retry(
++    stop=stop_after_attempt(5),
++    wait=wait_exponential(multiplier=5, min=5, max=60),
++    retry=retry_if_exception_type((
++        requests.exceptions.HTTPError,
++        json.JSONDecodeError,
++        KeyError,
++        Exception
++    )),
++    before_sleep=lambda _: logging.warning("Rate limited, retrying...")
++)
++def parse_text_with_llm(text: str) -> Dict[str, Any]:
++    """Extract structured fields from OCR text using Groq's LLM API"""
++    dotenv.load_dotenv()
++    api_key = os.getenv("GROQ_API_KEY")
++    if not api_key:
++        logging.error("Groq API key not found in .env file")
++        raise OCRError("API configuration error")
++
++    client = Groq(api_key=api_key)
++    
++    prompt = f"""You are an expert in medical document processing, specializing in mammogram reports. Extract the following fields:
++- Patient name (title case, correct fused words like 'PatientName' to 'Patient Name')
++- Exam date (YYYY-MM-DD, correct formats like '23Dec2021')
++- BIRADS score for the right breast (0-6)
++- BIRADS score for the left breast (0-6)
++- Clinical impressions
++- Key findings (include measurements and locations)
++- Follow-up recommendations
++
++Correct OCR errors, prioritize medical terminology, and handle varied labels. For each field, provide a confidence score (0-1). Return valid JSON with keys: 
++patient_name, exam_date, birads_right, birads_left, impressions, findings, 
++follow_up_recommendation, and a 'confidence' sub-object with scores for each field.
++
++Text:
++{text[:3000]}"""
++
++    try:
++        # Log the full prompt and input text
++        logging.info(f"LLM Prompt:\n{prompt}")
++        logging.debug(f"Full Input Text:\n{text[:3000]}")  # Truncated to 3000 chars
++        
++        response = client.chat.completions.create(
++            messages=[{"role": "user", "content": prompt}],
++            model="mixtral-8x7b-32768",
++            temperature=0.2,
++            max_tokens=2000,
++            response_format={"type": "json_object"}
++        )
++        
++        # Validate Groq API response structure
++        if not response.choices or not hasattr(response.choices[0].message, 'content'):
++            raise ValueError("Invalid Groq API response format")
++        
++        # Log the raw API response
++        raw_response = response.choices[0].message.content
++        logging.info(f"Raw API Response:\n{raw_response}")
++        
++        result = json.loads(raw_response)
++        
++        # Validate response structure
++        required = ['patient_name', 'exam_date', 'birads_right', 'birads_left',
++                   'impressions', 'findings', 'follow_up_recommendation', 'confidence']
++        if all(k in result for k in required) and isinstance(result['confidence'], dict):
++            return result
++            
++        raise ValueError("Invalid response structure from LLM")
++            
++    except Exception as e:
++        logging.error(f"LLM extraction failed: {str(e)}")
++        raise OCRError("Failed to extract fields after 3 attempts") from e
++
++def extract_fields_from_text(text: str, use_llm_fallback: bool = True) -> Dict[str, Any]:
++    """Extract fields using LLM first, with regex fallback for missing fields"""
++    fields = {
++        'patient_name': None,
++        'exam_date': None,
++        'birads_right': None,
++        'birads_left': None,
++        'impressions': None,
++        'findings': None,
++        'follow-up_recommendation': None,
++        'document_date': None,
++        'exam_type': None,
++        'clinical_history': None
++    }
++
++    # First try LLM extraction
++    llm_fields = {}
++    if use_llm_fallback:
++        try:
++            llm_fields = parse_text_with_llm(text)
++            # Map LLM fields to our schema
++            fields.update({
++                'patient_name': llm_fields.get('patient_name'),
++                'exam_date': llm_fields.get('exam_date'),
++                'birads_right': llm_fields.get('birads_right'),
++                'birads_left': llm_fields.get('birads_left'),
++                'impressions': llm_fields.get('impressions'),
++                'findings': llm_fields.get('findings'),
++                'follow-up_recommendation': llm_fields.get('follow_up_recommendation'),
++                'document_date': llm_fields.get('document_date'),
++                'exam_type': llm_fields.get('exam_type'),
++                'clinical_history': llm_fields.get('clinical_history')
++            })
++        except Exception as e:
++            logging.warning(f"LLM extraction failed: {str(e)}")
++
++    # Regex fallback for any missing critical fields
++    missing_fields = [k for k, v in fields.items() if v is None]
++    if missing_fields:
++        # Enhanced regex patterns with multi-line support and medical context
++        patterns = {
++            'patient_name': (
++                r'(?i)(?:patient|name)(?:\s*(?:name|ID)\b)?[:\s\-*]+'
++                r'((?:[A-ZÀ-ÿ][a-zà-ÿ]*-?)+\s*(?:[A-ZÀ-ÿ][a-zà-ÿ]*(?:\s+[A-ZÀ-ÿ][a-zà-ÿ]*)*))'
++            ),
++            'exam_date': (
++                r'(?i)(?:date\s*(?:of\s*)?(?:exam|study)|exam\s*date)[:\s\-*]+'
++                r'(\b(?:20\d{2}[-/](?:0[1-9]|1[0-2])[-/](?:0[1-9]|[12][0-9]|3[01])|'
++                r'(?:0[1-9]|1[0-2])[-/](?:0[1-9]|[12][0-9]|3[01])[-/]20\d{2})\b)'
++            ),
++            'birads_right': (
++                r'(?i)(?:bi-rads|birads|breast\s+imaging\s+reporting\s+.*?)\s*'
++                r'(?:right|rt\.?)\b[\s:\-]*(\d)'
++            ),
++            'birads_left': (
++                r'(?i)(?:bi-rads|birads|breast\s+imaging\s+reporting\s+.*?)\s*'
++                r'(?:left|lt\.?)\b[\s:\-]*(\d)'
++            ),
++            'impressions': (
++                r'(?i)(?:impressions?|conclusions?)\b[:\s]*'
++                r'((?:.*?(?:\n\s*.*?)*?)(?=\n\s*(?:recommendations?|findings|follow-?up|$))'
++            ),
++            'clinical_history': (
++                r'(?i)(?:clinical\s+history|patient\s+history)\b[:\s]*'
++                r'((?:.*?(?:\n\s*.*?)*?)(?=\n\s*(?:exam|findings|impressions|$))'
++            ),
++            'findings': (
++                r'(?i)(?:findings|results)\b[:\s]*'
++                r'((?:.*?(?:\n\s*.*?)*?)(?=\n\s*(?:impressions|recommendations?|$))'
++            ),
++            'follow-up_recommendation': (
++                r'(?i)(?:recommendations?|follow-?up)\b[:\s]*'
++                r'((?:.*?(?:\n\s*.*?)*?)(?=\n\s*(?:end\s+of\s+report|$)))'
++            )
++        }
++
++        for field, pattern in patterns.items():
++            if field in missing_fields and (match := re.search(pattern, text, re.DOTALL)):
++                captured = match.group(1).strip()
++                # Post-process based on field type
++                if field == 'patient_name':
++                    captured = re.sub(r'\s+', ' ', captured).title()
++                elif field in ('birads_right', 'birads_left'):
++                    captured = max(0, min(int(captured), 6)) if captured.isdigit() else None
++                elif field == 'exam_date':
++                    captured = re.sub(r'[/]', '-', captured)
++                
++                if captured:
++                    fields[field] = captured
++
++    
++    return fields, []
++
++def similar(a, b, threshold=0.7):
++    """Fuzzy string matching for OCR corrections"""
++    from difflib import SequenceMatcher
++    return SequenceMatcher(None, a, b).ratio() >= threshold
++
++def merge_results(nlp_data, template_data, priority_fields):
++    """Combine NLP and template results with priority"""
++    merged = nlp_data.copy()
++    for field in priority_fields:
++        if template_data.get(field, "Unknown") != "Unknown":
++            merged[field] = {
++                'value': template_data[field],
++                'source': 'template',
++                'confidence': 0.8  # Template matches get higher confidence
++            }
++    return merged
++
++def extract_additional_info(text, structured_data):
++    """Remove known fields from text for additional info"""
++    patterns = [re.escape(v['value']) for v in structured_data.values() 
++               if v['value'] != "Unknown"]
++    return re.sub(r'|'.join(patterns), '', text, flags=re.IGNORECASE).strip()
++
++def apply_template_fallback(image, existing_data):
++    # Define template regions and expected fields
++    field_regions = {
++        "document_date": (0.1, 0.05, 0.3, 0.08),  # x1, y1, x2, y2 as percentages
++        "mammo_type": (0.1, 0.15, 0.4, 0.18),
++        "birads_score": (0.6, 0.4, 0.8, 0.45)
++    }
++    
++    h, w = image.shape[:2]
++    results = {}
++    
++    for field, (x1_pct, y1_pct, x2_pct, y2_pct) in field_regions.items():
++        # Extract ROI based on template positions
++        x1 = int(w * x1_pct)
++        y1 = int(h * y1_pct)
++        x2 = int(w * x2_pct)
++        y2 = int(h * y2_pct)
++        roi = image[y1:y2, x1:x2]
++        
++        # OCR the specific region
++        ocr_data = pytesseract.image_to_string(
++            roi,
++            config='--psm 7 -c tessedit_char_whitelist="0123456789-ABCDEFGHIJKLMNOPQRSTUVWXYZ "'
++        )
++        results[field] = ocr_data.strip()
++    
++    # Merge template results with existing data
++    if results.get('document_date'):
++        existing_data['dates'].append({
++            "type": "template_date",
++            "value": results['document_date'],
++            "confidence": 0.9  # High confidence for template matches
++        })
++    if results.get('mammo_type'):
++        existing_data['procedures'].append({
++            "type": "template_procedure",
++            "value": results['mammo_type'],
++            "confidence": 0.85
++        })
++    
++    return existing_data
++
++def convert_to_structured_json(df):
++    """Convert dataframe to medical JSON structure without field_type"""
++    return {
++        "patient": {
++            "name": df.get('patient_name', 'Unknown'),
++            "date_of_birth": df.get('date_of_birth', 'Unknown')
++        },
++        "exam": {
++            "date": df.get('exam_date', 'Unknown'),
++            "type": df.get('document_type', 'Mammogram'),
++            "birads": df.get('birads_score', 'Unknown')
++        },
++        "findings": {
++            "primary": df.get('mammogram_results', 'No results'),
++            "additional": df.get('additional_information', '')
++        }
++    }
++
++def extract_with_template_matching(image):
++    """Multi-scale template matching with parallel processing"""
++    # Map field names to template filenames
++    field_template_map = {
++        'document_date': 'date_template',
++        'exam_type': 'exam_type_template', 
++        'birads_score': 'birads_template',
++        'patient_name': 'patient_template',
++        'impressions': 'impressions_template'
++    }
++    results = {k: "Unknown" for k in field_template_map.keys()}
++    results['additional_information'] = ""
++    warnings = []
++    
++    try:
++        # Convert to grayscale once
++        gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
++        h, w = gray_image.shape
++        
++        # Create process pool for template-scale combinations
++        with ThreadPoolExecutor(max_workers=os.cpu_count()*2) as executor:
++            futures = []
++            
++            # Generate scaled templates
++            scales = np.linspace(0.8, 1.2, 5)  # 5 scales between 80%-120%
++            for field, template_key in field_template_map.items():
++                template = TEMPLATES.get(template_key)
++                if template is None:
++                    warnings.append(f"Template for '{field}' not found")
++                    continue
++                
++                # Submit all scale variations
++                for scale in scales:
++                    futures.append(
++                        executor.submit(
++                            process_template_scale,
++                            gray_image.copy(),
++                            template,
++                            field,
++                            scale
++                        )
++                    )
++
++            # Process results as they complete
++            best_matches = {}
++            for future in concurrent.futures.as_completed(futures):
++                field, value, confidence, scale, (x, y) = future.result()
++                
++                # Track best match per field
++                if confidence > best_matches.get(field, (0,))[0]:
++                    best_matches[field] = (confidence, scale, x, y, value)
++
++            # Extract text from best matches
++            mask = np.zeros_like(gray_image)
++            for field, (conf, scale, x, y, val) in best_matches.items():
++                if conf < 0.7:  # Final confidence threshold
++                    warnings.append(f"Low confidence ({conf:.0%}) for {field}")
++                    continue
++                
++                # Get original template dimensions
++                orig_h, orig_w = TEMPLATES[field_template_map[field]].shape
++                
++                # Calculate ROI based on original size
++                roi_x1 = x + int(orig_w * scale)
++                roi_y1 = y
++                roi_x2 = roi_x1 + 400  # Fixed width for text extraction
++                roi_y2 = roi_y1 + int(orig_h * scale) + 50
++                
++                # Ensure coordinates are within image bounds
++                roi = gray_image[
++                    max(0, roi_y1):min(h, roi_y2),
++                    max(0, roi_x1):min(w, roi_x2)
++                ]
++                
++                # OCR the region
++                text = pytesseract.image_to_string(roi, config='--psm 6').strip()
++                results[field] = ' '.join(text.split()) or "Unknown"
++                
++                # Add to mask
++                cv2.rectangle(mask, (x, y), 
++                             (x + int(orig_w * scale), y + int(orig_h * scale)),
++                             (255,255,255), -1)
++
++            # Process remaining text
++            masked_image = cv2.bitwise_and(gray_image, cv2.bitwise_not(mask))
++            remaining_text = pytesseract.image_to_string(masked_image)
++            results['additional_information'] = clean_additional_text(remaining_text)
++
++    except Exception as e:
++        error_msg = f"Template matching failed: {str(e)}"
++        logging.error(error_msg, exc_info=True)
++        warnings.append(error_msg)
++    
++    return results, warnings
++
++def process_template_scale(image, template, field, scale):
++    """Process a single template at specific scale"""
++    try:
++        # Scale the template
++        scaled_template = cv2.resize(
++            template, 
++            None,
++            fx=scale,
++            fy=scale,
++            interpolation=cv2.INTER_AREA
++        )
++        t_h, t_w = scaled_template.shape
++        
++        # Skip if template larger than image
++        if t_h > image.shape[0] or t_w > image.shape[1]:
++            return field, "Unknown", 0.0, scale, (0,0)
++
++        # Match template
++        res = cv2.matchTemplate(image, scaled_template, cv2.TM_CCOEFF_NORMED)
++        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
++        
++        return field, "Unknown", max_val, scale, max_loc
++    
++    except Exception as e:
++        logging.warning(f"Scale {scale} failed for {field}: {str(e)}")
++        return field, "Unknown", 0.0, scale, (0,0)
++
++def clean_additional_text(text):
++    """Clean and format remaining OCR text"""
++    # Remove known fields and noise
++    patterns_to_remove = [
++        r'Document Date:.*?\n',
++        r'BIRADS Score:.*?\n',
++        r'Patient Name:.*?\n',
++        r'[\x00-\x1F\x7F-\x9F]'  # Remove control characters
++    ]
++    
++    for pattern in patterns_to_remove:
++        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
++        
++    return ' '.join(text.split())
++
++def apply_regex_validation(results):
++    """Validate and format extracted fields using regex"""
++    # Date validation
++    date_pattern = r'\b\d{4}-\d{2}-\d{2}\b'
++    for field in ['document_date', 'exam_date']:
++        match = re.search(date_pattern, results[field])
++        if match:
++            results[field] = match.group()
++            
++    # BIRADS score validation
++    birads_pattern = r'BIRADS[\s-]*([0-6])'
++    if 'birads_score' in results:
++        match = re.search(birads_pattern, results['birads_score'], re.IGNORECASE)
++        if match:
++            results['birads_score'] = f"BIRADS {match.group(1)}"
++            
++    # Name validation
++    name_pattern = r'^[A-Z][a-z]+ [A-Z][a-z]+$'
++    if not re.match(name_pattern, results['patient_name']):
++        results['patient_name'] = "Unknown"
++        
++    return results
++
++def extract_findings_text(findings):
++    """Convert structured findings data to plain text with error handling"""
++    try:
++        # Handle stringified JSON from CSV imports
++        if isinstance(findings, str):
++            try:
++                findings = json.loads(findings)
++            except json.JSONDecodeError:
++                return findings  # Return raw string if not JSON
++
++        # Process list of finding dictionaries
++        if isinstance(findings, list):
++            descriptions = []
++            for item in findings:
++                if isinstance(item, dict):
++                    desc = item.get('description', '')
++                    if desc:  # Only add non-empty descriptions
++                        descriptions.append(desc.strip(' .'))
++            return ' '.join(descriptions) if descriptions else ''
++        
++        # Handle single dictionary case
++        if isinstance(findings, dict):
++            return findings.get('description', '')
++        
++        return str(findings)
++    
++    except Exception as e:
++        logging.error(f"Findings extraction error: {str(e)}", exc_info=True)
++        return ''  # Return empty string on failure
++
++def default_structured_output():
++    """Fallback structure for failed extractions"""
++    return {
++        'birads_score': "Unknown",
++        'document_date': "Unknown",
++        'document_type': "Unknown",
++        'electronically_signed_by': "Unknown",
++        'exam_date': "Unknown",
++        'impression_result': "Unknown",
++        'mammogram_results': "Unknown",
++        'patient_history': "Unknown", 
++        'patient_name': "Unknown",
++        'recommendation': "Unknown",
++        'testing_provider': "Unknown",
++        'ultrasound_results': "Unknown",
++        'additional_information': "",
++        'confidence_scores': {'ocr': 0.0, 'nlp': 0.0}
++    }
++
++# Add missing dependency installation
++def install_dependencies():
++    """Ensure required NLP dependencies exist"""
++    try:
++        import sentencepiece  # Required for translation models
++    except ImportError:
++        import sys, subprocess
++        subprocess.check_call([sys.executable, "-m", "pip", "install", "sentencepiece"])
+
+# 2025-02-24 17:40:52.657954
++y
+
+# 2025-02-24 17:44:19.055069
++it seems that part of the improvements that we have done are the one not extracting the data properly, debug and find out whats going wrong. Some pages failed to process:
++
++    Page 2: expected string or bytes-like object
++
++    Page 1: expected string or bytes-like object
++
++Check mammo_ai.log for full details
+
+# 2025-02-24 17:45:42.329649
++y
+
+# 2025-02-24 17:52:21.524436
++So the issue is still not fixed, we are not succuceeding in extracting any of the data. make sure wehave donut being utilized properly, and that the data is being extracted properly into a dataframe Some pages failed to process:
++
++    Page 1: PaddlePaddle initialization error
++
++    Page 2: PaddlePaddle initialization error
++
++Check mammo_ai.log for full details
+
+# 2025-02-24 17:54:23.395551
++y
+
+# 2025-02-24 17:58:40.973575
++Some pages failed to process:
++
++    Page 1: PaddleOCR initialization failed
++
++    Page 2: PaddleOCR initialization failed
++
++Check mammo_ai.log for full details
++Processed Results
++Structured Medical Data
++
++No structured data available - DataFrame is empty 
+
+# 2025-02-24 18:00:43.487090
++y
+
+# 2025-02-24 18:03:49.457185
++Some pages failed to process:
++
++    Page 2: local variable 'model_dir' referenced before assignment
++
++    Page 1: local variable 'model_dir' referenced before assignment
++
++Check mammo_ai.log for full details debug and fix
+
+# 2025-02-24 18:05:16.890674
++y
+
+# 2025-02-24 18:07:23.203439
++remove all the improvements done today till noon
+
+# 2025-02-24 18:08:27.017083
++y
+
+# 2025-02-24 18:13:05.000819
++debug and fix ValueError: All arrays must be of the same length
++Traceback:
++
++File "C:\Users\ybada\OneDrive\Desktop\Chatbots\Medical\src\app.py", line 563, in <module>
++    st.session_state['df'] = pd.DataFrame({
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\pandas\core\frame.py", line 709, in __init__
++    mgr = dict_to_mgr(data, index, columns, dtype=dtype, copy=copy, typ=manager)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\pandas\core\internals\construction.py", line 481, in dict_to_mgr
++    return arrays_to_mgr(arrays, columns, index, dtype=dtype, typ=typ, consolidate=copy)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\pandas\core\internals\construction.py", line 115, in arrays_to_mgr
++    index = _extract_index(arrays)
++File "C:\Users\ybada\anaconda3\envs\mammo_ai\lib\site-packages\pandas\core\internals\construction.py", line 655, in _extract_index
++    raise ValueError("All arrays must be of the same length")
+
+# 2025-02-24 18:14:28.724888
++y
+
+# 2025-02-24 18:15:53.492044
++No valid data extracted from any pages debug and fix
+
+# 2025-02-24 18:18:04.932835
++y
+
+# 2025-02-24 18:24:30.111994
++still no data, I want you once and for all go back to our earlier implementation that was working at Commit 7411d77. Make this operational once and for all. and I did not find the paddleOCR models so delete them yourself.
+
+# 2025-02-24 18:26:26.204911
++y
+
+# 2025-02-24 18:52:38.845314
++Aider, improve the data analysis in my mammogram project to consolidate all pages of each PDF into a single row in the DataFrame. Use DeepSeek R1 for reasoning and Claude Sonnet for editing. Modify `app.py` and `ocr_utils.py` to achieve this:
++
++### Current Issue:
++- Each page of a PDF (e.g., "Eng Example 1.pdf" pages 1 and 2) is currently input as a separate row or column, complicating analysis.
++
++### Goals:
++- Use the following 12 columns for the DataFrame: `birads_score`, `document_date`, `document_type`, `electronically_sig`, `exam_date`, `impression_result`, `mammogram_results`, `patient_history`, `patient_name`, `recommendation`, `testing_provider`, `ultrasound_results`.
++- For each PDF, combine text from all pages into a single string or list, then extract and consolidate data into one row per PDF.
++- Extract fields from the example:
++  - `birads_score`: "BI-RADS: Negative" (from "negative for malignancy").
++  - `document_date`: "2023-05-05" (earliest or most relevant date).
++  - `document_type`: "Scan-Mammo DIAGNOSTIC".
++  - `electronically_sig`: "Signed by Cynthia Theriault, MD, FRCPC".
++  - `exam_date`: "2023-05-05" (from "05 May 2023").
++  - `impression_result`: "Impression: Stable mammogram, negative for malignancy".
++  - `mammogram_results`: "Findings: Breasts were imaged with standard and pushed back views. The parenchyma dense, category C. No architectural clusters of suspicious or abnormal are identified".
++  - `patient_history`: "Reference study: imaging on Oct 10, 2022".
++  - `patient_name`: "Not Available" (deidentified, no patient names expected).
++  - `recommendation`: "Routine screening" (inferred or extracted if present).
++  - `testing_provider`: "Cynthia Theriault, MD, FRCPC".
++  - `ultrasound_results`: "Not Available" (unless specified).
++- Use `extract_fields_from_text` in `ocr_utils.py` to parse combined text, using regex or LLM (`parse_text_with_llm`) for fields like `birads_score`, `impression_result`, etc.
++- Update `app.py` in the OCR Processing and Data Analysis tabs to:
++  - Read all pages of each PDF using `pdf2image` or `pdfplumber`.
++  - Combine page text and create one DataFrame row per PDF.
++  - Handle missing fields (e.g., `patient_name`) with "Not Available".
++- Ensure the output matches the example row structure and is stored in `st.session_state['df']`.
++
++### Files to Work On:
++- `app.py`
++- `ocr_utils.py`
++
++### Output:
++- Document changes with comments and commit them (e.g., "Consolidated PDF pages into single rows").
++- Test with "Eng Example 1.pdf" to verify a single row with all fields.
+
+# 2025-02-24 18:54:22.584270
++Aider, improve the data analysis in my mammogram project to consolidate all pages of each PDF into a single row in the DataFrame. Use DeepSeek R1 for reasoning and Claude Sonnet for editing. Modify `app.py` and `ocr_utils.py` to achieve this:
++
++### Current Issue:
++- Each page of a PDF (e.g., "Eng Example 1.pdf" pages 1 and 2) is currently input as a separate row or column, complicating analysis.
++
++### Goals:
++- Use the following 12 columns for the DataFrame: `birads_score`, `document_date`, `document_type`, `electronically_sig`, `exam_date`, `impression_result`, `mammogram_results`, `patient_history`, `patient_name`, `recommendation`, `testing_provider`, `ultrasound_results`.
++- For each PDF, combine text from all pages into a single string or list, then extract and consolidate data into one row per PDF.
++- Extract fields from the example:
++  - `birads_score`: "BI-RADS: Negative" (from "negative for malignancy").
++  - `document_date`: "2023-05-05" (earliest or most relevant date).
++  - `document_type`: "Scan-Mammo DIAGNOSTIC".
++  - `electronically_sig`: "Signed by Cynthia Theriault, MD, FRCPC".
++  - `exam_date`: "2023-05-05" (from "05 May 2023").
++  - `impression_result`: "Impression: Stable mammogram, negative for malignancy".
++  - `mammogram_results`: "Findings: Breasts were imaged with standard and pushed back views. The parenchyma dense, category C. No architectural clusters of suspicious or abnormal are identified".
++  - `patient_history`: "Reference study: imaging on Oct 10, 2022".
++  - `patient_name`: "Not Available" (deidentified, no patient names expected).
++  - `recommendation`: "Routine screening" (inferred or extracted if present).
++  - `testing_provider`: "Cynthia Theriault, MD, FRCPC".
++  - `ultrasound_results`: "Not Available" (unless specified).
++- Use `extract_fields_from_text` in `ocr_utils.py` to parse combined text, using regex or LLM (`parse_text_with_llm`) for fields like `birads_score`, `impression_result`, etc.
++- Update `app.py` in the OCR Processing and Data Analysis tabs to:
++  - Read all pages of each PDF using `pdf2image` or `pdfplumber`.
++  - Combine page text and create one DataFrame row per PDF.
++  - Handle missing fields (e.g., `patient_name`) with "Not Available".
++- Ensure the output matches the example row structure and is stored in `st.session_state['df']`.
++
++### Output:
++- Document changes with comments and commit them (e.g., "Consolidated PDF pages into single rows").
++- Test with "Eng Example 1.pdf" to verify a single row with all fields.
+
+# 2025-02-24 18:55:31.996066
++/ask
+
+# 2025-02-24 18:55:33.616325
++Aider, improve the data analysis in my mammogram project to consolidate all pages of each PDF into a single row in the DataFrame. Use DeepSeek R1 for reasoning and Claude Sonnet for editing. Modify `app.py` and `ocr_utils.py` to achieve this:
++
++### Current Issue:
++- Each page of a PDF (e.g., "Eng Example 1.pdf" pages 1 and 2) is currently input as a separate row or column, complicating analysis.
++
++### Goals:
++- Use the following 12 columns for the DataFrame: `birads_score`, `document_date`, `document_type`, `electronically_sig`, `exam_date`, `impression_result`, `mammogram_results`, `patient_history`, `patient_name`, `recommendation`, `testing_provider`, `ultrasound_results`.
++- For each PDF, combine text from all pages into a single string or list, then extract and consolidate data into one row per PDF.
++- Extract fields from the example:
++  - `birads_score`: "BI-RADS: Negative" (from "negative for malignancy").
++  - `document_date`: "2023-05-05" (earliest or most relevant date).
++  - `document_type`: "Scan-Mammo DIAGNOSTIC".
++  - `electronically_sig`: "Signed by Cynthia Theriault, MD, FRCPC".
++  - `exam_date`: "2023-05-05" (from "05 May 2023").
++  - `impression_result`: "Impression: Stable mammogram, negative for malignancy".
++  - `mammogram_results`: "Findings: Breasts were imaged with standard and pushed back views. The parenchyma dense, category C. No architectural clusters of suspicious or abnormal are identified".
++  - `patient_history`: "Reference study: imaging on Oct 10, 2022".
++  - `patient_name`: "Not Available" (deidentified, no patient names expected).
++  - `recommendation`: "Routine screening" (inferred or extracted if present).
++  - `testing_provider`: "Cynthia Theriault, MD, FRCPC".
++  - `ultrasound_results`: "Not Available" (unless specified).
++- Use `extract_fields_from_text` in `ocr_utils.py` to parse combined text, using regex or LLM (`parse_text_with_llm`) for fields like `birads_score`, `impression_result`, etc.
++- Update `app.py` in the OCR Processing and Data Analysis tabs to:
++  - Read all pages of each PDF using `pdf2image` or `pdfplumber`.
++  - Combine page text and create one DataFrame row per PDF.
++  - Handle missing fields (e.g., `patient_name`) with "Not Available".
++- Ensure the output matches the example row structure and is stored in `st.session_state['df']`.
++
++### Output:
++- Document changes with comments and commit them (e.g., "Consolidated PDF pages into single rows").
++- Test with "Eng Example 1.pdf" to verify a single row with all fields.
+
+# 2025-02-24 18:56:43.289265
++/archi
+
+# 2025-02-24 18:58:04.621570
++Aider, improve the data analysis in my mammogram project to consolidate all pages of each PDF into a single row in the DataFrame. Use DeepSeek R1 for reasoning and Claude Sonnet for editing. Modify `app.py` and `ocr_utils.py` to achieve this:
++
++### Current Issue:
++- Each page of a PDF (e.g., "Eng Example 1.pdf" pages 1 and 2) is currently input as a separate row or column, complicating analysis.
++
++### Goals:
++- Use the following 12 columns for the DataFrame: `birads_score`, `document_date`, `document_type`, `electronically_sig`, `exam_date`, `impression_result`, `mammogram_results`, `patient_history`, `patient_name`, `recommendation`, `testing_provider`, `ultrasound_results`.
++- For each PDF, combine text from all pages into a single string or list, then extract and consolidate data into one row per PDF.
++- Extract fields from the example:
++  - `birads_score`: "BI-RADS: Negative" (from "negative for malignancy").
++  - `document_date`: "2023-05-05" (earliest or most relevant date).
++  - `document_type`: "Scan-Mammo DIAGNOSTIC".
++  - `electronically_sig`: "Signed by Cynthia Theriault, MD, FRCPC".
++  - `exam_date`: "2023-05-05" (from "05 May 2023").
++  - `impression_result`: "Impression: Stable mammogram, negative for malignancy".
++  - `mammogram_results`: "Findings: Breasts were imaged with standard and pushed back views. The parenchyma dense, category C. No architectural clusters of suspicious or abnormal are identified".
++  - `patient_history`: "Reference study: imaging on Oct 10, 2022".
++  - `patient_name`: "Not Available" (deidentified, no patient names expected).
++  - `recommendation`: "Routine screening" (inferred or extracted if present).
++  - `testing_provider`: "Cynthia Theriault, MD, FRCPC".
++  - `ultrasound_results`: "Not Available" (unless specified).
++- Use `extract_fields_from_text` in `ocr_utils.py` to parse combined text, using regex or LLM (`parse_text_with_llm`) for fields like `birads_score`, `impression_result`, etc.
++- Update `app.py` in the OCR Processing and Data Analysis tabs to:
++  - Read all pages of each PDF using `pdf2image` or `pdfplumber`.
++  - Combine page text and create one DataFrame row per PDF.
++  - Handle missing fields (e.g., `patient_name`) with "Not Available".
++- Ensure the output matches the example row structure and is stored in `st.session_state['df']`.
++
++### Files to Work On:
++- `app.py`
++- `ocr_utils.py`
++
++### Output:
++- Document changes with comments and commit them (e.g., "Consolidated PDF pages into single rows").
++- Test with "Eng Example 1.pdf" to verify a single row with all fields.
+
+# 2025-02-24 18:58:07.571567
++yes
+
+# 2025-02-24 19:00:52.457788
++aider --list-models anthropic/
+
+# 2025-02-24 19:01:50.277840
++Aider, improve the data analysis in my mammogram project to consolidate all pages of each PDF into a single row in the DataFrame. Use DeepSeek R1 for reasoning and Claude Sonnet for editing. Modify `app.py` and `ocr_utils.py` to achieve this:
++
++### Current Issue:
++- Each page of a PDF (e.g., "Eng Example 1.pdf" pages 1 and 2) is currently input as a separate row or column, complicating analysis.
++
++### Goals:
++- Use the following 12 columns for the DataFrame: `birads_score`, `document_date`, `document_type`, `electronically_sig`, `exam_date`, `impression_result`, `mammogram_results`, `patient_history`, `patient_name`, `recommendation`, `testing_provider`, `ultrasound_results`.
++- For each PDF, combine text from all pages into a single string or list, then extract and consolidate data into one row per PDF.
++- Extract fields from the example:
++  - `birads_score`: "BI-RADS: Negative" (from "negative for malignancy").
++  - `document_date`: "2023-05-05" (earliest or most relevant date).
++  - `document_type`: "Scan-Mammo DIAGNOSTIC".
++  - `electronically_sig`: "Signed by Cynthia Theriault, MD, FRCPC".
++  - `exam_date`: "2023-05-05" (from "05 May 2023").
++  - `impression_result`: "Impression: Stable mammogram, negative for malignancy".
++  - `mammogram_results`: "Findings: Breasts were imaged with standard and pushed back views. The parenchyma dense, category C. No architectural clusters of suspicious or abnormal are identified".
++  - `patient_history`: "Reference study: imaging on Oct 10, 2022".
++  - `patient_name`: "Not Available" (deidentified, no patient names expected).
++  - `recommendation`: "Routine screening" (inferred or extracted if present).
++  - `testing_provider`: "Cynthia Theriault, MD, FRCPC".
++  - `ultrasound_results`: "Not Available" (unless specified).
++- Use `extract_fields_from_text` in `ocr_utils.py` to parse combined text, using regex or LLM (`parse_text_with_llm`) for fields like `birads_score`, `impression_result`, etc.
++- Update `app.py` in the OCR Processing and Data Analysis tabs to:
++  - Read all pages of each PDF using `pdf2image` or `pdfplumber`.
++  - Combine page text and create one DataFrame row per PDF.
++  - Handle missing fields (e.g., `patient_name`) with "Not Available".
++- Ensure the output matches the example row structure and is stored in `st.session_state['df']`.
++
++### Files to Work On:
++- `app.py`
++- `ocr_utils.py`
++
++### Output:
++- Document changes with comments and commit them (e.g., "Consolidated PDF pages into single rows").
++- Test with "Eng Example 1.pdf" to verify a single row with all fields.
+
+# 2025-02-24 19:01:53.204060
++y
+
+# 2025-02-24 19:07:27.402259
++Refactor the mammogram analysis system to process PDFs as complete documents rather than individual pages. Implement these changes:
++
++1. DATA STRUCTURE:
++   - Maintain consistent DataFrame with these columns: birads_score, document_date, document_type, electronically_signed_by, exam_date, impression_result, mammogram_results, patient_history, patient_name, recommendation, testing_provider, ultrasound_results
++
++2. PDF PROCESSING:
++   - Modify process_pdf() to extract and combine all page text before field extraction
++   - Group OCR results by file using a key derived from file metadata
++   - Apply NLP extraction once per document on the combined text
++
++3. FIELD EXTRACTION IMPROVEMENTS:
++   - Enhance regex patterns to better capture birads_score formats (numeric, textual "Negative")
++   - Improve date detection to handle various formats (YYYY-MM-DD, DD Month YYYY)
++   - Extract provider signatures from report endings
++   - Look for keyword sections like "IMPRESSION:", "FINDINGS:", "RECOMMENDATION:"
++
++4. IMPLEMENTATION APPROACH:
++   - Update process_pdf() to return one row per PDF
++   - Modify extract_fields_from_text() to accept combined text and return all required fields
++   - Update app.py to present consolidated data in the DataFrame
++
++FILES TO MODIFY:
++- app.py: PDF processing flow
++- ocr_utils.py: text extraction and field parsing
++
++The key goal is one PDF = one row with complete medical report data.
+
+# 2025-02-24 19:10:56.455663
++yes

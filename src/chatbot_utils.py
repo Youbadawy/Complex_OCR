@@ -1,9 +1,20 @@
 import pandas as pd
 from langdetect import detect
-from transformers import pipeline
 import re
 
-def analyze_csv(df, diagnosis_pipeline):
+# Add a try-except block for transformers
+try:
+    from transformers.pipelines import pipeline
+    TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    import logging
+    logging.warning("Transformers pipeline not available. Chatbot functionality will be limited.")
+    TRANSFORMERS_AVAILABLE = False
+
+def analyze_csv(df, diagnosis_pipeline=None):
+    if not TRANSFORMERS_AVAILABLE and diagnosis_pipeline is None:
+        return [{"error": "Transformers library not available"}]
+        
     analysis_results = []
     
     # Validate required columns
@@ -19,20 +30,21 @@ def analyze_csv(df, diagnosis_pipeline):
             'diagnosis_flags': []
         }
         
-        # RadBERT analysis
-        diagnosis = diagnosis_pipeline(
-            f"Findings: {row['findings']}. BIRADS: {row['birads_score']}",
-            truncation=True,
-            max_length=512
-        )
-        
-        # Process results
-        if diagnosis[0]['label'] == 'ABNORMAL':
-            case_analysis['diagnosis_flags'].append({
-                'type': 'abnormality',
-                'confidence': diagnosis[0]['score'],
-                'location': 'Unknown'
-            })
+        # RadBERT analysis (if available)
+        if TRANSFORMERS_AVAILABLE and diagnosis_pipeline:
+            diagnosis = diagnosis_pipeline(
+                f"Findings: {row['findings']}. BIRADS: {row['birads_score']}",
+                truncation=True,
+                max_length=512
+            )
+            
+            # Process results
+            if diagnosis[0]['label'] == 'ABNORMAL':
+                case_analysis['diagnosis_flags'].append({
+                    'type': 'abnormality',
+                    'confidence': diagnosis[0]['score'],
+                    'location': 'Unknown'
+                })
         
         analysis_results.append(case_analysis)
     
@@ -67,6 +79,9 @@ def generate_chatbot_context(df):
 
 def generate_medical_response(query, context, chat_history):
     """Generate context-aware medical response with language detection"""
+    if not TRANSFORMERS_AVAILABLE:
+        return "Sorry, the medical language model is not available. Please try again later."
+        
     try:
         lang = detect(query)
     except:
@@ -79,22 +94,25 @@ def generate_medical_response(query, context, chat_history):
         prompt = f"[Medical Context]\n{context}\n\n[History]\n{chat_history}\n\n[Question] {query}\n[Answer]"
     
     # Generate response
-    medical_qa = pipeline(
-        "text-generation", 
-        model="Medical-ChatBot",
-        max_length=512,
-        temperature=0.3
-    )
-    
-    response = medical_qa(
-        prompt,
-        max_new_tokens=200,
-        do_sample=True,
-        clean_up_tokenization_spaces=True
-    )[0]['generated_text']
-    
-    # Extract only the new response
-    return response.split("[Réponse]" if lang == 'fr' else "[Answer]")[-1].strip()
+    try:
+        medical_qa = pipeline(
+            "text-generation", 
+            model="Medical-ChatBot",
+            max_length=512,
+            temperature=0.3
+        )
+        
+        response = medical_qa(
+            prompt,
+            max_new_tokens=200,
+            do_sample=True,
+            clean_up_tokenization_spaces=True
+        )[0]['generated_text']
+        
+        # Extract only the new response
+        return response.split("[Réponse]" if lang == 'fr' else "[Answer]")[-1].strip()
+    except Exception as e:
+        return f"Error generating response: {str(e)}"
 
 def handle_user_feedback(feedback_type, details):
     """Process user feedback about data inconsistencies"""
