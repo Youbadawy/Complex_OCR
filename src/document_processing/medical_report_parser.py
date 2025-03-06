@@ -62,24 +62,34 @@ class MedicalReportParser:
         Initialize the parser with OCR text.
         
         Args:
-            text: Raw OCR text extracted from a medical report
+            text: Raw OCR text from a medical report
         """
-        self.raw_text = text
+        self.original_text = text
         self.preprocessed_text = self._preprocess_text(text)
         self.language = self._detect_language(self.preprocessed_text)
-        self.normalized_text = self.preprocessed_text.lower()  # For case-insensitive searches
         
-        # Diagnostic information
+        # Fields that will be extracted
+        self.extracted_fields = {}
+        
+        # Metadata about the extraction process
         self.metadata = {
-            'language': self.language,
-            'document_length': len(text) if text else 0,
-            'extraction_stats': {},
-            'validation_issues': []
+            'extraction_stats': {},  # Stats about the extraction
+            'validation_issues': [],  # Issues identified during validation
+            'fields_extracted': 0,   # Number of fields successfully extracted
+            'language': self.language  # Detected language
         }
         
-        # Initialize fields with N/A
-        self.extracted_fields = {field: ExtractedField("N/A") for field in self.EXPECTED_FIELDS}
+    @property
+    def text(self):
+        """
+        Property to access the preprocessed text, for backward compatibility.
+        Some methods may use self.text while others use self.preprocessed_text.
         
+        Returns:
+            The preprocessed text
+        """
+        return self.preprocessed_text
+    
     def _preprocess_text(self, text: str) -> str:
         """
         Preprocess the OCR text to improve extraction accuracy.
@@ -1221,7 +1231,7 @@ class MedicalReportParser:
         data = {field: self.extracted_fields[field].value for field in self.EXPECTED_FIELDS}
         
         # Add the raw text
-        data["raw_ocr_text"] = self.raw_text
+        data["raw_ocr_text"] = self.original_text
         
         return pd.Series(data)
 

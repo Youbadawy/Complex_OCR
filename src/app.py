@@ -1,7 +1,10 @@
 """
-Medical Report Processor - Main Application
-A Streamlit-based application for OCR processing and analysis of medical reports
+Main application entry point for Medical Report Processor.
+
+This application provides OCR processing and analysis for medical reports,
+specifically focused on mammography and breast imaging.
 """
+
 import streamlit as st
 import logging
 import warnings
@@ -32,6 +35,15 @@ from ui.tabs import (
 )
 from utils.helpers import clear_all_caches, fix_database_issues
 from api.claude_client import initialize_claude
+
+# Import new parser components for availability checks - BUT DO NOT MODIFY OCR PROCESS
+try:
+    from document_processing.medical_report_parser import MedicalReportParser
+    from document_processing.parser_integration import process_ocr_text
+    PARSER_AVAILABLE = True
+except ImportError:
+    PARSER_AVAILABLE = False
+    logger.warning("New medical report parser not available. Using legacy extraction.")
 
 # Set page config
 st.set_page_config(

@@ -303,7 +303,8 @@ def extract_medical_fields(text, use_llm=False, llm_api_key=None):
             extract_patient_info, extract_exam_type, extract_date_from_text,
             extract_provider_info, extract_signature_block, extract_birads_score,
             extract_sections, is_redacted_document, validate_field_types,
-            enhance_extraction_with_llm, get_extraction_value, extract_section
+            enhance_extraction_with_llm, get_extraction_value, extract_section,
+            extract_exam_date  # Add the new function
         )
         
         # Initialize result dictionary with empty fields
@@ -354,13 +355,32 @@ def extract_medical_fields(text, use_llm=False, llm_api_key=None):
         except Exception as e:
             logging.error(f"Error extracting exam type: {str(e)}")
         
+        # Use the enhanced exam date extraction
         try:
-            if 'exam_date' not in structured_data or not structured_data.get('exam_date', {}).get('value'):
-                date_extraction = extract_date_from_text(text)
-                if date_extraction and 'value' in date_extraction:
-                    structured_data['exam_date'] = date_extraction
+            exam_date_data = extract_exam_date(text)
+            if exam_date_data and exam_date_data.get('value'):
+                structured_data['exam_date'] = exam_date_data
+            else:
+                # Fallback to traditional date extraction
+                if 'exam_date' not in structured_data or not structured_data.get('exam_date', {}).get('value'):
+                    date_extraction = extract_date_from_text(text)
+                    if date_extraction and 'value' in date_extraction:
+                        structured_data['exam_date'] = date_extraction
         except Exception as e:
             logging.error(f"Error extracting exam date: {str(e)}")
+            
+            # If both methods fail, use a simple date extraction as last resort
+            try:
+                if 'exam_date' not in structured_data or not structured_data.get('exam_date', {}).get('value'):
+                    # Look for dates near exam keywords
+                    date_matches = re.findall(r'(?:exam|examination|date).*?(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})', 
+                                            text, re.IGNORECASE)
+                    if date_matches:
+                        normalized_date = normalize_date(date_matches[0])
+                        if normalized_date:
+                            structured_data['exam_date'] = {"value": normalized_date, "confidence": 0.5}
+            except Exception as nested_e:
+                logging.error(f"Error in date fallback extraction: {str(nested_e)}")
         
         # Extract provider information with enhanced function
         try:
@@ -857,7 +877,7 @@ def parse_extracted_text(ocr_result):
     
     # Improved date validation
     date_matches = re.finditer(
-        r'\b(20\d{2}(?:-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?)?)\b'  # YYYY-MM-DD
+        r'\b(20\d{2}(?:-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?)?\b'  # YYYY-MM-DD
         r'|(0?[1-9]|1[0-2])[/-](0[1-9]|[12][0-9]|3[01])[/-](20\d{2})'  # MM/DD/YYYY
         r'|(0[1-9]|[12][0-9]|3[01])[-/](0[1-9]|1[0-2])[-/](20\d{2})',  # DD-MM-YYYY
         cleaned_text

@@ -62,13 +62,30 @@ def save_to_db(data: dict):
     try:
         session = Session()
         
+        # Ensure exam_date is properly serialized
+        exam_date = data.get('exam_date', 'Not Available')
+        if isinstance(exam_date, dict) and 'value' in exam_date:
+            exam_date = exam_date.get('value', 'Not Available')
+        elif hasattr(exam_date, 'value'):
+            exam_date = exam_date.value if exam_date.value != "N/A" else 'Not Available'
+        
+        # Ensure findings are properly serialized
+        findings = data.get('findings', {})
+        # Convert any ExtractedField objects within findings
+        if isinstance(findings, dict):
+            for key, value in list(findings.items()):
+                if hasattr(value, 'value'):
+                    findings[key] = value.value
+                elif isinstance(value, dict) and 'value' in value:
+                    findings[key] = value['value']
+        
         # Convert dict fields to JSON
         report = Report(
             md5_hash=data['md5_hash'],
             filename=data['filename'],
             patient_name=data.get('patient_name', 'Not Available'),
-            exam_date=data.get('exam_date', 'Not Available'),
-            findings=json.dumps(data.get('findings', {})),
+            exam_date=str(exam_date),
+            findings=json.dumps(findings),
             report_metadata=json.dumps(data.get('metadata', {})),
             raw_ocr_text=data.get('raw_ocr_text', '')
         )

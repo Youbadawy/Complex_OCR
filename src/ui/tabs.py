@@ -16,6 +16,7 @@ import pdfplumber
 import streamlit as st
 import matplotlib.pyplot as plt
 import plotly.express as px
+import plotly.graph_objects as go
 from io import BytesIO
 from PIL import Image
 from datetime import datetime
@@ -32,7 +33,10 @@ import ocr_utils
 
 from document_processing.ocr import process_pdf, process_pdf_batch, debug_ocr_process
 from document_processing.text_analysis import extract_sections
-from models.inference import standardize_birads, extract_medical_terms, get_term_explanations
+from models.inference import (
+    standardize_birads, extract_medical_terms, get_term_explanations, 
+    assess_report_quality, analyze_provider_quality
+)
 from database.operations import save_to_db, init_db, Session, Report
 from ui.components import (
     render_message, display_report_card, display_pdf_image, 
@@ -158,7 +162,7 @@ def render_upload_tab(models):
                         # Debug information
                         if debug_mode:
                             st.text_area(
-                                f"Raw OCR Text - {file.name}",
+                                f"Raw OCR Text - {file.name}", 
                                 extracted_text,
                                 height=200,
                                 key=f"debug_text_{i}"
@@ -169,7 +173,6 @@ def render_upload_tab(models):
                             st.write("Raw OCR result type:", type(ocr_result))
                             if isinstance(ocr_result, dict):
                                 st.write("Keys:", list(ocr_result.keys()))
-                        
                 except Exception as e:
                     st.error(f"Error processing {file.name}: {str(e)}")
                     if debug_mode:
@@ -273,7 +276,12 @@ def render_analysis_tab(models):
             cols[i].metric(key, value)
         
         # Create tabs for different analyses
-        analysis_tab1, analysis_tab2, analysis_tab3 = st.tabs(["Data Overview", "Document Selection", "Terminology Analysis"])
+        analysis_tab1, analysis_tab2, analysis_tab3, analysis_tab4 = st.tabs([
+            "Data Overview", 
+            "Document Selection", 
+            "Terminology Analysis",
+            "Report Quality Analysis"  # New tab
+        ])
         
         with analysis_tab1:
             # Display data overview and visualizations
@@ -435,60 +443,446 @@ def render_analysis_tab(models):
                     # Get all document text
                     all_text = df['raw_ocr_text'].tolist()
                     
-                    # Extract medical terms
-                    medical_terms = extract_medical_terms(pd.Series(all_text))
+                    # Detect language
+                    language = 'en'  # Default to English
+                    if 'language' in df.columns:
+                        # Use the most common language in the dataset
+                        language_counts = df['language'].value_counts()
+                        if not language_counts.empty:
+                            language = language_counts.index[0]
                     
-                    if medical_terms:
-                        # Create tabs for different term categories
-                        term_cats = list(medical_terms.keys())
-                        if term_cats:
-                            term_tabs = st.tabs([cat.title() for cat in term_cats])
-                            
-                            for i, (category, terms) in enumerate(medical_terms.items()):
-                                with term_tabs[i]:
-                                    if terms:
-                                        # Count term frequencies
-                                        term_counts = {}
-                                        for term in terms:
-                                            count = sum(str(text).lower().count(term.lower()) for text in all_text if text)
-                                            term_counts[term] = count
-                                        
-                                        # Sort by frequency
-                                        term_counts = dict(sorted(term_counts.items(), key=lambda x: x[1], reverse=True))
-                                        
-                                        # Display as bar chart for most common terms (top 15)
-                                        top_terms = dict(list(term_counts.items())[:15])
-                                        
-                                        if top_terms:
-                                            term_df = pd.DataFrame([{"Term": k, "Count": v} for k, v in top_terms.items()])
-                                            
-                                            fig = px.bar(term_df, x="Term", y="Count", text="Count",
-                                                        title=f"Most Common {category.title()} Terms")
-                                            fig.update_layout(xaxis_title="Term", yaxis_title="Frequency")
-                                            st.plotly_chart(fig, use_container_width=True)
-                                            
-                                            # Show term explanations
-                                            try:
-                                                explanations = get_term_explanations(category)
-                                                
-                                                if explanations:
-                                                    with st.expander("Term Explanations", expanded=False):
-                                                        for term, count in top_terms.items():
-                                                            if term in explanations:
-                                                                st.markdown(f"**{term}** ({count} occurrences): {explanations[term]}")
-                                                            else:
-                                                                st.markdown(f"**{term}** ({count} occurrences)")
-                                            except Exception as e:
-                                                st.warning(f"Could not load term explanations: {str(e)}")
-                                    else:
-                                        st.info(f"No {category} terms found")
-                    else:
+                    # UI controls for filtering
+                    st.sidebar.subheader("Terminology Analysis Options")
+                    min_frequency = st.sidebar.slider("Minimum Term Frequency", 1, 10, 1, 
+                                                    help="Only show terms that appear at least this many times")
+                    
+                    # Category selection
+                    available_categories = [
+                        "tissues", "characteristics", "signs", "diagnoses", 
+                        "interventions", "measurements", "birads", "locations", 
+                        "orientations", "procedures", "findings"
+                    ]
+                    selected_categories = st.sidebar.multiselect(
+                        "Term Categories", 
+                        available_categories,
+                        default=available_categories[:5],  # Default to first 5 categories
+                        help="Select which categories of medical terms to analyze"
+                    )
+                    
+                    # Visualization options
+                    viz_type = st.sidebar.radio(
+                        "Visualization Type",
+                        ["Bar Chart", "Word Cloud", "Table"],
+                        index=0,
+                        help="Select how to visualize the extracted terms"
+                    )
+                    
+                    # Extract medical terms with language detection
+                    medical_terms = extract_medical_terms(pd.Series(all_text), language=language)
+                    
+                    if not medical_terms:
                         st.info("No medical terminology detected or terminology model not available")
+                        return
+                        
+                    # Filter by selected categories
+                    if selected_categories:
+                        medical_terms = {k: v for k, v in medical_terms.items() if k in selected_categories}
+                    
+                    if not medical_terms:
+                        st.info("No medical terminology detected in the selected categories")
+                        return
+                        
+                    # Show language information
+                    st.info(f"Analyzing terminology in {'French' if language == 'fr' else 'English'} language")
+                    
+                    # No special handling for BIRADS anymore - we'll just treat it like other categories
+                    # and display it with the visualization and term explanations
+                    
+                    # Get term categories
+                    term_cats = list(medical_terms.keys())
+                    
+                    # Skip creating tabs if no categories
+                    if not term_cats:
+                        st.info("No terminology categories to display")
+                        return
+                    
+                    # Create tabs for different term categories
+                    term_tabs = st.tabs([cat.title() for cat in term_cats])
+                    
+                    for i, category in enumerate(term_cats):
+                        terms = medical_terms[category]
+                        with term_tabs[i]:
+                            if not terms:
+                                st.info(f"No {category} terms found")
+                                continue
+                                
+                            # Count term frequencies
+                            term_counts = {}
+                            for term in terms:
+                                count = sum(str(text).lower().count(term.lower()) for text in all_text if text)
+                                if count >= min_frequency:  # Apply frequency filter
+                                    term_counts[term] = count
+                            
+                            if not term_counts:
+                                st.info(f"No {category} terms found with frequency ≥ {min_frequency}")
+                                continue
+                                
+                            # Sort by frequency
+                            term_counts = dict(sorted(term_counts.items(), key=lambda x: x[1], reverse=True))
+                            
+                            # Create dataframe for visualization
+                            term_df = pd.DataFrame([{"Term": k, "Count": v} for k, v in term_counts.items()])
+                            
+                            # Display based on selected visualization type
+                            if viz_type == "Bar Chart":
+                                # Take top 15 for bar chart
+                                top_term_df = term_df.head(15)
+                                
+                                # Special handling for BIRADS to make sure they're in ascending order
+                                if category == "birads":
+                                    # Sort BIRADS in proper numeric order
+                                    try:
+                                        # Convert to numeric when possible, otherwise keep as string
+                                        term_df['SortOrder'] = term_df['Term'].apply(lambda x: float(x[0]) if x[0].isdigit() else 999)
+                                        top_term_df = term_df.sort_values('SortOrder').head(15)
+                                        title = "BI-RADS Score Distribution"
+                                    except:
+                                        title = f"Most Common {category.title()} Terms"
+                                else:
+                                    title = f"Most Common {category.title()} Terms"
+                                    
+                                fig = px.bar(top_term_df, x="Term", y="Count", text="Count",
+                                            title=title)
+                                fig.update_layout(xaxis_title="Term", yaxis_title="Frequency")
+                                st.plotly_chart(fig, use_container_width=True)
+                            
+                            elif viz_type == "Word Cloud":
+                                # Create word cloud
+                                try:
+                                    wordcloud = WordCloud(
+                                        width=800, height=400,
+                                        background_color='white',
+                                        max_words=100,
+                                        colormap='viridis'
+                                    ).generate_from_frequencies({k: v for k, v in term_counts.items()})
+                                    
+                                    fig, ax = plt.subplots(figsize=(10, 5))
+                                    ax.imshow(wordcloud, interpolation='bilinear')
+                                    ax.axis('off')
+                                    st.pyplot(fig)
+                                except Exception as e:
+                                    st.warning(f"Could not generate word cloud: {str(e)}")
+                                    # Fall back to bar chart
+                                    top_term_df = term_df.head(15)
+                                    fig = px.bar(top_term_df, x="Term", y="Count", text="Count")
+                                    st.plotly_chart(fig, use_container_width=True)
+                            
+                            else:  # Table view
+                                st.dataframe(term_df, use_container_width=True)
+                            
+                            # Show term explanations
+                            try:
+                                explanations = get_term_explanations(category)
+                                
+                                if explanations:
+                                    # For BIRADS, always expand by default
+                                    with st.expander("Term Explanations", expanded=(category == 'birads')):
+                                        for term, count in term_counts.items():
+                                            if term in explanations:
+                                                st.markdown(f"**{term}** ({count} occurrences): {explanations[term]}")
+                                            else:
+                                                st.markdown(f"**{term}** ({count} occurrences)")
+                            except Exception as e:
+                                st.warning(f"Could not load term explanations: {str(e)}")
                 else:
                     st.warning("No text data available for terminology analysis")
             except Exception as e:
                 st.error(f"Error analyzing medical terminology: {e}")
                 logger.exception("Error in terminology analysis")
+        
+        with analysis_tab4:
+            st.subheader("AI Report Quality Analysis")
+            
+            # Check if we have reports to analyze
+            if 'raw_ocr_text' in df.columns:
+                # Option to select specific report
+                report_idx = st.selectbox(
+                    "Select a report to analyze:",
+                    options=list(range(len(df))),
+                    format_func=lambda x: f"Report #{x+1}: {df.iloc[x].get('filename', f'Document {x+1}')}"
+                )
+                
+                # Get the selected report text
+                report_text = df.iloc[report_idx]['raw_ocr_text']
+                
+                # Prepare extracted fields if available
+                extracted_fields = {}
+                for field in ['birads_score', 'recommendation', 'findings', 'impression']:
+                    if field in df.columns:
+                        extracted_fields[field] = df.iloc[report_idx][field]
+                
+                # Run the report quality assessment
+                quality_assessment = assess_report_quality(report_text, extracted_fields)
+                
+                # Display overall score with a large metric
+                col1, col2 = st.columns([1, 2])
+                with col1:
+                    st.metric(
+                        "Overall Quality Score", 
+                        f"{quality_assessment['overall_score']}/100",
+                        delta=None
+                    )
+                    st.markdown(f"**Assessment:** {quality_assessment['assessment']}")
+                
+                # Display radar chart for the four metrics
+                with col2:
+                    # Create radar chart data
+                    categories = ['Completeness', 'Descriptiveness', 'Structure', 'Critical Elements']
+                    values = [
+                        quality_assessment['completeness'],
+                        quality_assessment['descriptiveness'],
+                        quality_assessment['structure'],
+                        quality_assessment['critical_elements']
+                    ]
+                    
+                    # Create figure with plotly
+                    fig = go.Figure()
+                    
+                    fig.add_trace(go.Scatterpolar(
+                        r=values,
+                        theta=categories,
+                        fill='toself',
+                        name='Report Quality'
+                    ))
+                    
+                    fig.update_layout(
+                        polar=dict(
+                            radialaxis=dict(
+                                visible=True,
+                                range=[0, 100]
+                            )
+                        ),
+                        title="Report Quality Metrics",
+                        showlegend=False
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                # Display issues and recommendations
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.subheader("Issues Identified")
+                    if quality_assessment['issues']:
+                        for issue in quality_assessment['issues']:
+                            st.markdown(f"- {issue}")
+                    else:
+                        st.success("No issues identified!")
+                
+                with col2:
+                    st.subheader("Recommendations")
+                    if quality_assessment['recommendations']:
+                        for rec in quality_assessment['recommendations']:
+                            st.markdown(f"- {rec}")
+                    else:
+                        st.success("No recommendations needed!")
+                
+                # Display the report text for reference
+                with st.expander("View Report Text", expanded=False):
+                    st.text_area("", report_text, height=300, key=f"report_text_{report_idx}")
+                
+                # Batch analysis section
+                st.subheader("Batch Quality Analysis")
+                
+                # Analyze all reports
+                if st.button("Analyze All Reports"):
+                    with st.spinner("Analyzing report quality across all documents..."):
+                        # Collect quality scores for all reports
+                        all_scores = []
+                        for i in range(len(df)):
+                            text = df.iloc[i]['raw_ocr_text']
+                            fields = {}
+                            for field in ['birads_score', 'recommendation', 'findings', 'impression', 'interpreting_provider']:
+                                if field in df.columns:
+                                    fields[field] = df.iloc[i][field]
+                            
+                            assessment = assess_report_quality(text, fields)
+                            report_data = {
+                                'report_num': i+1,
+                                'filename': df.iloc[i].get('filename', f'Document {i+1}'),
+                                'interpreting_provider': fields.get('interpreting_provider', 'Unknown Provider'),
+                                'overall_score': assessment['overall_score'],
+                                'completeness': assessment['completeness'],
+                                'descriptiveness': assessment['descriptiveness'],
+                                'structure': assessment['structure'],
+                                'critical_elements': assessment['critical_elements'],
+                                'has_birads': assessment['has_birads'],
+                                'has_measurements': assessment['has_measurements'],
+                                'has_recommendations': assessment['has_recommendations'],
+                                'issues': assessment['issues']
+                            }
+                            all_scores.append(report_data)
+                        
+                        # Create a DataFrame for visualization
+                        scores_df = pd.DataFrame([{k: v for k, v in score.items() if k != 'issues'} for score in all_scores])
+                        
+                        # Display the scores
+                        st.dataframe(scores_df)
+                        
+                        # Create a bar chart of overall scores
+                        fig = px.bar(
+                            scores_df, 
+                            x='report_num', 
+                            y='overall_score',
+                            title="Overall Quality Scores",
+                            labels={'report_num': 'Report Number', 'overall_score': 'Quality Score'},
+                            color='overall_score',
+                            color_continuous_scale='RdYlGn'
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Show average scores
+                        avg_scores = {
+                            'Overall': scores_df['overall_score'].mean(),
+                            'Completeness': scores_df['completeness'].mean(),
+                            'Descriptiveness': scores_df['descriptiveness'].mean(),
+                            'Structure': scores_df['structure'].mean(),
+                            'Critical Elements': scores_df['critical_elements'].mean()
+                        }
+                        
+                        # Display metrics in columns
+                        cols = st.columns(len(avg_scores))
+                        for i, (label, value) in enumerate(avg_scores.items()):
+                            cols[i].metric(label, f"{value:.1f}")
+                        
+                        # Provider Quality Analysis
+                        st.subheader("Provider Quality Analysis")
+                        
+                        # Check if we have provider information
+                        if 'interpreting_provider' in scores_df.columns:
+                            # Analyze provider quality
+                            provider_analysis = analyze_provider_quality(all_scores)
+                            
+                            if provider_analysis:
+                                # Create tabs for different providers
+                                provider_tabs = st.tabs(list(provider_analysis.keys()))
+                                
+                                # Show data for each provider
+                                for i, (provider, data) in enumerate(provider_analysis.items()):
+                                    with provider_tabs[i]:
+                                        # Provider summary
+                                        col1, col2, col3 = st.columns([1, 1, 2])
+                                        
+                                        with col1:
+                                            st.metric("Quality Score", f"{data['avg_quality']}/100")
+                                            st.metric("Report Count", data['report_count'])
+                                            st.markdown(f"**Grade: {data['grade']}**")
+                                            
+                                        with col2:
+                                            # Performance relative to average
+                                            delta_color = "normal" if data['relative_performance'] == 0 else "inverse" if data['relative_performance'] < 0 else "normal"
+                                            st.metric("vs. Average", f"{data['relative_performance']:+.1f}", delta=None)
+                                            
+                                            # BI-RADS usage
+                                            st.metric("BI-RADS Usage", f"{data['birads_usage']['percentage']}%")
+                                            
+                                            # Recommendations usage
+                                            st.metric("Recommendations", f"{data['recommendations_usage']['percentage']}%")
+                                        
+                                        with col3:
+                                            # Radar chart for quality metrics
+                                            categories = ['Completeness', 'Descriptiveness', 'Structure', 'Critical Elements']
+                                            values = [
+                                                data['avg_completeness'],
+                                                data['avg_descriptiveness'],
+                                                data['avg_structure'],
+                                                data['avg_critical_elements']
+                                            ]
+                                            
+                                            fig = go.Figure()
+                                            
+                                            fig.add_trace(go.Scatterpolar(
+                                                r=values,
+                                                theta=categories,
+                                                fill='toself',
+                                                name=provider
+                                            ))
+                                            
+                                            fig.update_layout(
+                                                polar=dict(
+                                                    radialaxis=dict(
+                                                        visible=True,
+                                                        range=[0, 100]
+                                                    )
+                                                ),
+                                                title=f"Quality Profile: {provider}",
+                                                showlegend=False
+                                            )
+                                            
+                                            st.plotly_chart(fig, use_container_width=True)
+                                        
+                                        # Top issues
+                                        st.subheader("Common Issues")
+                                        if data['top_issues']:
+                                            issues_df = pd.DataFrame([
+                                                {"Issue": issue, "Count": count} 
+                                                for issue, count in data['top_issues'].items()
+                                            ])
+                                            
+                                            # Bar chart of issues
+                                            fig = px.bar(
+                                                issues_df,
+                                                x="Issue",
+                                                y="Count",
+                                                title="Most Common Issues",
+                                                color="Count",
+                                                color_continuous_scale="Reds"
+                                            )
+                                            st.plotly_chart(fig, use_container_width=True)
+                                        else:
+                                            st.info("No common issues found.")
+                                            
+                                # Provider comparison
+                                st.subheader("Provider Comparison")
+                                
+                                # Create comparison dataframe
+                                comparison_data = []
+                                for provider, data in provider_analysis.items():
+                                    comparison_data.append({
+                                        "Provider": provider,
+                                        "Quality Score": data['avg_quality'],
+                                        "Grade": data['grade'],
+                                        "Reports": data['report_count'],
+                                        "BI-RADS Usage": f"{data['birads_usage']['percentage']}%",
+                                        "Recommendations": f"{data['recommendations_usage']['percentage']}%",
+                                        "vs. Average": data['relative_performance']
+                                    })
+                                
+                                comparison_df = pd.DataFrame(comparison_data)
+                                st.dataframe(comparison_df)
+                                
+                                # Bar chart comparing providers
+                                fig = px.bar(
+                                    comparison_df,
+                                    x="Provider",
+                                    y="Quality Score",
+                                    color="Grade",
+                                    title="Provider Quality Comparison",
+                                    color_discrete_map={
+                                        "A": "#2ecc71",  # Green
+                                        "B": "#3498db",  # Blue
+                                        "C": "#f1c40f",  # Yellow
+                                        "D": "#e67e22",  # Orange
+                                        "F": "#e74c3c"   # Red
+                                    }
+                                )
+                                st.plotly_chart(fig, use_container_width=True)
+                            else:
+                                st.info("No provider data available for analysis.")
+                        else:
+                            st.info("Provider information not available in the dataset.")
+            else:
+                st.warning("No report text available for quality analysis. Please upload documents first.")
     else:
         # No data available
         st.info("No processed documents available for analysis. Please process documents in the OCR Processing tab first.")
