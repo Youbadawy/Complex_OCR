@@ -1,563 +1,652 @@
 """
-Validation module for Medical Report Processor application.
-This module provides functionality to validate and cross-check extracted report data.
+Validation pipeline for medical report extraction.
+
+This module provides functionality for validating and cross-checking extracted 
+information from medical reports, enabling the resolution of conflicts between 
+different extraction methods and ensuring consistency in the final data.
 """
 
 import re
 import logging
-import json
-from typing import Dict, Any, List, Optional, Union, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 import datetime
+from dataclasses import dataclass
 
-# Setup logger
+# Set up logger
 logger = logging.getLogger(__name__)
 
-# Import LLM extraction functionality if available
-try:
-    from .llm_extraction import extract_with_llm, enhance_extraction_with_llm
-    LLM_AVAILABLE = True
-except ImportError:
-    logger.warning("LLM extraction module not available")
-    LLM_AVAILABLE = False
+@dataclass
+class ValidationRule:
+    """A rule for validating extracted fields"""
+    field_name: str
+    validation_function: callable
+    description: str
+    severity: str = "warning"  # warning, error, info
     
-# Import the BIRADS extraction function
-try:
-    from .text_analysis import extract_birads_score
-except ImportError:
-    logger.warning("Could not import extract_birads_score")
-    def extract_birads_score(text):
-        return {'value': '', 'confidence': 0.0}
+    def __post_init__(self):
+        # Validate severity level
+        if self.severity not in ["warning", "error", "info"]:
+            raise ValueError(f"Invalid severity level: {self.severity}")
 
-class ValidationError(Exception):
-    """Base exception for validation errors"""
-    pass
-
-class InconsistentDataError(ValidationError):
-    """Exception raised when data is inconsistent"""
-    pass
-
-class MissingDataError(ValidationError):
-    """Exception raised when required data is missing"""
-    pass
-
-def is_valid_date(date_str: str) -> bool:
-    """
-    Check if a string is a valid date.
+class ValidationResult:
+    """Results from validation rules"""
     
-    Args:
-        date_str: Date string to validate
+    def __init__(self):
+        self.issues = []
+        self.modifications = {}
         
-    Returns:
-        Boolean indicating if date is valid
-    """
-    if not date_str or date_str == "Not Available":
-        return False
+    def add_issue(self, rule: ValidationRule, message: str, field_name: str, 
+                 original_value: Any, suggested_value: Any = None):
+        """
+        Add a validation issue
         
-    # Check for YYYY-MM-DD format
-    if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
-        try:
-            year, month, day = map(int, date_str.split('-'))
-            datetime.date(year, month, day)
-            return True
-        except ValueError:
-            return False
+        Args:
+            rule: The validation rule that was violated
+            message: Description of the issue
+            field_name: Name of the field with the issue
+            original_value: Original value of the field
+            suggested_value: Suggested correction (if any)
+        """
+        self.issues.append({
+            "rule_description": rule.description,
+            "severity": rule.severity,
+            "message": message,
+            "field": field_name,
+            "original_value": original_value,
+            "suggested_value": suggested_value
+        })
+        
+        # Store modification if a suggested value is provided
+        if suggested_value is not None:
+            self.modifications[field_name] = suggested_value
+    
+    def has_errors(self) -> bool:
+        """Check if there are any error-level issues"""
+        return any(issue["severity"] == "error" for issue in self.issues)
+    
+    def has_warnings(self) -> bool:
+        """Check if there are any warning-level issues"""
+        return any(issue["severity"] == "warning" for issue in self.issues)
+    
+    def get_modified_data(self, original_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Apply suggested modifications to the original data
+        
+        Args:
+            original_data: Original extracted data
             
-    return False
-
-def is_valid_birads(birads_str: str) -> bool:
-    """
-    Check if a string is a valid BIRADS score.
-    
-    Args:
-        birads_str: BIRADS string to validate
-        
-    Returns:
-        Boolean indicating if BIRADS score is valid
-    """
-    if not birads_str or birads_str == "Not Available":
-        return False
-        
-    # Check for BIRADS X format
-    if re.match(r'^BIRADS\s*[0-6][a-c]?$', birads_str, re.IGNORECASE):
-        return True
-        
-    return False
-
-def is_valid_exam_type(exam_type: str) -> bool:
-    """
-    Check if a string is a valid exam type.
-    
-    Args:
-        exam_type: Exam type string to validate
-        
-    Returns:
-        Boolean indicating if exam type is valid
-    """
-    if not exam_type or exam_type == "Not Available":
-        return False
-        
-    valid_types = ["MAMMOGRAM", "ULTRASOUND", "MRI", "TOMOSYNTHESIS", "BIOPSY"]
-    
-    for valid_type in valid_types:
-        if valid_type in exam_type.upper():
-            return True
-            
-    return False
-
-def normalize_date(date_str: str) -> str:
-    """
-    Normalize date to YYYY-MM-DD format.
-    
-    Args:
-        date_str: Date string to normalize
-        
-    Returns:
-        Normalized date string
-    """
-    if not date_str or date_str == "Not Available":
-        return date_str
-        
-    # Already in YYYY-MM-DD format
-    if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
-        return date_str
-        
-    # Try to parse MM/DD/YYYY format
-    if re.match(r'^\d{1,2}/\d{1,2}/\d{4}$', date_str):
-        month, day, year = map(int, date_str.split('/'))
-        return f"{year:04d}-{month:02d}-{day:02d}"
-        
-    # Try to parse DD/MM/YYYY format
-    if re.match(r'^\d{1,2}/\d{1,2}/\d{4}$', date_str):
-        day, month, year = map(int, date_str.split('/'))
-        return f"{year:04d}-{month:02d}-{day:02d}"
-        
-    # Try to parse Month DD, YYYY format
-    match = re.match(r'^([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})$', date_str)
-    if match:
-        month_str, day, year = match.groups()
-        month_map = {
-            "january": 1, "february": 2, "march": 3, "april": 4,
-            "may": 5, "june": 6, "july": 7, "august": 8,
-            "september": 9, "october": 10, "november": 11, "december": 12,
-            "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
-            "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12
-        }
-        month = month_map.get(month_str.lower(), 1)
-        return f"{int(year):04d}-{month:02d}-{int(day):02d}"
-        
-    # Return original if we can't normalize
-    return date_str
-
-def normalize_birads(birads_str: str) -> str:
-    """
-    Normalize BIRADS score to standard format.
-    
-    Args:
-        birads_str: BIRADS string to normalize
-        
-    Returns:
-        Normalized BIRADS string
-    """
-    if not birads_str or birads_str == "Not Available":
-        return birads_str
-        
-    # Extract BIRADS number and optional letter
-    match = re.search(r'[^0-6]*([0-6])([a-c])?', birads_str, re.IGNORECASE)
-    if match:
-        number = match.group(1)
-        letter = match.group(2) or ""
-        return f"BIRADS {number}{letter.lower()}"
-        
-    # Return original if we can't normalize
-    return birads_str
-
-def normalize_exam_type(exam_type: str) -> str:
-    """
-    Normalize exam type to standard format.
-    
-    Args:
-        exam_type: Exam type string to normalize
-        
-    Returns:
-        Normalized exam type string
-    """
-    if not exam_type or exam_type == "Not Available":
-        return exam_type
-        
-    # Map common variations to standard types
-    type_map = {
-        "MAMMOGRAM": ["MAMMOGRAPHY", "MAMMO", "BILATERAL MAMMOGRAM", "SCREENING MAMMOGRAM"],
-        "ULTRASOUND": ["US", "SONOGRAPHY", "SONOGRAM", "BREAST US"],
-        "MRI": ["MAGNETIC RESONANCE IMAGING", "MR"],
-        "TOMOSYNTHESIS": ["TOMO", "3D MAMMOGRAM", "3D MAMMO", "3D"],
-        "BIOPSY": ["CORE BIOPSY", "NEEDLE BIOPSY", "FNA"]
-    }
-    
-    exam_upper = exam_type.upper()
-    
-    for standard_type, variations in type_map.items():
-        if standard_type in exam_upper:
-            return standard_type
-            
-        for variation in variations:
-            if variation in exam_upper:
-                return standard_type
-                
-    # Return original if we can't normalize
-    return exam_type
-
-def check_birads_impression_consistency(birads: str, impression: str) -> bool:
-    """
-    Check if BIRADS score is consistent with impression text.
-    
-    Args:
-        birads: BIRADS score
-        impression: Impression text
-        
-    Returns:
-        Boolean indicating if BIRADS is consistent with impression
-    """
-    if not birads or birads == "Not Available" or not impression:
-        return True  # Can't check consistency
-        
-    birads_value = re.search(r'[^0-6]*([0-6])', birads)
-    if not birads_value:
-        return True  # Can't extract BIRADS number
-        
-    birads_num = birads_value.group(1)
-    
-    # Map BIRADS scores to keywords
-    consistency_map = {
-        "0": ["incomplete", "additional", "additional imaging", "additional evaluation"],
-        "1": ["negative", "normal", "no evidence", "unremarkable"],
-        "2": ["benign", "no suspicious", "typical", "usual", "unchanged", "stable", "no concern"],
-        "3": ["probably benign", "likely benign", "short-term follow", "follow up in 6"],
-        "4": ["suspicious", "suspicious for malignancy", "biopsy", "recommend biopsy"],
-        "5": ["highly suspicious", "highly suggestive", "malignancy", "consider biopsy"],
-        "6": ["known malignancy", "biopsy proven", "proven malignancy"]
-    }
-    
-    # Check if impression contains keywords consistent with BIRADS
-    if any(keyword in impression.lower() for keyword in consistency_map.get(birads_num, [])):
-        return True
-    
-    # Check if impression contains contradictory keywords
-    contradictory_scores = {k: v for k, v in consistency_map.items() if k != birads_num}
-    for score, keywords in contradictory_scores.items():
-        if any(keyword in impression.lower() for keyword in keywords):
-            contradictions = [kw for kw in keywords if kw in impression.lower()]
-            logger.warning(f"BIRADS {birads_num} contradicts impression: {contradictions}")
-            return False
-            
-    # Default to True if no clear contradiction
-    return True
-
-def extract_birads_from_impression(impression: str) -> str:
-    """
-    Extract BIRADS score from impression text when missing.
-    
-    Args:
-        impression: Impression text
-        
-    Returns:
-        Extracted BIRADS score or empty string
-    """
-    if not impression:
-        return ""
-        
-    # First try direct extraction
-    birads_result = extract_birads_score(impression)
-    if birads_result['value']:
-        return birads_result['value']
-        
-    # Then try keyword-based extraction
-    keyword_map = {
-        "negative": "BIRADS 1",
-        "normal": "BIRADS 1",
-        "no evidence of malignancy": "BIRADS 1",
-        "benign": "BIRADS 2", 
-        "stable": "BIRADS 2",
-        "no suspicious": "BIRADS 2",
-        "probably benign": "BIRADS 3",
-        "likely benign": "BIRADS 3",
-        "suspicious": "BIRADS 4",
-        "recommend biopsy": "BIRADS 4",
-        "highly suspicious": "BIRADS 5",
-        "highly suggestive": "BIRADS 5",
-        "known malignancy": "BIRADS 6",
-        "biopsy proven": "BIRADS 6"
-    }
-    
-    for keyword, birads in keyword_map.items():
-        if keyword in impression.lower():
-            logger.info(f"Inferred {birads} from impression text containing '{keyword}'")
-            return birads
-            
-    return ""
-
-def resolve_field_conflicts(
-    field_name: str, 
-    values: List[str], 
-    confidence_scores: Optional[List[float]] = None
-) -> str:
-    """
-    Resolve conflicts between different values for the same field.
-    
-    Args:
-        field_name: Name of the field
-        values: List of different values for the field
-        confidence_scores: Optional list of confidence scores for each value
-        
-    Returns:
-        Resolved field value
-    """
-    # Filter out empty values and "Not Available"
-    filtered_values = [v for v in values if v and v != "Not Available"]
-    
-    if not filtered_values:
-        return "Not Available"
-        
-    if len(filtered_values) == 1:
-        return filtered_values[0]
-        
-    # If we have confidence scores, use the value with highest confidence
-    if confidence_scores and len(confidence_scores) == len(values):
-        valid_values = [(v, c) for v, c in zip(values, confidence_scores) if v and v != "Not Available"]
-        if valid_values:
-            best_value, best_score = max(valid_values, key=lambda x: x[1])
-            logger.info(f"Resolved {field_name} conflict using confidence scores: {best_value} (confidence: {best_score})")
-            return best_value
-    
-    # Field-specific resolution logic
-    if field_name == "birads_score":
-        # Normalize all BIRADS values and check if they agree after normalization
-        normalized_values = [normalize_birads(v) for v in filtered_values]
-        if len(set(normalized_values)) == 1:
-            return normalized_values[0]
-            
-        # Prefer higher BIRADS if in conflict (conservative approach)
-        birads_numbers = []
-        for value in filtered_values:
-            match = re.search(r'[^0-6]*([0-6])', value)
-            if match:
-                birads_numbers.append(int(match.group(1)))
-                
-        if birads_numbers:
-            highest_birads = max(birads_numbers)
-            for value in filtered_values:
-                if str(highest_birads) in value:
-                    logger.info(f"Resolved BIRADS conflict by choosing highest value: {value}")
-                    return value
-                    
-    elif field_name == "exam_date":
-        # Try to normalize dates and see if they agree
-        normalized_dates = [normalize_date(v) for v in filtered_values]
-        if len(set(normalized_dates)) == 1:
-            return normalized_dates[0]
-            
-        # Prefer most recent date if multiple valid dates
-        valid_dates = []
-        for date_str in normalized_dates:
-            if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
-                try:
-                    year, month, day = map(int, date_str.split('-'))
-                    valid_dates.append((date_str, datetime.date(year, month, day)))
-                except ValueError:
-                    continue
-                    
-        if valid_dates:
-            most_recent = max(valid_dates, key=lambda x: x[1])
-            logger.info(f"Resolved date conflict by choosing most recent: {most_recent[0]}")
-            return most_recent[0]
-    
-    # Default: return the longest value as it might contain more information
-    longest_value = max(filtered_values, key=len)
-    logger.info(f"Resolved {field_name} conflict by choosing longest value: {longest_value}")
-    return longest_value
-
-def fix_impression_duplication(report_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Fix duplicate impression content in findings and other fields.
-    
-    Args:
-        report_data: Report data with possible impression duplication
-        
-    Returns:
-        Report data with fixed impression fields
-    """
-    fixed_data = report_data.copy()
-    
-    # Check if impression appears in findings
-    if fixed_data.get('impression') and fixed_data.get('findings'):
-        impression = fixed_data['impression']
-        findings = fixed_data['findings']
-        
-        # If impression text is duplicated in findings, remove it from findings
-        if impression in findings:
-            findings = findings.replace(impression, "").strip()
-            if findings:
-                fixed_data['findings'] = findings
+        Returns:
+            Modified data with corrections applied
+        """
+        modified_data = original_data.copy()
+        for field, value in self.modifications.items():
+            if field in modified_data:
+                if isinstance(modified_data[field], dict) and "value" in modified_data[field]:
+                    # Handle fields stored as {value: X, confidence: Y}
+                    modified_data[field]["value"] = value
+                    # Reduce confidence slightly since this is a correction
+                    if "confidence" in modified_data[field]:
+                        modified_data[field]["confidence"] *= 0.9
+                else:
+                    # Handle direct field values
+                    modified_data[field] = value
             else:
-                fixed_data['findings'] = "See impression section."
-                
-    # Check if recommendation appears in impression
-    if fixed_data.get('impression') and fixed_data.get('recommendation'):
-        impression = fixed_data['impression']
-        recommendation = fixed_data['recommendation']
+                # Add new field
+                modified_data[field] = value
         
-        # If recommendation text is duplicated in impression, remove it from impression
-        if recommendation in impression:
-            impression = impression.replace(recommendation, "").strip()
-            if impression:
-                fixed_data['impression'] = impression
-                
-    return fixed_data
+        return modified_data
 
-def augment_missing_fields(report_data: Dict[str, Any], raw_text: str) -> Dict[str, Any]:
+class ReportValidator:
     """
-    Try to fill in missing fields using available information.
+    Validator for medical report extracted data.
     
-    Args:
-        report_data: Report data with possible missing fields
-        raw_text: Original raw text
+    This class provides methods for validating extracted medical report data,
+    including cross-checking between different extraction methods, verifying 
+    format consistency, and ensuring field values are correct and consistent.
+    """
+    
+    def __init__(self):
+        """Initialize the validator with standard validation rules"""
+        self.rules = self._create_validation_rules()
+    
+    def _create_validation_rules(self) -> List[ValidationRule]:
+        """
+        Create the standard set of validation rules
         
-    Returns:
-        Augmented report data
-    """
-    augmented_data = report_data.copy()
+        Returns:
+            List of validation rules for medical reports
+        """
+        rules = []
+        
+        # BIRADS score validation
+        rules.append(ValidationRule(
+            field_name="birads_score",
+            validation_function=self._validate_birads_score,
+            description="BIRADS score should be in a valid format (BIRADS 0-6)",
+            severity="error"
+        ))
+        
+        # Date format validation
+        rules.append(ValidationRule(
+            field_name="exam_date",
+            validation_function=self._validate_date_format,
+            description="Date should be in YYYY-MM-DD format",
+            severity="warning"
+        ))
+        
+        # Provider name validation
+        rules.append(ValidationRule(
+            field_name="provider_name",
+            validation_function=self._validate_provider_name,
+            description="Provider name should have proper capitalization and spacing",
+            severity="info"
+        ))
+        
+        # Duplicate field detection (impression/findings)
+        rules.append(ValidationRule(
+            field_name="impression",
+            validation_function=self._validate_impression_vs_findings,
+            description="Impression should not be an exact duplicate of findings",
+            severity="warning"
+        ))
+        
+        # Content consistency validation
+        rules.append(ValidationRule(
+            field_name="content_consistency",
+            validation_function=self._validate_content_consistency,
+            description="Fields should be consistent with each other",
+            severity="warning"
+        ))
+        
+        return rules
     
-    # Try to extract BIRADS score from impression if missing
-    if augmented_data.get('birads_score') in ["", "Not Available"] and augmented_data.get('impression'):
-        birads = extract_birads_from_impression(augmented_data['impression'])
-        if birads:
-            augmented_data['birads_score'] = birads
-            logger.info(f"Extracted BIRADS {birads} from impression")
+    def _validate_birads_score(self, data: Dict[str, Any]) -> Tuple[bool, str, Any]:
+        """
+        Validate BIRADS score format and value
+        
+        Args:
+            data: Extracted report data
             
-    # Try to extract BIRADS score from raw text if still missing
-    if augmented_data.get('birads_score') in ["", "Not Available"]:
-        birads_result = extract_birads_score(raw_text)
-        if birads_result['value'] and birads_result['confidence'] >= 0.7:
-            augmented_data['birads_score'] = birads_result['value']
-            logger.info(f"Extracted BIRADS {birads_result['value']} from raw text")
+        Returns:
+            Tuple of (is_valid, message, suggested_correction)
+        """
+        if "birads_score" not in data:
+            return True, "", None
             
-    # Use LLM as a last resort if available
-    if LLM_AVAILABLE and any(augmented_data.get(field) in ["", "Not Available"] for field in ['birads_score', 'impression', 'findings']):
+        birads_value = data["birads_score"].get("value", "") if isinstance(data["birads_score"], dict) else data["birads_score"]
+        
+        # Skip empty values
+        if not birads_value:
+            return True, "", None
+            
+        # Check format
+        if not re.match(r'BIRADS\s*[0-6][abc]?', birads_value, re.IGNORECASE):
+            # Try to extract a valid format from what we have
+            match = re.search(r'[0-6][abc]?', birads_value)
+            if match:
+                suggested = f"BIRADS {match.group(0)}"
+                return False, f"Invalid BIRADS format: '{birads_value}'", suggested
+            else:
+                return False, f"Invalid BIRADS format: '{birads_value}'", None
+                
+        # Normalize to standard format
+        normalized = re.sub(r'BIRADS\s+', 'BIRADS ', birads_value, flags=re.IGNORECASE)
+        if normalized.upper() != birads_value.upper():
+            return False, f"Non-standard BIRADS format: '{birads_value}'", normalized
+            
+        return True, "", None
+    
+    def _validate_date_format(self, data: Dict[str, Any]) -> Tuple[bool, str, Any]:
+        """
+        Validate date format
+        
+        Args:
+            data: Extracted report data
+            
+        Returns:
+            Tuple of (is_valid, message, suggested_correction)
+        """
+        if "exam_date" not in data:
+            return True, "", None
+            
+        date_value = data["exam_date"].get("value", "") if isinstance(data["exam_date"], dict) else data["exam_date"]
+        
+        # Skip empty values
+        if not date_value:
+            return True, "", None
+            
+        # Try to parse different date formats and normalize
         try:
-            augmented_data = enhance_extraction_with_llm(augmented_data, raw_text)
-            logger.info("Enhanced extraction with LLM")
-        except Exception as e:
-            logger.error(f"LLM enhancement failed: {str(e)}")
+            # Check if already in ISO format
+            if re.match(r'\d{4}-\d{2}-\d{2}', date_value):
+                # Verify it's a valid date
+                year, month, day = map(int, date_value.split('-'))
+                datetime.date(year, month, day)  # Will raise ValueError if invalid
+                return True, "", None
+                
+            # Try MM/DD/YYYY format
+            match = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})', date_value)
+            if match:
+                month, day, year = map(int, match.groups())
+                # Create date to validate
+                date_obj = datetime.date(year, month, day)
+                return False, f"Date not in ISO format: '{date_value}'", date_obj.isoformat()
+                
+            # Try DD-MM-YYYY format
+            match = re.match(r'(\d{1,2})-(\d{1,2})-(\d{4})', date_value)
+            if match:
+                day, month, year = map(int, match.groups())
+                # Create date to validate
+                date_obj = datetime.date(year, month, day)
+                return False, f"Date not in ISO format: '{date_value}'", date_obj.isoformat()
+                
+            # Try Month DD, YYYY format
+            match = re.match(r'([A-Za-z]+)\s+(\d{1,2}),?\s*(\d{4})', date_value)
+            if match:
+                month_name, day, year = match.groups()
+                month_mapping = {
+                    'january': 1, 'february': 2, 'march': 3, 'april': 4, 'may': 5, 'june': 6,
+                    'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12
+                }
+                month = month_mapping.get(month_name.lower())
+                if month:
+                    date_obj = datetime.date(int(year), month, int(day))
+                    return False, f"Date not in ISO format: '{date_value}'", date_obj.isoformat()
+                    
+            # Cannot parse the date
+            return False, f"Invalid date format: '{date_value}'", None
             
-    return augmented_data
+        except ValueError as e:
+            return False, f"Invalid date: '{date_value}' - {str(e)}", None
+    
+    def _validate_provider_name(self, data: Dict[str, Any]) -> Tuple[bool, str, Any]:
+        """
+        Validate provider name format
+        
+        Args:
+            data: Extracted report data
+            
+        Returns:
+            Tuple of (is_valid, message, suggested_correction)
+        """
+        if "provider_name" not in data:
+            return True, "", None
+            
+        provider_value = data["provider_name"].get("value", "") if isinstance(data["provider_name"], dict) else data["provider_name"]
+        
+        # Skip empty values
+        if not provider_value:
+            return True, "", None
+            
+        # Check for all uppercase or all lowercase
+        if provider_value.isupper() or provider_value.islower():
+            # Properly capitalize
+            words = provider_value.split()
+            capitalized = []
+            for word in words:
+                if word.lower() in ['md', 'do', 'pa', 'np', 'rn', 'phd']:
+                    capitalized.append(word.upper())
+                elif word.lower() in ['van', 'de', 'la', 'von', 'del']:
+                    capitalized.append(word.lower())
+                else:
+                    capitalized.append(word.capitalize())
+            
+            suggested = ' '.join(capitalized)
+            return False, f"Provider name formatting issues: '{provider_value}'", suggested
+            
+        return True, "", None
+    
+    def _validate_impression_vs_findings(self, data: Dict[str, Any]) -> Tuple[bool, str, Any]:
+        """
+        Validate impression field isn't duplicate of findings
+        
+        Args:
+            data: Extracted report data
+            
+        Returns:
+            Tuple of (is_valid, message, suggested_correction)
+        """
+        if "impression" not in data or "findings" not in data:
+            return True, "", None
+            
+        impression = data["impression"].get("value", "") if isinstance(data["impression"], dict) else data["impression"]
+        findings = data["findings"].get("value", "") if isinstance(data["findings"], dict) else data["findings"]
+        
+        # Skip empty values
+        if not impression or not findings:
+            return True, "", None
+            
+        # Check for duplicate content
+        if impression.strip() == findings.strip():
+            return False, "Impression is an exact duplicate of findings", None
+            
+        # Check for near-duplicate (>90% match)
+        impression_words = set(impression.lower().split())
+        findings_words = set(findings.lower().split())
+        
+        if impression_words and findings_words:
+            overlap = len(impression_words.intersection(findings_words))
+            similarity = overlap / min(len(impression_words), len(findings_words))
+            
+            if similarity > 0.9:
+                return False, f"Impression is very similar to findings (similarity: {similarity:.2f})", None
+                
+        return True, "", None
+    
+    def _validate_content_consistency(self, data: Dict[str, Any]) -> Tuple[bool, str, Any]:
+        """
+        Validate consistency between fields
+        
+        Args:
+            data: Extracted report data
+            
+        Returns:
+            Tuple of (is_valid, message, suggested_correction)
+        """
+        issues = []
+        
+        # Check BIRADS consistency with impression/findings
+        birads_value = ""
+        if "birads_score" in data:
+            birads_value = data["birads_score"].get("value", "") if isinstance(data["birads_score"], dict) else data["birads_score"]
+        
+        impression = ""
+        if "impression" in data:
+            impression = data["impression"].get("value", "") if isinstance(data["impression"], dict) else data["impression"]
+            
+        findings = ""
+        if "findings" in data:
+            findings = data["findings"].get("value", "") if isinstance(data["findings"], dict) else data["findings"]
+            
+        # If we have both BIRADS and impression/findings
+        if birads_value and (impression or findings):
+            birads_match = re.search(r'BIRADS\s*([0-6][abc]?)', birads_value, re.IGNORECASE)
+            if birads_match:
+                birads_number = birads_match.group(1)
+                
+                # Check if the birads number appears in impression or findings
+                combined_text = (impression + " " + findings).lower()
+                
+                # Look for variations like "category 4" or "bi-rads 4" in impression/findings
+                alt_patterns = [
+                    rf'bi-?rads\s*{birads_number}',
+                    rf'category\s*{birads_number}',
+                    rf'acr\s*{birads_number}'
+                ]
+                
+                matches_found = False
+                for pattern in alt_patterns:
+                    if re.search(pattern, combined_text, re.IGNORECASE):
+                        matches_found = True
+                        break
+                
+                # If BIRADS isn't mentioned in impression/findings when it should be
+                if not matches_found and birads_number not in ['0', '1']:
+                    issues.append(f"BIRADS score {birads_number} is not reflected in impression or findings")
+        
+        if issues:
+            return False, ", ".join(issues), None
+        
+        return True, "", None
+    
+    def validate(self, extracted_data: Dict[str, Any]) -> ValidationResult:
+        """
+        Validate extracted data against all rules
+        
+        Args:
+            extracted_data: The data extracted from a medical report
+            
+        Returns:
+            ValidationResult object with issues and suggested corrections
+        """
+        result = ValidationResult()
+        
+        # Apply each validation rule
+        for rule in self.rules:
+            try:
+                # Some rules operate on the entire data structure
+                if rule.field_name == "content_consistency":
+                    is_valid, message, suggested = rule.validation_function(extracted_data)
+                    if not is_valid:
+                        result.add_issue(rule, message, "multiple_fields", "N/A", suggested)
+                    continue
+                
+                # Skip rules for fields that don't exist in the data
+                if rule.field_name not in extracted_data:
+                    continue
+                
+                # Apply the validation rule
+                is_valid, message, suggested = rule.validation_function(extracted_data)
+                if not is_valid:
+                    field_value = extracted_data[rule.field_name]
+                    if isinstance(field_value, dict) and "value" in field_value:
+                        original_value = field_value["value"]
+                    else:
+                        original_value = field_value
+                        
+                    result.add_issue(rule, message, rule.field_name, original_value, suggested)
+            
+            except Exception as e:
+                logger.error(f"Error applying validation rule {rule.description}: {str(e)}")
+                
+        return result
 
-def validate_report_data(report_data: Dict[str, Any], raw_text: str) -> Dict[str, Any]:
+def validate_and_enhance_extraction(extraction_results: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Validate and clean report data.
+    Validate and enhance extraction results, applying corrections where needed.
     
     Args:
-        report_data: Report data to validate
-        raw_text: Original raw text
+        extraction_results: Data extracted from medical report text
         
     Returns:
-        Validated and cleaned report data
-        
-    Raises:
-        ValidationError: If validation fails and cannot be fixed
+        Enhanced and validated extraction results
     """
-    logger.info("Validating report data")
+    # Create validator
+    validator = ReportValidator()
     
-    # Create a copy of the data to avoid modifying the original
-    validated_data = report_data.copy()
+    # Run validation
+    validation_result = validator.validate(extraction_results)
     
-    # Step 1: Normalize fields
-    if 'exam_date' in validated_data:
-        validated_data['exam_date'] = normalize_date(validated_data['exam_date'])
+    # Apply suggested corrections
+    if validation_result.modifications:
+        logger.info(f"Applying {len(validation_result.modifications)} corrections to extracted data")
+        enhanced_data = validation_result.get_modified_data(extraction_results)
         
-    if 'birads_score' in validated_data:
-        validated_data['birads_score'] = normalize_birads(validated_data['birads_score'])
-        
-    if 'exam_type' in validated_data:
-        validated_data['exam_type'] = normalize_exam_type(validated_data['exam_type'])
-        
-    # Step 2: Fix impression duplication
-    validated_data = fix_impression_duplication(validated_data)
+        # Log validation issues
+        for issue in validation_result.issues:
+            if issue["severity"] == "error":
+                logger.error(f"Validation error: {issue['message']}")
+            elif issue["severity"] == "warning":
+                logger.warning(f"Validation warning: {issue['message']}")
+            else:
+                logger.info(f"Validation info: {issue['message']}")
+                
+        return enhanced_data
     
-    # Step 3: Check for birads-impression consistency
-    if ('birads_score' in validated_data and 'impression' in validated_data and 
-            validated_data['birads_score'] not in ["", "Not Available"] and 
-            validated_data['impression'] not in ["", "Not Available"]):
-        if not check_birads_impression_consistency(validated_data['birads_score'], validated_data['impression']):
-            logger.warning(f"BIRADS score {validated_data['birads_score']} inconsistent with impression")
+    # No modifications needed
+    return extraction_results
+
+def cross_validate_extractions(rule_based_results: Dict[str, Any], 
+                              llm_based_results: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Cross-validate and merge results from different extraction methods.
+    
+    Args:
+        rule_based_results: Results from rule-based extraction
+        llm_based_results: Results from LLM-based extraction
+        
+    Returns:
+        Merged and cross-validated results
+    """
+    if not rule_based_results and not llm_based_results:
+        logger.warning("Both extraction results are empty")
+        return {}
+        
+    if not rule_based_results:
+        logger.info("Only LLM-based results available")
+        return validate_and_enhance_extraction(llm_based_results)
+        
+    if not llm_based_results:
+        logger.info("Only rule-based results available")
+        return validate_and_enhance_extraction(rule_based_results)
+    
+    # Start with rule-based results as baseline
+    merged_results = rule_based_results.copy()
+    
+    # Track conflicts for logging
+    conflicts = []
+    
+    # Merge fields from LLM extraction, prioritizing based on confidence
+    for field, llm_value in llm_based_results.items():
+        # Skip if LLM didn't extract this field
+        if not llm_value:
+            continue
             
-            # Extract BIRADS from impression as a second opinion
-            impression_birads = extract_birads_from_impression(validated_data['impression'])
+        # Different handling based on whether the field exists in rule-based results
+        if field not in merged_results or not merged_results[field]:
+            # Field missing in rule-based results, use LLM result
+            logger.debug(f"Using LLM extraction for missing field: {field}")
+            merged_results[field] = llm_value
+        else:
+            # Both extractions have this field, compare and choose best
+            rule_value = merged_results[field]
             
-            if impression_birads and impression_birads != validated_data['birads_score']:
-                # Resolve conflict
-                logger.info(f"BIRADS conflict: {validated_data['birads_score']} vs {impression_birads}")
-                validated_data['birads_score'] = resolve_field_conflicts(
-                    'birads_score', 
-                    [validated_data['birads_score'], impression_birads],
-                    [0.8, 0.9]  # Slightly prefer impression-derived BIRADS
-                )
+            # Handle different data structures
+            rule_confidence = 0.0
+            llm_confidence = 0.0
+            
+            if isinstance(rule_value, dict) and "confidence" in rule_value:
+                rule_confidence = rule_value["confidence"]
+                rule_text_value = rule_value.get("value", "")
+            else:
+                rule_text_value = rule_value
+                
+            if isinstance(llm_value, dict) and "confidence" in llm_value:
+                llm_confidence = llm_value["confidence"]
+                llm_text_value = llm_value.get("value", "")
+            else:
+                llm_text_value = llm_value
+            
+            # Compare values
+            if rule_text_value == llm_text_value:
+                # Values match, increase confidence
+                if isinstance(merged_results[field], dict) and "confidence" in merged_results[field]:
+                    merged_results[field]["confidence"] = min(0.99, merged_results[field]["confidence"] + 0.1)
+            else:
+                # Values don't match, use the one with higher confidence
+                if llm_confidence > rule_confidence:
+                    logger.debug(f"Using LLM extraction for field {field} due to higher confidence")
+                    merged_results[field] = llm_value
+                    conflicts.append(f"Field '{field}': Rule='{rule_text_value}', LLM='{llm_text_value}' (chose LLM)")
+                else:
+                    conflicts.append(f"Field '{field}': Rule='{rule_text_value}', LLM='{llm_text_value}' (kept Rule)")
     
-    # Step 4: Augment missing fields
-    validated_data = augment_missing_fields(validated_data, raw_text)
+    # Log conflicts for debugging
+    if conflicts:
+        logger.info(f"Resolved {len(conflicts)} conflicts between extraction methods")
+        for conflict in conflicts:
+            logger.debug(f"Conflict resolution: {conflict}")
     
-    logger.info("Report data validation complete")
+    # Validate the merged results
+    return validate_and_enhance_extraction(merged_results)
+
+def validate_report_data(extracted_data: Dict[str, Any], raw_text: str = None) -> Dict[str, Any]:
+    """
+    Validate and enhance extracted report data.
+    
+    Args:
+        extracted_data: Dictionary of extracted fields
+        raw_text: Optional raw text for additional validation
+        
+    Returns:
+        Dictionary with validated and enhanced data
+    """
+    logger.info("Validating extracted report data")
+    
+    # Create a copy to avoid modifying the original
+    validated_data = extracted_data.copy()
+    
+    # Apply validation rules
+    validation_result = apply_validation_rules(validated_data, raw_text)
+    
+    # Apply suggested modifications from validation
+    for field, value in validation_result.modifications.items():
+        validated_data[field] = value
+        logger.debug(f"Modified field '{field}' based on validation")
+    
+    # Log validation issues
+    for issue in validation_result.issues:
+        if issue['rule'].severity == 'error':
+            logger.error(f"Validation error in {issue['field_name']}: {issue['message']}")
+        elif issue['rule'].severity == 'warning':
+            logger.warning(f"Validation warning in {issue['field_name']}: {issue['message']}")
+        else:
+            logger.info(f"Validation note for {issue['field_name']}: {issue['message']}")
+    
+    # Enhance data with additional processing
+    validated_data = enhance_extracted_data(validated_data, raw_text)
+    
     return validated_data
 
 def extract_and_validate_report(raw_text: str) -> Dict[str, Any]:
     """
-    Extract and validate report data from raw text.
+    Extract and validate information from a medical report.
     
-    This function combines extraction and validation in a single step,
-    using traditional extraction methods first, then LLM if needed.
+    This function combines extraction and validation in a single step.
     
     Args:
-        raw_text: Raw OCR text
+        raw_text: Raw text from the medical report
         
     Returns:
-        Validated report data
+        Dictionary with extracted and validated data
     """
-    from .text_analysis import process_document_text
+    logger.info("Extracting and validating report data")
     
-    try:
-        # First use traditional extraction methods
-        logger.info("Extracting report data with traditional methods")
-        extracted_data = process_document_text(raw_text)
+    # Import here to avoid circular imports
+    from .text_analysis import extract_structured_data
+    
+    # Extract structured data
+    extracted_data = extract_structured_data(raw_text)
+    
+    # Validate and enhance the extracted data
+    validated_data = validate_report_data(extracted_data, raw_text)
+    
+    return validated_data
+
+def apply_validation_rules(data: Dict[str, Any], raw_text: str = None) -> ValidationResult:
+    """
+    Apply validation rules to extracted data.
+    
+    Args:
+        data: Dictionary of extracted fields
+        raw_text: Optional raw text for additional validation
         
-        # Validate and enhance the extracted data
-        logger.info("Validating and enhancing extracted data")
-        validated_data = validate_report_data(extracted_data, raw_text)
+    Returns:
+        ValidationResult object with issues and suggested modifications
+    """
+    # Create validation result object
+    result = ValidationResult()
+    
+    # Simple implementation for now
+    logger.info("Applying validation rules to extracted data")
+    
+    return result
+
+def enhance_extracted_data(data: Dict[str, Any], raw_text: str = None) -> Dict[str, Any]:
+    """
+    Enhance extracted data with additional processing.
+    
+    Args:
+        data: Dictionary of extracted fields
+        raw_text: Optional raw text for additional enhancement
         
-        # If critical fields are still missing, try LLM extraction
-        critical_fields = ["exam_date", "exam_type", "birads_score", "impression"]
-        missing_fields = [field for field in critical_fields 
-                         if field not in validated_data or 
-                         validated_data[field] in ["", "Not Available"]]
-        
-        if missing_fields and LLM_AVAILABLE:
-            logger.info(f"Critical fields still missing: {missing_fields}")
-            logger.info("Trying LLM extraction")
-            
-            try:
-                llm_data = extract_with_llm(raw_text, "full")
-                
-                # Merge LLM-extracted data with validated data, prioritizing LLM for missing fields
-                for field in missing_fields:
-                    if field in llm_data and llm_data[field]:
-                        validated_data[field] = llm_data[field]
-                        logger.info(f"LLM extracted {field}: {llm_data[field]}")
-                
-                # Re-validate the merged data
-                validated_data = validate_report_data(validated_data, raw_text)
-                
-            except Exception as e:
-                logger.error(f"LLM extraction failed: {str(e)}")
-        
-        return validated_data
-        
-    except Exception as e:
-        logger.error(f"Error in extract_and_validate_report: {str(e)}")
-        raise 
+    Returns:
+        Enhanced data dictionary
+    """
+    # Create a copy to avoid modifying the original
+    enhanced = data.copy()
+    
+    # Simple implementation for now
+    logger.info("Enhancing extracted data")
+    
+    return enhanced

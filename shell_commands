@@ -1,0 +1,2 @@
+mkdir -p src/models src/document_processing src/database src/api src/ui
+touch src/models/__init__.py src/document_processing/__init__.py src/database/__init__.py src/api/__init__.py src/ui/__init__.py 

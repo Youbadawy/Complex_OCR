@@ -19,9 +19,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Import processing modules
-from .pdf_processor import process_pdf, extract_text_from_pdf
+from .pdf_processor import process_pdf
 from .text_analysis import process_document_text
 from .report_validation import validate_report_data, extract_and_validate_report
+
+# Import our enhanced extraction pipeline
+try:
+    from .extraction_pipeline import ExtractionPipeline, extract_all_fields_from_text
+    from .multilingual_extraction import detect_language
+    PIPELINE_AVAILABLE = True
+    logger.info("Enhanced extraction pipeline is available")
+except ImportError as e:
+    logger.warning(f"Enhanced extraction pipeline not available: {str(e)}")
+    PIPELINE_AVAILABLE = False
 
 # Check if LLM integration is available
 try:
@@ -65,7 +75,28 @@ def process_single_report(pdf_path: str, use_llm: bool = True) -> Dict[str, Any]
         
         # Step 1: Extract text from PDF
         try:
-            raw_text = extract_text_from_pdf(pdf_path)
+            # Use process_pdf to get the extracted text
+            if os.path.exists(pdf_path):
+                with open(pdf_path, 'rb') as file:
+                    try:
+                        # Try to handle different return formats from process_pdf
+                        result = process_pdf(file)
+                        
+                        # Check if result is a tuple (result, metadata)
+                        if isinstance(result, tuple) and len(result) >= 1:
+                            raw_text = result[0].get('raw_text', '')
+                        # Check if result is a dictionary
+                        elif isinstance(result, dict):
+                            raw_text = result.get('raw_text', '')
+                        else:
+                            raw_text = str(result)
+                    except Exception as e:
+                        logger.error(f"Error processing PDF: {str(e)}")
+                        raise PDFProcessingError(f"Error processing PDF: {str(e)}")
+            else:
+                logger.warning(f"File not found: {pdf_path}")
+                raise PDFProcessingError(f"File not found: {pdf_path}")
+                
             if not raw_text:
                 logger.warning(f"No text extracted from {pdf_path}")
                 raise PDFProcessingError(f"No text extracted from {pdf_path}")
@@ -74,15 +105,27 @@ def process_single_report(pdf_path: str, use_llm: bool = True) -> Dict[str, Any]
             logger.error(f"Error extracting text from PDF: {str(e)}")
             raise PDFProcessingError(f"Error extracting text from PDF: {str(e)}")
         
-        # Step 2: Process the raw text using conventional methods
+        # Step 2: Process the raw text using our extraction pipeline if available
         try:
-            extracted_data = process_document_text(raw_text)
-            logger.info("Basic extraction completed")
+            if PIPELINE_AVAILABLE:
+                logger.info("Using enhanced multilingual extraction pipeline")
+                # Detect language first for logging
+                language = detect_language(raw_text)
+                logger.info(f"Detected language: {language}")
+                
+                # Use our comprehensive extraction pipeline
+                extracted_data = extract_all_fields_from_text(raw_text)
+                logger.info("Enhanced extraction pipeline completed")
+            else:
+                # Fallback to legacy extraction
+                logger.info("Using legacy extraction method")
+                extracted_data = process_document_text(raw_text)
+                logger.info("Basic extraction completed")
         except Exception as e:
             logger.error(f"Error in text processing: {str(e)}")
             raise TextProcessingError(f"Error in text processing: {str(e)}")
         
-        # Step 3: Validate and enhance the extracted data
+        # Step 3: Validate the extracted data
         try:
             validated_data = validate_report_data(extracted_data, raw_text)
             logger.info("Validation completed")
@@ -119,24 +162,14 @@ def process_single_report(pdf_path: str, use_llm: bool = True) -> Dict[str, Any]
         validated_data['processing_status'] = 'success'
         
         return validated_data
-    
-    except ProcessingError as e:
-        # Return partial data with error status
-        return {
-            'source_file': os.path.basename(pdf_path),
-            'processing_status': 'error',
-            'error_message': str(e)
-        }
+        
+    except ProcessingError:
+        # Re-raise ProcessingError for specific handling
+        raise
     except Exception as e:
-        # Catch any unexpected errors
-        error_msg = f"Unexpected error processing {pdf_path}: {str(e)}"
-        logger.error(error_msg)
+        logger.error(f"Unexpected error processing report: {str(e)}")
         logger.error(traceback.format_exc())
-        return {
-            'source_file': os.path.basename(pdf_path),
-            'processing_status': 'error',
-            'error_message': error_msg
-        }
+        raise ProcessingError(f"Failed to process report: {str(e)}")
 
 def process_directory(directory_path: str, output_file: str = None, use_llm: bool = True) -> pd.DataFrame:
     """

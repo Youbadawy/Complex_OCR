@@ -6634,3 +6634,403 @@ UnboundLocalError: local variable 're' referenced before assignment
 2025-02-26 21:40:21,599 - WARNING - Failed to parse findings JSON: Expecting value: line 1 column 1 (char 0)
 2025-02-26 21:40:21,599 - WARNING - Failed to parse findings JSON: Expecting value: line 1 column 1 (char 0)
 2025-02-26 21:40:22,939 - INFO - Database initialized successfully
+2025-02-27 13:04:47,485 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 13:04:48,287 - INFO - Database initialized successfully
+2025-02-27 13:07:08,127 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 13:07:08,159 - INFO - Database initialized successfully
+2025-02-27 13:07:11,672 - INFO - Using cached results for Eng Example 3.pdf
+2025-02-27 13:07:11,672 - INFO - Using cached results for Eng Example 4.pdf
+2025-02-27 13:07:11,672 - ERROR - Cache lookup error: the JSON object must be str, bytes or bytearray, not NoneType
+2025-02-27 13:07:11,925 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 13:07:13,273 - INFO - Extracted text from page 1 using OCR fallback
+2025-02-27 13:07:13,273 - INFO - Combined text length: 1499 characters
+2025-02-27 13:07:13,273 - INFO - Text sample: Patient: Scan-Mammo Bilat Screen w/ Tomosynthesis Ta: Printed on: Printed by: PROTECTED B Page: 1 of 1 2023-10-25 16:00:16 EDT {780}450-9551 From: MIC Medical Imaging 2023-10-25 Wed 13:58 Medical Imag...
+2025-02-27 13:07:13,273 - INFO - Document is deidentified, using standard patient name
+2025-02-27 13:07:13,311 - INFO - Missing fields: ['birads_score'], trying fallback extraction
+2025-02-27 13:07:13,311 - INFO - Updated birads_score from fallback: BIRADS mentioned
+2025-02-27 13:07:13,311 - INFO - Provider and signature fields match, increasing confidence
+2025-02-27 13:07:13,311 - WARNING - Could not parse date: 25
+2025-02-27 13:07:13,311 - INFO - Extraction results: {"birads_score": "Not Available", "document_date": "2023-10-25", "document_type": "Mammo", "electronically_signed_by": "Not Available", "exam_date": "Not Available", "impression_result": "No mammographic evidence of malignancy. Annual screening is recommended for patients of this age once mammography has begun Recommendation: Screening in 1 year. BI-RADS: 1. October is Breast Cancer Awareness month, and we wanted to bring attention to the recently changed breast cancer screening guidelines for Alberta women. Women aged 45-74 are encouraged to attend and can now self-refer for routine breast cancer screening every 1-2 years. Women aged 40-44 are encouraged to discuss breast cancer screening with their primary care physician and may request a requisition. After the first requisition, women 40-44 can self-refer annually, Electronically Signed: Jason Novak 10/25/2023 1:50 PM MDT Page 1 of 1 2024-04-10 09:17 Gail Greer PROTEGE B Document Date: 2023-10-25 CFHS/SSFC Page: 17", "mammogram_results": "Density: ACR Category B: There are scattered areas of fibroglandular density. No mass, architectural distortion or microcalcifications IMPRESSION: No mammographic evidence of malignancy. Annual screening is recommended for patients of this age once mammography has begun Recommendation: Screening in 1 year. BI-RADS: 1. October is Breast Cancer Awareness month, and we wanted to bring attention to the recently changed breast cancer screening guidelines for Alberta women. Women aged 45-74 are encouraged to attend and can now self-refer for routine breast cancer screening every 1-2 years. Women aged 40-44 are encouraged to discuss breast cancer screening with their primary care physician and may request a requisition. After the first requisition, women 40-44 can self-refer annually, Electronically Signed: Jason Novak 10/25/2023 1:50 PM MDT Page 1 of 1 2024-04-10 09:17 Gail Greer PROTEGE B Document Date: 2023-10-25 CFHS/SSFC Page: 17", "patient_history": "Screening. Aunt diagnosed with postmenopausal breast cancer. COMPARISON: None. Baseline. FINDINGS: Density: ACR Category B: There are scattered areas of fibroglandular density. No mass, architectural distortion or microcalcifications IMPRESSION: No mammographic evidence of malignancy. Annual screening is recommended for patients of this age once mammography has begun Recommendation: Screening in 1 year. BI-RADS: 1. October is Breast Cancer Awareness month, and we wanted to bring attention to the recently changed breast cancer screening guidelines for Alberta women. Women aged 45-74 are encouraged to attend and can now self-refer for routine breast cancer screening every 1-2 years. Women aged 40-44 are encouraged to discuss breast cancer screening with their primary care physician and may request a requisition. After the first requisition, women 40-44 can self-refer annually, Electronically Signed: Jason Novak 10/25/2023 1:50 PM MDT Page 1 of 1 2024-04-10 09:17 Gail Greer PROTEGE B Document Date: 2023-10-25 CFHS/SSFC Page: 17", "patient_name": "Deidentified", "recommendation": "Screening in 1 year. BI-RADS: 1. October is Breast Cancer Awareness month, and we wanted to bring attention to the recently changed breast cancer screening guidelines for Alberta women. Women aged 45-74 are encouraged to attend and can now self-refer for routine breast cancer screening every 1-2 years. Women aged 40-44 are encouraged to discuss breast cancer screening with their primary care physician and may request a requisition. After the first requisition, women 40-44 can self-refer annually, Electronically Signed: Jason Novak 10/25/2023 1:50 PM MDT Page 1 of 1 2024-04-10 09:17 Gail Greer PROTEGE B Document Date: 2023-10-25 CFHS/SSFC Page: 17", "testing_provider": "Not Available", "ultrasound_results": "Not Available", "additional_information": "", "is_deidentified": true, "confidence_scores": {"ocr": 0.0, "nlp": 0.0}}
+2025-02-27 13:07:13,321 - INFO - Saved report to database: Eng Example 4.pdf
+2025-02-27 13:07:13,337 - INFO - Using cached results for Eng Example 2.pdf
+2025-02-27 13:07:13,748 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 13:07:14,239 - WARNING - Failed to parse findings JSON: Expecting value: line 1 column 1 (char 0)
+2025-02-27 13:07:14,239 - WARNING - Failed to parse findings JSON: Expecting value: line 1 column 1 (char 0)
+2025-02-27 13:07:14,239 - WARNING - Failed to parse findings JSON: Expecting value: line 1 column 1 (char 0)
+2025-02-27 13:07:14,836 - INFO - Database initialized successfully
+2025-02-27 17:42:43,416 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 17:42:44,282 - INFO - Database initialized successfully
+2025-02-27 17:43:00,279 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 17:43:00,293 - INFO - Database initialized successfully
+2025-02-27 17:43:01,712 - INFO - Using cached results for Eng Example 3.pdf
+2025-02-27 17:43:01,717 - INFO - Using cached results for Eng Example 4.pdf
+2025-02-27 17:43:01,717 - INFO - Using cached results for Eng Example 1.pdf
+2025-02-27 17:43:01,717 - INFO - Using cached results for Eng Example 2.pdf
+2025-02-27 17:43:03,746 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 17:43:05,561 - INFO - Database initialized successfully
+2025-02-27 17:43:31,394 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 17:43:32,071 - INFO - Database initialized successfully
+2025-02-27 17:48:19,161 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 17:48:23,290 - INFO - Database initialized successfully
+2025-02-27 17:48:32,540 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 17:48:32,562 - INFO - Database initialized successfully
+2025-02-27 17:48:33,879 - INFO - Using cached results for Eng Example 2.pdf
+2025-02-27 17:48:33,883 - INFO - Using cached results for Eng Example 3.pdf
+2025-02-27 17:48:33,883 - INFO - Using cached results for Eng Example 4.pdf
+2025-02-27 17:48:33,887 - INFO - Using cached results for Eng Example 1.pdf
+2025-02-27 17:48:34,346 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 17:48:46,810 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:11:23,620 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:11:25,003 - INFO - Database initialized successfully
+2025-02-27 18:12:48,722 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:12:48,784 - INFO - Database initialized successfully
+2025-02-27 18:12:50,025 - INFO - Using cached results for Eng Example 4.pdf
+2025-02-27 18:12:50,035 - INFO - Using cached results for Eng Example 1.pdf
+2025-02-27 18:12:50,048 - INFO - Using cached results for Eng Example 2.pdf
+2025-02-27 18:12:50,055 - INFO - Using cached results for Eng Example 3.pdf
+2025-02-27 18:12:51,468 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:18:52,501 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:18:53,900 - INFO - Database initialized successfully
+2025-02-27 18:21:27,341 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:21:27,423 - INFO - Database initialized successfully
+2025-02-27 18:21:31,566 - INFO - Using cached results for Eng Example 2.pdf
+2025-02-27 18:21:31,569 - INFO - Using cached results for Eng Example 3.pdf
+2025-02-27 18:21:31,571 - INFO - Using cached results for Eng Example 4.pdf
+2025-02-27 18:21:31,575 - INFO - Using cached results for Eng Example 1.pdf
+2025-02-27 18:21:32,014 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:21:33,566 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:30:38,008 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:30:38,387 - INFO - Database initialized successfully
+2025-02-27 18:32:03,551 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:32:03,584 - INFO - Database initialized successfully
+2025-02-27 18:32:04,973 - INFO - Using cached results for Eng Example 3.pdf
+2025-02-27 18:32:04,979 - INFO - Using cached results for Eng Example 4.pdf
+2025-02-27 18:32:04,983 - INFO - Using cached results for Eng Example 1.pdf
+2025-02-27 18:32:04,983 - INFO - Using cached results for Eng Example 2.pdf
+2025-02-27 18:32:05,626 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:32:09,478 - INFO - Database initialized successfully
+2025-02-27 18:41:49,749 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:41:49,914 - INFO - Database initialized successfully
+2025-02-27 18:47:40,818 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:47:40,847 - INFO - Database initialized successfully
+2025-02-27 18:47:41,676 - INFO - Using cached results for Eng Example 3.pdf
+2025-02-27 18:47:41,680 - INFO - Using cached results for Eng Example 4.pdf
+2025-02-27 18:47:41,684 - INFO - Using cached results for Eng Example 1.pdf
+2025-02-27 18:47:41,688 - INFO - Using cached results for Eng Example 2.pdf
+2025-02-27 18:47:42,305 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:47:45,879 - INFO - Database initialized successfully
+2025-02-27 18:47:52,143 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:47:55,012 - INFO - Database initialized successfully
+2025-02-27 18:52:46,863 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:52:46,873 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:52:47,529 - INFO - Database initialized successfully
+2025-02-27 18:52:47,534 - INFO - Database initialized successfully
+2025-02-27 18:53:00,953 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:53:00,985 - INFO - Database initialized successfully
+2025-02-27 18:53:02,431 - INFO - Using cached results for Eng Example 2.pdf
+2025-02-27 18:53:02,434 - INFO - Using cached results for Eng Example 3.pdf
+2025-02-27 18:53:02,437 - INFO - Using cached results for Eng Example 4.pdf
+2025-02-27 18:53:02,440 - INFO - Using cached results for Eng Example 1.pdf
+2025-02-27 18:53:03,076 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 18:53:06,298 - INFO - Database initialized successfully
+2025-02-27 19:05:32,896 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:05:33,419 - INFO - Database initialized successfully
+2025-02-27 19:13:13,416 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:13:13,411 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:13:17,178 - INFO - Database initialized successfully
+2025-02-27 19:13:17,198 - INFO - Database initialized successfully
+2025-02-27 19:14:04,941 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:14:05,030 - INFO - Database initialized successfully
+2025-02-27 19:14:06,200 - INFO - Using cached results for Eng Example 2.pdf
+2025-02-27 19:14:06,200 - INFO - Using cached results for Eng Example 3.pdf
+2025-02-27 19:14:06,200 - INFO - Using cached results for Eng Example 4.pdf
+2025-02-27 19:14:06,210 - INFO - Using cached results for Eng Example 1.pdf
+2025-02-27 19:14:06,800 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:14:10,089 - INFO - Database initialized successfully
+2025-02-27 19:14:19,879 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:14:21,471 - INFO - Using cached results for Eng Example 2.pdf
+2025-02-27 19:14:21,476 - INFO - Using cached results for Eng Example 3.pdf
+2025-02-27 19:14:21,480 - INFO - Using cached results for Eng Example 4.pdf
+2025-02-27 19:14:21,485 - INFO - Using cached results for Eng Example 1.pdf
+2025-02-27 19:14:21,969 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:14:24,240 - INFO - Extracted text from page 1 using OCR fallback
+2025-02-27 19:14:24,240 - INFO - Combined text length: 1423 characters
+2025-02-27 19:14:24,240 - INFO - Text sample: national Patient: PROTECTED B CFHS/SSFC Scan-Mammo MG Screening Mammo Bilateral Printed on: 2021-04-12 13:53 Printed by: Natalie Paille     Hépital Montfort Patient Name: Diagnostic Services - Imaging...
+2025-02-27 19:14:24,240 - INFO - Document is deidentified, using standard patient name
+2025-02-27 19:14:24,250 - INFO - Missing fields: ['birads_score'], trying fallback extraction
+2025-02-27 19:14:24,256 - INFO - Updated birads_score from fallback: BIRADS 1-3
+2025-02-27 19:14:24,256 - INFO - Provider and signature fields match, increasing confidence
+2025-02-27 19:14:24,260 - INFO - Extraction results: {"birads_score": "BIRADS 1", "document_date": "2020-07-09", "document_type": "Mammo", "electronically_signed_by": "Not Available", "exam_date": "2020-09-07", "impression_result": "Not Available", "mammogram_results": "Status: Signed MG Screening Mammo Bilatera! MG Screening Mammo Bilateral INDICATION: Screening. COMPARISON STUDY: January 9, 2017 and December 3, 2014. FINDINGS: Scattered fibroglandular tissue is again seen in both breasts. There is no evidence of a dominant mass lesion, distortion of tissue architecture, ar suspicious microcalcificatians within either breast to suggest presence of a malignant lesion. OPINION: No significant interval change. No mammagraphic evidence of malignancy. routine screening is planned, follow- up mammogram is recommended in 24 months time. BI-RADS 1   Reported and Electronically Signed By: Dr. Charlotte Lobo This report is generated in a voice recognition system and is considered authenticated when electronically signed by physician. cc: DND Dr. Marie | Desrosiers; Dr. Diego Garcia Brito Dictated: 09/07/20 1402 DND Or. Marie | Desrosiers S 713 ch Montreal Ottawa, ON K1K OT2 Printed: 09/07/20 1501   To: DNDDESRMAR Page 1 of 1 END OF DOCUMENT PROTEGE B Document Date: 2020-07-09 Page: 4", "patient_history": "Screening. COMPARISON STUDY: January 9, 2017 and December 3, 2014. FINDINGS: Scattered fibroglandular tissue is again seen in both breasts. There is no evidence of a dominant mass lesion, distortion of tissue architecture, ar suspicious microcalcificatians within either breast to suggest presence of a malignant lesion. OPINION: No significant interval change. No mammagraphic evidence of malignancy. routine screening is planned, follow- up mammogram is recommended in 24 months time. BI-RADS 1   Reported and Electronically Signed By: Dr. Charlotte Lobo This report is generated in a voice recognition system and is considered authenticated when electronically signed by physician. cc: DND Dr. Marie | Desrosiers; Dr. Diego Garcia Brito Dictated: 09/07/20 1402 DND Or. Marie | Desrosiers S 713 ch Montreal Ottawa, ON K1K OT2 Printed: 09/07/20 1501   To: DNDDESRMAR Page 1 of 1 END OF DOCUMENT PROTEGE B Document Date: 2020-07-09 Page: 4", "patient_name": "Deidentified", "recommendation": "mammogram is recommended in 24 months time. BI-RADS 1   Reported and Electronically Signed By: Dr. Charlotte Lobo This report is generated in a voice recognition system and is considered authenticated when electronically signed by physician. cc: DND Dr. Marie | Desrosiers; Dr. Diego Garcia Brito Dictated: 09/07/20 1402 DND Or. Marie | Desrosiers S 713 ch Montreal Ottawa, ON K1K OT2 Printed: 09/07/20 1501   To: DNDDESRMAR Page 1 of 1 END OF DOCUMENT PROTEGE B Document Date: 2020-07-09 Page: 4", "testing_provider": "Not Available", "ultrasound_results": "Not Available", "additional_information": "", "is_deidentified": true, "confidence_scores": {"ocr": 0.0, "nlp": 0.0}}
+2025-02-27 19:14:24,280 - INFO - Saved report to database: Example 4.pdf
+2025-02-27 19:14:24,500 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:14:26,652 - INFO - Extracted text from page 1 using OCR fallback
+2025-02-27 19:14:26,652 - INFO - Combined text length: 1938 characters
+2025-02-27 19:14:26,652 - INFO - Text sample: PROTECTED B CFHS/SSFC Scan-Mammo MG Screening Mammo Bilateral Document Date: 2020-12-09 Hépital Montfort Patient Name: | Diagnostic Services - Imaging MRN: 713 Montreal Rd | | Ottawa, ON HCN: | K1K Pa...
+2025-02-27 19:14:26,652 - INFO - Document is deidentified, using standard patient name
+2025-02-27 19:14:26,658 - INFO - Missing fields: ['birads_score'], trying fallback extraction
+2025-02-27 19:14:26,658 - INFO - Updated birads_score from fallback: BIRADS 1-2
+2025-02-27 19:14:26,658 - INFO - Provider and signature fields match, increasing confidence
+2025-02-27 19:14:26,660 - INFO - Extraction results: {"birads_score": "BIRADS 1", "document_date": "2020-12-09", "document_type": "Mammo", "electronically_signed_by": "Not Available", "exam_date": "2020-09-12", "impression_result": "Not Available", "mammogram_results": "Status: Signed MG Screening Mammo Bilateral MG Screening Mammo Bilateral INDICATION: Baseline screening mammogram with clinically palpable area of nodularity 6 o'clock position left breast for the past 2 months. COMPARISON STUDY: None FINDINGS: Breast parenchyma is predominantly fatty with minimal symmetrically distributed fibroglandular density. Immediately underlying the cutaneous marker in the approximate 6 o'clock position left inframammary fold region there is an approximate 19 mm partially demarcated fat density nodule consistent with lipoma or fat lobule. No soft tissue components. On the cranial caudal view there is a approximated to sub centimeter focal asymmetry likely representing normal glandular tissue. No mammographic evidence to suggest developing neoplasm. Follaw- up sonographic/cone compression views carrelation recommended for confirmation. OPINION: No evidence of malignancy. Questioned small palpable lipoma and regional asymmetric glandular density. Further investigation with cone compression views and ultrasound will be arranged. BI-RADS 0 Reported and Electronically Signed By: Dr. Danny Tenaschuk This report is generated in a voice recognition system and is considered authenticated when electronically signed by physician. cc: DND Dr. Sylvia Uhthoff Munro; DND Montfort site Dictated: 09/12/20 0954 DND Dr. Sylvia Uhthoff Munro FC(O) 713 Ch Montreal Ottawa, ON K1K OT2 Printed: 09/12/20 1001 To: DNDUHTHSYL Page \u20181 of 4 END OF DOCUMENT Signed by : Mrs Rosy Burns, CLERK, OT-PCS, 2020-12-09 11:34:00 Printed on: 2021-05-06 15:46 PROTEGE B Page: 1 Printed by: Sarah Holland", "patient_history": "Baseline screening mammogram with clinically palpable area of nodularity 6 o'clock position left breast for the past 2 months. COMPARISON STUDY: None FINDINGS: Breast parenchyma is predominantly fatty with minimal symmetrically distributed fibroglandular density. Immediately underlying the cutaneous marker in the approximate 6 o'clock position left inframammary fold region there is an approximate 19 mm partially demarcated fat density nodule consistent with lipoma or fat lobule. No soft tissue components. On the cranial caudal view there is a approximated to sub centimeter focal asymmetry likely representing normal glandular tissue. No mammographic evidence to suggest developing neoplasm. Follaw- up sonographic/cone compression views carrelation recommended for confirmation. OPINION: No evidence of malignancy. Questioned small palpable lipoma and regional asymmetric glandular density. Further investigation with cone compression views and ultrasound will be arranged. BI-RADS 0 Reported and Electronically Signed By: Dr. Danny Tenaschuk This report is generated in a voice recognition system and is considered authenticated when electronically signed by physician. cc: DND Dr. Sylvia Uhthoff Munro; DND Montfort site Dictated: 09/12/20 0954 DND Dr. Sylvia Uhthoff Munro FC(O) 713 Ch Montreal Ottawa, ON K1K OT2 Printed: 09/12/20 1001 To: DNDUHTHSYL Page \u20181 of 4 END OF DOCUMENT Signed by : Mrs Rosy Burns, CLERK, OT-PCS, 2020-12-09 11:34:00 Printed on: 2021-05-06 15:46 PROTEGE B Page: 1 Printed by: Sarah Holland", "patient_name": "Deidentified", "recommendation": "Not Available", "testing_provider": "Not Available", "ultrasound_results": "Not Available", "additional_information": "", "is_deidentified": true, "confidence_scores": {"ocr": 0.0, "nlp": 0.0}}
+2025-02-27 19:14:26,670 - INFO - Saved report to database: Example 5.pdf
+2025-02-27 19:14:26,910 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:14:29,500 - INFO - Extracted text from page 1 using OCR fallback
+2025-02-27 19:14:29,680 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:14:31,512 - INFO - Extracted text from page 2 using OCR fallback
+2025-02-27 19:14:31,695 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:14:33,701 - INFO - Extracted text from page 3 using OCR fallback
+2025-02-27 19:14:33,702 - INFO - Combined text length: 5011 characters
+2025-02-27 19:14:33,702 - INFO - Text sample: PROTECTED B CFHS/SSFC Patient: Scan-Mammogram Bilateral US Rt Breast Document Date: 2019-05-08 RECEIVED 15:27 Sent 05/08/2019 15:35:24, Page - 2 Name: Phys: Sex: F Acct: Loc: ZD.RAD.D Exam Date: 08/05...
+2025-02-27 19:14:33,703 - INFO - Document is deidentified, using standard patient name
+2025-02-27 19:14:33,709 - INFO - Missing fields: ['birads_score'], trying fallback extraction
+2025-02-27 19:14:33,710 - INFO - Updated birads_score from fallback: BIRADS 1-2
+2025-02-27 19:14:33,710 - INFO - Provider and signature fields match, increasing confidence
+2025-02-27 19:14:33,710 - INFO - Extraction results: {"birads_score": "BIRADS 1", "document_date": "2019-05-08", "document_type": "Mammogram", "electronically_signed_by": "Not Available", "exam_date": "2019-08-05", "impression_result": "-BILATERAL MAMMOGRAM AND RIGHT BREAST/AXILLA ULTRASOUND CLINICAL INDICATION: y/oF. Lesion noted under right breast since 2015-16; waxes and wanes in size; wonders about ripple an implant? Nontender and mobile. COMPARISON: None. FINDINGS: At the time of imaging, patient notes intermittent lump/ripple 6-7 o\u2019clock right breast, can not feel today. Breast density: Scattered areas of fibroglandular density (25-50% fibroglandular tissue). Bilateral mammogram performed including implant displaced views. No concerning breast mass, architectural torsion calcification. No mammographic abnormality in the region of clinical concern (inferior right breast). Follow-up ultrasound the region of clinical concern demonstrates no concerning abnormality. In the region patient indicates, there is slight focal undulation/ripple (2-3 mm) of the implant contour, potentially this could be the palpable abnormality. Entire breaet ultrasound demonstrates no sonographic features of implant rupture. On mammogram in the right axilla incidental note is made of a region of localized coarse calcifications spanning 2.2 x 1.6 cm. Targeted ultrasound demonstrates this probably corresponds to a 2.0 x 0.5 em lymph node with thin cortex and echogenic foci more positioned towards the hilum, in keeping with lymph node calcification. Overall appearance is favored benign. This could reflect sequela of prior remote nonspecific granulomatous disease, potentially related to prior tattooing (right arm tattoo noted), and it is difficult to exclude the possibility of silicone accumulation due to occult gel bleed type implant leak {although this would not be typical ultrasound appearance PAGE 1 Signed Report (CONTINUED) Printed on: 2024-01-09 07:50 Printed by: Gail Greer PROTEGE B Page: 18", "mammogram_results": "At the time of imaging, patient notes intermittent lump/ripple 6-7 o\u2019clock right breast, can not feel today. Breast density: Scattered areas of fibroglandular density (25-50% fibroglandular tissue). Bilateral mammogram performed including implant displaced views. No concerning breast mass, architectural torsion calcification. No mammographic abnormality in the region of clinical concern (inferior right breast). Follow-up ultrasound the region of clinical concern demonstrates no concerning abnormality. In the region patient indicates, there is slight focal undulation/ripple (2-3 mm) of the implant contour, potentially this could be the palpable abnormality. Entire breaet ultrasound demonstrates no sonographic features of implant rupture. On mammogram in the right axilla incidental note is made of a region of localized coarse calcifications spanning 2.2 x 1.6 cm. Targeted ultrasound demonstrates this probably corresponds to a 2.0 x 0.5 em lymph node with thin cortex and echogenic foci more positioned towards the hilum, in keeping with lymph node calcification. Overall appearance is favored benign. This could reflect sequela of prior remote nonspecific granulomatous disease, potentially related to prior tattooing (right arm tattoo noted), and it is difficult to exclude the possibility of silicone accumulation due to occult gel bleed type implant leak {although this would not be typical ultrasound appearance PAGE 1 Signed Report (CONTINUED) Printed on: 2024-01-09 07:50 Printed by: Gail Greer PROTEGE B Page: 18", "patient_history": "y/oF. Lesion noted under right breast since 2015-16; waxes and wanes in size; wonders about ripple an implant? Nontender and mobile. COMPARISON: None. FINDINGS: At the time of imaging, patient notes intermittent lump/ripple 6-7 o\u2019clock right breast, can not feel today. Breast density: Scattered areas of fibroglandular density (25-50% fibroglandular tissue). Bilateral mammogram performed including implant displaced views. No concerning breast mass, architectural torsion calcification. No mammographic abnormality in the region of clinical concern (inferior right breast). Follow-up ultrasound the region of clinical concern demonstrates no concerning abnormality. In the region patient indicates, there is slight focal undulation/ripple (2-3 mm) of the implant contour, potentially this could be the palpable abnormality. Entire breaet ultrasound demonstrates no sonographic features of implant rupture. On mammogram in the right axilla incidental note is made of a region of localized coarse calcifications spanning 2.2 x 1.6 cm. Targeted ultrasound demonstrates this probably corresponds to a 2.0 x 0.5 em lymph node with thin cortex and echogenic foci more positioned towards the hilum, in keeping with lymph node calcification. Overall appearance is favored benign. This could reflect sequela of prior remote nonspecific granulomatous disease, potentially related to prior tattooing (right arm tattoo noted), and it is difficult to exclude the possibility of silicone accumulation due to occult gel bleed type implant leak {although this would not be typical ultrasound appearance PAGE 1 Signed Report (CONTINUED) Printed on: 2024-01-09 07:50 Printed by: Gail Greer PROTEGE B Page: 18", "patient_name": "Deidentified", "recommendation": "ultrasound the region of clinical concern demonstrates no concerning abnormality. In the region patient indicates, there is slight focal undulation/ripple (2-3 mm) of the implant contour, potentially this could be the palpable abnormality. Entire breaet ultrasound demonstrates no sonographic features of implant rupture. On mammogram in the right axilla incidental note is made of a region of localized coarse calcifications spanning 2.2 x 1.6 cm. Targeted ultrasound demonstrates this probably corresponds to a 2.0 x 0.5 em lymph node with thin cortex and echogenic foci more positioned towards the hilum, in keeping with lymph node calcification. Overall appearance is favored benign. This could reflect sequela of prior remote nonspecific granulomatous disease, potentially related to prior tattooing (right arm tattoo noted), and it is difficult to exclude the possibility of silicone accumulation due to occult gel bleed type implant leak {although this would not be typical ultrasound appearance PAGE 1 Signed Report (CONTINUED) Printed on: 2024-01-09 07:50 Printed by: Gail Greer PROTEGE B Page: 18", "testing_provider": "Not Available", "ultrasound_results": "Not Available", "additional_information": "", "is_deidentified": true, "confidence_scores": {"ocr": 0.0, "nlp": 0.0}}
+2025-02-27 19:14:33,722 - INFO - Saved report to database: Example 6.pdf
+2025-02-27 19:14:33,928 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:14:36,033 - INFO - Extracted text from page 1 using OCR fallback
+2025-02-27 19:14:36,034 - INFO - Combined text length: 1508 characters
+2025-02-27 19:14:36,034 - INFO - Text sample: PROTECTED B CFHS/SSFC Scan-Mammo-Annual Document Date: 2015-03-27 32684806 BC Cancer Agency SCREENING MAMMOGRAPHY CARE & RESEARCH PROGRAM OF BC An agency of the Provincial Health Services Authority   ...
+2025-02-27 19:14:36,034 - INFO - Document is deidentified, using standard patient name
+2025-02-27 19:14:36,039 - INFO - Missing fields: ['birads_score'], trying fallback extraction
+2025-02-27 19:14:36,040 - INFO - Updated birads_score from fallback: BIRADS 1-2
+2025-02-27 19:14:36,040 - INFO - Provider and signature fields match, increasing confidence
+2025-02-27 19:14:36,040 - INFO - Extraction results: {"birads_score": "BIRADS 1", "document_date": "2015-03-27", "document_type": "Mammo", "electronically_signed_by": "Not Available", "exam_date": "2015-04-03", "impression_result": "- Bilateral Mammogram Mammogram interpreted as within normal limits RECOMMENDATION TO PRIMARY CARE PROVIDER: If asymptomatic, return for regular screening in two years. BRITISH COLUMBIA'S BREAST SCREENING POLICY Average risk Ages 40-49: Routine mammography available every two years. Ages 50-74: Routine mammograms are recommended every two years. Higher than average risk Ages 40-74 with a first degree relative with breast cancer: screening mammograms are recommended every year. some cancers cannot be detected on a mammogram due to the location of the cancer or the density of the tissue. Any new breast changes should be investigated as necessary. For more information: www.screeningbe.ca Gu have this report ih error, please notify us at: - - -92   APR 03 2015 PO Box 17000, Stn Sponsored by B.C. Medical Association, B.C. Radiolagical Society, Canadian Cancer Society (B.C. and Yukon Division), British Columbia Cancer Agency, Dept. of Radiology, Funded by British Columb:a Ministry of Page: 18 Printed by: Karen McEvoy-Perrault", "mammogram_results": "ih error, please notify us at: - - -92   APR 03 2015 PO Box 17000, Stn Sponsored by B.C. Medical Association, B.C. Radiolagical Society, Canadian Cancer Society (B.C. and Yukon Division), British Columbia Cancer Agency, Dept. of Radiology, Funded by British Columb:a Ministry of Page: 18 Printed by: Karen McEvoy-Perrault", "patient_history": "Not Available", "patient_name": "Deidentified", "recommendation": "TO PRIMARY CARE PROVIDER: If asymptomatic, return for regular screening in two years. BRITISH COLUMBIA'S BREAST SCREENING POLICY Average risk Ages 40-49: Routine mammography available every two years. Ages 50-74: Routine mammograms are recommended every two years. Higher than average risk Ages 40-74 with a first degree relative with breast cancer: screening mammograms are recommended every year. some cancers cannot be detected on a mammogram due to the location of the cancer or the density of the tissue. Any new breast changes should be investigated as necessary. For more information: www.screeningbe.ca Gu have this report ih error, please notify us at: - - -92   APR 03 2015 PO Box 17000, Stn Sponsored by B.C. Medical Association, B.C. Radiolagical Society, Canadian Cancer Society (B.C. and Yukon Division), British Columbia Cancer Agency, Dept. of Radiology, Funded by British Columb:a Ministry of Page: 18 Printed by: Karen McEvoy-Perrault", "testing_provider": "Not Available", "ultrasound_results": "Not Available", "additional_information": "", "is_deidentified": true, "confidence_scores": {"ocr": 0.0, "nlp": 0.0}}
+2025-02-27 19:14:36,050 - INFO - Saved report to database: Example 3.pdf
+2025-02-27 19:14:36,249 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:14:38,810 - INFO - Database initialized successfully
+2025-02-27 19:19:32,434 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:19:32,438 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:19:32,938 - INFO - Database initialized successfully
+2025-02-27 19:19:32,939 - INFO - Database initialized successfully
+2025-02-27 19:21:59,123 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:21:59,147 - INFO - Database initialized successfully
+2025-02-27 19:22:00,853 - INFO - Using cached results for Example 4.pdf
+2025-02-27 19:22:00,857 - INFO - Using cached results for Example 5.pdf
+2025-02-27 19:22:00,859 - INFO - Using cached results for Example 6.pdf
+2025-02-27 19:22:00,860 - INFO - Using cached results for Example 3.pdf
+2025-02-27 19:22:01,318 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:22:03,557 - INFO - Database initialized successfully
+2025-02-27 19:24:40,270 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:24:41,036 - INFO - Database initialized successfully
+2025-02-27 19:25:27,460 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:25:27,504 - INFO - Database initialized successfully
+2025-02-27 19:25:29,844 - INFO - Using cached results for Example 4.pdf
+2025-02-27 19:25:29,849 - INFO - Using cached results for Example 5.pdf
+2025-02-27 19:25:29,849 - INFO - Using cached results for Example 6.pdf
+2025-02-27 19:25:29,860 - INFO - Using cached results for Example 3.pdf
+2025-02-27 19:25:30,598 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:25:34,928 - INFO - Database initialized successfully
+2025-02-27 19:27:13,481 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:40:39,367 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:40:40,048 - INFO - Database initialized successfully
+2025-02-27 19:42:13,576 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:42:13,596 - INFO - Database initialized successfully
+2025-02-27 19:42:17,058 - INFO - Using cached results for Example 3.pdf
+2025-02-27 19:42:17,058 - INFO - Using cached results for Example 4.pdf
+2025-02-27 19:42:17,066 - INFO - Using cached results for Example 5.pdf
+2025-02-27 19:42:17,066 - INFO - Using cached results for Example 6.pdf
+2025-02-27 19:42:17,553 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:42:19,934 - INFO - Database initialized successfully
+2025-02-27 19:43:23,868 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:44:31,976 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 19:58:17,604 - INFO - RadBERT loaded successfully with pipeline
+2025-02-27 19:59:01,417 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:01:07,160 - INFO - RadBERT loaded successfully with pipeline
+2025-02-27 20:01:58,699 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:04:25,066 - INFO - RadBERT loaded successfully with pipeline
+2025-02-27 20:15:17,363 - INFO - RadBERT loaded successfully with pipeline
+2025-02-27 20:15:17,363 - INFO - Medical chatbot loaded successfully
+2025-02-27 20:15:17,406 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:15:26,392 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:15:27,912 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:18:08,812 - INFO - RadBERT loaded successfully with pipeline
+2025-02-27 20:18:08,812 - INFO - Medical chatbot loaded successfully
+2025-02-27 20:18:08,852 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:18:09,799 - INFO - Database initialized successfully
+2025-02-27 20:18:09,802 - INFO - Debug logging initialized
+2025-02-27 20:19:03,222 - INFO - RadBERT loaded successfully with pipeline
+2025-02-27 20:19:03,223 - INFO - Medical chatbot loaded successfully
+2025-02-27 20:19:03,287 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:19:03,392 - INFO - Database initialized successfully
+2025-02-27 20:19:03,401 - INFO - Debug logging initialized
+2025-02-27 20:19:04,287 - INFO - Claude API client initialized successfully
+2025-02-27 20:19:32,782 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:19:32,828 - INFO - Database initialized successfully
+2025-02-27 20:19:32,832 - INFO - Debug logging initialized
+2025-02-27 20:19:32,857 - INFO - Claude API client initialized successfully
+2025-02-27 20:19:33,591 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:19:33,641 - INFO - Database initialized successfully
+2025-02-27 20:19:33,641 - INFO - Debug logging initialized
+2025-02-27 20:19:33,671 - INFO - Claude API client initialized successfully
+2025-02-27 20:19:41,975 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:19:42,291 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:19:42,614 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:19:42,692 - INFO - Database initialized successfully
+2025-02-27 20:19:42,702 - INFO - Debug logging initialized
+2025-02-27 20:19:42,741 - INFO - Claude API client initialized successfully
+2025-02-27 20:23:47,651 - INFO - RadBERT loaded successfully with pipeline
+2025-02-27 20:23:47,651 - INFO - Medical chatbot loaded successfully
+2025-02-27 20:23:47,701 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:23:47,782 - INFO - Database initialized successfully
+2025-02-27 20:24:08,971 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:24:09,028 - INFO - Database initialized successfully
+2025-02-27 20:24:11,441 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:24:11,503 - INFO - Database initialized successfully
+2025-02-27 20:24:20,363 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:24:20,713 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:24:21,137 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:24:21,279 - INFO - Database initialized successfully
+2025-02-27 20:26:02,836 - INFO - RadBERT loaded successfully with pipeline
+2025-02-27 20:26:02,836 - INFO - Medical chatbot loaded successfully
+2025-02-27 20:26:56,407 - INFO - Medical chatbot loaded successfully
+2025-02-27 20:26:59,121 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:27:00,160 - INFO - Database initialized successfully
+2025-02-27 20:27:32,085 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:27:32,428 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:30:13,550 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:30:15,163 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:30:15,738 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:30:24,730 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:30:25,338 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:37:35,181 - INFO - RadBERT loaded successfully with pipeline
+2025-02-27 20:37:35,181 - INFO - Medical chatbot loaded successfully
+2025-02-27 20:38:39,359 - INFO - Medical chatbot loaded successfully
+2025-02-27 20:38:40,259 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:38:42,659 - INFO - Database initialized successfully
+2025-02-27 20:39:09,929 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 20:39:10,191 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:08:41,087 - INFO - RadBERT loaded successfully with pipeline
+2025-02-27 22:09:34,287 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:10:10,937 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:10:12,365 - INFO - Using cached results for Example 5.pdf
+2025-02-27 22:10:12,375 - INFO - Using cached results for Example 6.pdf
+2025-02-27 22:10:12,377 - INFO - Using cached results for Example 3.pdf
+2025-02-27 22:10:12,377 - INFO - Using cached results for Example 4.pdf
+2025-02-27 22:10:13,198 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:11:18,182 - INFO - RadBERT loaded successfully with pipeline
+2025-02-27 22:11:18,182 - INFO - Medical chatbot loaded successfully
+2025-02-27 22:11:18,237 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:12:24,082 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:12:25,905 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:12:29,427 - INFO - Extracted text from page 1 using OCR fallback
+2025-02-27 22:12:29,794 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:12:33,011 - INFO - Extracted text from page 2 using OCR fallback
+2025-02-27 22:12:33,356 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:12:35,904 - INFO - Extracted text from page 3 using OCR fallback
+2025-02-27 22:12:36,132 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:12:37,228 - INFO - Extracted text from page 4 using OCR fallback
+2025-02-27 22:12:37,228 - INFO - Combined text length: 5083 characters
+2025-02-27 22:12:37,228 - INFO - Text sample: PROTECTED B CFHS/SSFC Scan-US Lt Breast Document Date: 2023-11-06 To: Page: 1 of 2 2023-11-06 17:24:24 EST {780}450-9551 From: MIC imaging 2023-11-06 Mon 18:24 ID: #355167 Page 1 of 2     MEDICAL IMAG...
+2025-02-27 22:12:37,228 - INFO - Document is deidentified, using standard patient name
+2025-02-27 22:12:37,247 - INFO - Missing fields: ['birads_score'], trying fallback extraction
+2025-02-27 22:12:37,257 - INFO - Updated birads_score from fallback: BIRADS 1-2
+2025-02-27 22:12:37,257 - INFO - Provider and signature fields match, increasing confidence
+2025-02-27 22:12:37,259 - WARNING - Could not parse date: 06
+2025-02-27 22:12:37,259 - INFO - Extraction results: {"birads_score": "BIRADS 1", "document_date": "2023-11-06", "document_type": "DIAGNOSTIC", "electronically_signed_by": "Not Available", "exam_date": "Not Available", "impression_result": "Not Available", "mammogram_results": "(Original report to follow) Through a quality assurance check an error was identified in this report. The error in the 2nd sentence of the 3rd paragraph. replaced with The sentence should read \"1 matemal cousin with breast carcinoma at age 42.\" Electronically Signed: Dr. S. Appavoo, FRCPC 11/6/2023 3:15 PM MST ORIGINAL REPORT History: Bilateral mammogram + 6 month FU Lt breast u/s. PRIOR: Breast imaging studies dating back to November 15, 2022. FAMILY HISTORY: Mather with breast carcinoma at age 55. 1 maternal cousin with breast breast, at age 42. IBIS lifetime risk calculation of >25%. BILATERAL MAMMOGRAM WITH TOMOSYNTHESIS: Density: ACR Category D: The breasts are extremely dense, which lowers the sensitivity of mammography. No conceming mass, architectural distortion or suspicious microcalcifications. BREAST ULTRASOUND: Again noted, there is a well-defined ovoid parallel nonshadowing nonvascular mass at the 3:00 position of the left breast, 5 cm from the nippie. This currently measures 1.1 x 0.7 x 0.4 cm, unchanged allowing for interscan measurement differances. No morphologle findings are noted. INIPRESSION: Stable benign-appearing mass at the 3:00 position of the left breast. This Is likely a benign Page 1 of 2 i : -06- : Page: 26 Printed on: 2024-06-12 07:46 PROTEGE B Printed by: Natalie Paille", "patient_history": "Bilateral mammogram + 6 month FU Lt breast u/s. PRIOR: Breast imaging studies dating back to November 15, 2022. FAMILY HISTORY: Mather with breast carcinoma at age 55. 1 maternal cousin with breast breast, at age 42. IBIS lifetime risk calculation of >25%. BILATERAL MAMMOGRAM WITH TOMOSYNTHESIS: Density: ACR Category D: The breasts are extremely dense, which lowers the sensitivity of mammography. No conceming mass, architectural distortion or suspicious microcalcifications. BREAST ULTRASOUND: Again noted, there is a well-defined ovoid parallel nonshadowing nonvascular mass at the 3:00 position of the left breast, 5 cm from the nippie. This currently measures 1.1 x 0.7 x 0.4 cm, unchanged allowing for interscan measurement differances. No morphologle findings are noted. INIPRESSION: Stable benign-appearing mass at the 3:00 position of the left breast. This Is likely a benign Page 1 of 2 i : -06- : Page: 26 Printed on: 2024-06-12 07:46 PROTEGE B Printed by: Natalie Paille", "patient_name": "Deidentified", "recommendation": "bilateral mammogram and targeted left breast ultrasound examination will be booked for one year from now. If the findings maintained stability for 2 full years, no further specific imaging follow-up is required unless there is adverse clinical change. Given the strong family history and elevated risk of breast carcinoma, this patient should be offered high risk screening protocol, including annual mammography staggered at 6 months with annual MRI screening. Recommendation: Follow-ip mammogram and ultrasound in 1 year. BLRADS 3 Electronically Signed: Dr. S. Appavoo, FRCPC 11/6/2023 2:36 PM MST Page 2 of 2 2024-06-12 07:46 PROTEGE B Natalie Paille CFHS/SSFC Page: 27", "testing_provider": "Not Available", "ultrasound_results": "Not Available", "additional_information": "", "is_deidentified": true, "confidence_scores": {"ocr": 0.0, "nlp": 0.0}}
+2025-02-27 22:12:37,276 - INFO - Saved report to database: Eng Example 5.pdf
+2025-02-27 22:12:37,507 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:12:39,309 - INFO - Extracted text from page 1 using OCR fallback
+2025-02-27 22:12:39,309 - INFO - Combined text length: 1094 characters
+2025-02-27 22:12:39,309 - INFO - Text sample: PROTECTED B CFHS/SSFC Scan-Mammo (B) Screening Document Date: 2023-04-14 AM Medical Imag.ng Msq 11105360 Page 1 of 4 MEDICAL IMAGING Dr. Karissa Hetland CFB - Edmonton PO BOX 10500 STN FORCES Edmonton...
+2025-02-27 22:12:39,310 - INFO - Document is deidentified, using standard patient name
+2025-02-27 22:12:39,315 - INFO - Missing fields: ['birads_score'], trying fallback extraction
+2025-02-27 22:12:39,315 - INFO - Updated birads_score from fallback: BIRADS 1-2
+2025-02-27 22:12:39,316 - INFO - Provider and signature fields match, increasing confidence
+2025-02-27 22:12:39,317 - WARNING - Could not parse date: 14
+2025-02-27 22:12:39,317 - INFO - Extraction results: {"birads_score": "BIRADS 1", "document_date": "2023-04-14", "document_type": "Mammo", "electronically_signed_by": "Not Available", "exam_date": "Not Available", "impression_result": "No evidence of malignancy. No adverse change since 2015. BI-RADS: 1: Negative. Recommendation(s): Screening mammography recommended in 1-2 years. Electronically Signed: Dr. H. Aguilar, FRCPC 4/14/2023 9:40 AM MDT Page 1 of 1 Printed on: 2024-10-17 09:17 : Page: Printed by: Natalie Paille PROTEGE B", "mammogram_results": "There are scattered areas of fibroglandular density (ACR category B). No worrisome focal mass, architectural distortion or suspicious calcifications. IMPRESSION: No evidence of malignancy. No adverse change since 2015. BI-RADS: 1: Negative. Recommendation(s): Screening mammography recommended in 1-2 years. Electronically Signed: Dr. H. Aguilar, FRCPC 4/14/2023 9:40 AM MDT Page 1 of 1 Printed on: 2024-10-17 09:17 : Page: Printed by: Natalie Paille PROTEGE B", "patient_history": "51 year old female with dense breasts for routine mammogram + ABUS. MMG aug 2021- normal ( apart from dense breasts ). No new breast concerns. Please R/O interval change. BILATERAL SCREENING MAMMOGRAPHY WITH TOMOSYNTHESIS Family History: No personal or family history of breast cancer. Findings: There are scattered areas of fibroglandular density (ACR category B). No worrisome focal mass, architectural distortion or suspicious calcifications. IMPRESSION: No evidence of malignancy. No adverse change since 2015. BI-RADS: 1: Negative. Recommendation(s): Screening mammography recommended in 1-2 years. Electronically Signed: Dr. H. Aguilar, FRCPC 4/14/2023 9:40 AM MDT Page 1 of 1 Printed on: 2024-10-17 09:17 : Page: Printed by: Natalie Paille PROTEGE B", "patient_name": "Deidentified", "recommendation": "(s): Screening mammography recommended in 1-2 years. Electronically Signed: Dr. H. Aguilar, FRCPC 4/14/2023 9:40 AM MDT Page 1 of 1 Printed on: 2024-10-17 09:17 : Page: Printed by: Natalie Paille PROTEGE B", "testing_provider": "Not Available", "ultrasound_results": "Not Available", "additional_information": "", "is_deidentified": true, "confidence_scores": {"ocr": 0.0, "nlp": 0.0}}
+2025-02-27 22:12:39,331 - INFO - Saved report to database: Eng Example 6.pdf
+2025-02-27 22:12:39,641 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:12:42,030 - INFO - Extracted text from page 1 using OCR fallback
+2025-02-27 22:12:42,209 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:12:43,354 - INFO - Extracted text from page 2 using OCR fallback
+2025-02-27 22:12:43,354 - INFO - Combined text length: 2284 characters
+2025-02-27 22:12:43,354 - INFO - Text sample: PROTECTED B CFHS/SSFC Scan-Mammo & US Breast Bilateral Document Date: 2016-06-10 Hépital Montfort Patient Name: Diagnostic Services - Imaging MRN: 713 Montreal Rd AGE: SEX: F Ottawa, ON HCN: CT2 H-Ph:...
+2025-02-27 22:12:43,354 - INFO - Document is deidentified, using standard patient name
+2025-02-27 22:12:43,357 - INFO - Missing fields: ['birads_score'], trying fallback extraction
+2025-02-27 22:12:43,360 - INFO - Updated birads_score from fallback: BIRADS 1-2
+2025-02-27 22:12:43,360 - INFO - Provider and signature fields match, increasing confidence
+2025-02-27 22:12:43,361 - INFO - Extraction results: {"birads_score": "BIRADS 1", "document_date": "2016-06-10", "document_type": "Mammo", "electronically_signed_by": "Not Available", "exam_date": "2016-10-06", "impression_result": "Not Available", "mammogram_results": "Status: Signed MG Diagnostic Mammo Bilateral; MG US Breast Bilateral C001319651M0M BILATERAL BREAST ULTRASOUND BILATERAL DIAGNOSTIC MAMMOGRAM Bilateral mammogram and bilateral ultrasound was performed. Clinical: patient with breast mass on ultrasound. Question duct ectasia. No change since the previous examination. There is a normal hetercgeneous parenchyma pattern bilaterally. There is ne focal abnormality, area of architectural distortion or microcalcification in either breast to suggest a malignancy. Within the right breast there is a thinly septated cyst in the 10 o'clock position measuring \u00a7.6 x 11.8 mm. in addition in the 11-12 o'clock position there are well- defined aypoechoic avascular nodules, one measuring 11 x 4.9 7.9 in the other measuring 10.8 x 11.4 mm. These would be keeping with fibroadenomas. Simple cyst in the 2 o'clock position measuring up to 8.3 mm, There is no dilated ducts. Ultrasound left breast is unremarkable with no solid or cystic lesion. Ne dilated ducts in the left breast. OPINION: No mammographic or sonographic evidence of malignancy. Findings suggestive of fibroadenomas within the right breast, A targeted ultrasound is recommended in 6 months time. A routine screening mammogram in 12 to 24 months is recommended. ~BI-RADS 3~ Printed: 10/06/16 1601   To: Page 1 of 2   Printed on: 2023-03-10 16:13 EGE Page: 30 Printed by: James Campbell PROTEGE B", "patient_history": "Not Available", "patient_name": "Deidentified", "recommendation": "Not Available", "testing_provider": "Not Available", "ultrasound_results": "Not Available", "additional_information": "", "is_deidentified": true, "confidence_scores": {"ocr": 0.0, "nlp": 0.0}}
+2025-02-27 22:12:43,368 - INFO - Saved report to database: Example 1.pdf
+2025-02-27 22:12:43,377 - INFO - Using cached results for Eng Example 2.pdf
+2025-02-27 22:12:43,382 - INFO - Using cached results for Eng Example 3.pdf
+2025-02-27 22:12:43,382 - INFO - Using cached results for Eng Example 4.pdf
+2025-02-27 22:12:43,797 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:48:21,384 - INFO - RadBERT loaded successfully with pipeline
+2025-02-27 22:48:21,384 - INFO - Medical chatbot loaded successfully
+2025-02-27 22:48:21,427 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:48:38,252 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:48:38,482 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:48:38,722 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:48:52,522 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:48:53,912 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:48:55,684 - INFO - Extracted text from page 1 using OCR fallback
+2025-02-27 22:48:55,892 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:48:57,422 - INFO - Extracted text from page 2 using OCR fallback
+2025-02-27 22:48:57,422 - INFO - Combined text length: 2308 characters
+2025-02-27 22:48:57,422 - INFO - Text sample: PROTECTED B Patient: Scan-Mammo Right Document Date: 2020-10-30 Printed on: Printed by:   11-02-2020 09:33 Rouge Valley Health System Ph: 416-284-8131 Page: 2 ROUGE VALLEY HEALTH SYSTEM Centenary Heal...
+2025-02-27 22:48:57,422 - INFO - Document is deidentified, using standard patient name
+2025-02-27 22:48:57,432 - INFO - Missing fields: ['birads_score'], trying fallback extraction
+2025-02-27 22:48:57,432 - INFO - Updated birads_score from fallback: BIRADS 1-2
+2025-02-27 22:48:57,432 - INFO - Provider and signature fields match, increasing confidence
+2025-02-27 22:48:57,439 - INFO - Extraction results: {"birads_score": "BIRADS 1", "document_date": "2020-10-30", "document_type": "Mammo", "electronically_signed_by": "Not Available", "exam_date": "2020-10-30", "impression_result": "Not Available", "mammogram_results": "is NOT received in 4 weeks please contact the hospital central booking office GUZMAN,ALEXIS HERNANDO Fax: (416)635-2720 32 CH H SVCS C, 1 YUKON LANE Prov: CARAL TORONTO, ON M3K 0A1 Ordering copy Page 1 of 2 2024-05-08 09:15 PROTEGE B Karen McEvoy-Perrault CFHS/SSFC Page: 7", "patient_history": "Not Available", "patient_name": "Deidentified", "recommendation": "with bilateral screening mammography is recommended in one year BI-RADS CATEGORY: 2 41. Negative 2. Benign 3. Probably benign 4. Suspicious 5. Highly suggestive of malignancy 6. Known biopsy-proven malignancy Q. Incomplete** a follow up report is NOT received in 4 weeks please contact the hospital central booking office GUZMAN,ALEXIS HERNANDO Fax: (416)635-2720 32 CH H SVCS C, 1 YUKON LANE Prov: CARAL TORONTO, ON M3K 0A1 Ordering copy Page 1 of 2 2024-05-08 09:15 PROTEGE B Karen McEvoy-Perrault CFHS/SSFC Page: 7", "testing_provider": "Not Available", "ultrasound_results": "Not Available", "additional_information": "", "is_deidentified": true, "confidence_scores": {"ocr": 0.0, "nlp": 0.0}}
+2025-02-27 22:48:57,452 - INFO - Saved report to database: Example 10.pdf
+2025-02-27 22:48:57,672 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:48:59,174 - INFO - Extracted text from page 1 using OCR fallback
+2025-02-27 22:48:59,372 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:49:00,982 - INFO - Extracted text from page 2 using OCR fallback
+2025-02-27 22:49:00,982 - INFO - Combined text length: 2345 characters
+2025-02-27 22:49:00,982 - INFO - Text sample: PROTECTED B CFHS/SSFC Scan-Mammo Bilat Document Date: 2021-05-31   | 16.04.53 05-31-2021 1 Fax         5/31/2021 4:93 PM FROM: Fax TO: PAGE: 001 OF O01 CLINIQUE RADIOLOGIQUE AUDET CITE VERTE 1180, rue...
+2025-02-27 22:49:00,982 - INFO - Document is deidentified, using standard patient name
+2025-02-27 22:49:00,992 - INFO - Missing fields: ['birads_score'], trying fallback extraction
+2025-02-27 22:49:00,992 - INFO - Provider and signature fields match, increasing confidence
+2025-02-27 22:49:00,992 - WARNING - Could not parse date: /
+2025-02-27 22:49:00,992 - INFO - Extraction results: {"birads_score": "Not Available", "document_date": "2021-05-31", "document_type": "Mammo", "electronically_signed_by": "Not Available", "exam_date": "Not Available", "impression_result": "Not Available", "mammogram_results": "Not Available", "patient_history": "Not Available", "patient_name": "Deidentified", "recommendation": "Not Available", "testing_provider": "Not Available", "ultrasound_results": "Not Available", "additional_information": "", "is_deidentified": true, "confidence_scores": {"ocr": 0.0, "nlp": 0.0}}
+2025-02-27 22:49:01,007 - INFO - Saved report to database: FR Example 1.pdf
+2025-02-27 22:49:01,202 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:49:03,064 - INFO - Extracted text from page 1 using OCR fallback
+2025-02-27 22:49:03,064 - INFO - Combined text length: 1739 characters
+2025-02-27 22:49:03,064 - INFO - Text sample: nationale PROTECTED B CFHS/SSFC Patient: Scan-Mammo Clichés (G) Document Date: 2022-05-18   05-19-2022 1 | 18779212243 15:11:36 EDT To: 14188446671 Page: 1/1 From: Radiologix Audet Fax: 877921224     ...
+2025-02-27 22:49:03,064 - INFO - Document is deidentified, using standard patient name
+2025-02-27 22:49:03,068 - INFO - Missing fields: ['birads_score'], trying fallback extraction
+2025-02-27 22:49:03,068 - INFO - Provider and signature fields match, increasing confidence
+2025-02-27 22:49:03,070 - INFO - Extraction results: {"birads_score": "Not Available", "document_date": "2022-05-18", "document_type": "Mammo", "electronically_signed_by": "Not Available", "exam_date": "2022-05-19", "impression_result": "Not Available", "mammogram_results": "Not Available", "patient_history": "Not Available", "patient_name": "Deidentified", "recommendation": "Not Available", "testing_provider": "Not Available", "ultrasound_results": "Not Available", "additional_information": "", "is_deidentified": true, "confidence_scores": {"ocr": 0.0, "nlp": 0.0}}
+2025-02-27 22:49:03,080 - INFO - Saved report to database: FR Example 2.pdf
+2025-02-27 22:49:03,282 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:49:05,142 - INFO - Extracted text from page 1 using OCR fallback
+2025-02-27 22:49:05,146 - INFO - Combined text length: 2250 characters
+2025-02-27 22:49:05,146 - INFO - Text sample: rationale PROTECTED B Patient: Scan-Mammo-Screening Document Date: 2020-11-19 11/20/2020 68:09:08 AM FAXCOM PAGE 1 OF 1 NOVA SCOTIA BREAST SCREENING PROGRAM [     Halifax Shopping Centre Tel: (902) 47...
+2025-02-27 22:49:05,146 - INFO - Document is deidentified, using standard patient name
+2025-02-27 22:49:05,146 - INFO - Missing fields: ['birads_score'], trying fallback extraction
+2025-02-27 22:49:05,146 - INFO - Updated birads_score from fallback: BIRADS 1-2
+2025-02-27 22:49:05,146 - INFO - Provider and signature fields match, increasing confidence
+2025-02-27 22:49:05,152 - INFO - Extraction results: {"birads_score": "BIRADS 1", "document_date": "2020-11-19", "document_type": "Mammo", "electronically_signed_by": "Not Available", "exam_date": "2020-11-20", "impression_result": "If you have any questions about the breast screening program, your results, or would like information, please call the Nova Scotia Breast Screening Program at 902-473-3960 or 1-800-565-0548. MCDONALD, LORI Disclaimer: Density was assessed by the Densitas densityai(tm) automated sofiware. Confidentiality notice. This document may contain privileged and/or confidential information and js intended only for the individual named. If you have received this document in error, please the sender immediately by phone and do not use, copy or disseminate this please destroy this page and any associated pages. END OF DOCUMENT Printed on: 2024-08-14 08:02 PROTEGE B Printed by: Jeyagowry Nadarajah    CFHS/SSFC Page: 39", "mammogram_results": "you as her primary care provider when she registered for the Breast I am pleased to inform you that the radiologist who examined her mammogram did not detect any significant abnormality and recommends that she return in 1 year for her next mammogram. A letter is being sent to inform her of this, The Breast Screening Program reports your patient\u2019s breast density category in her screening mammogram result letters. Her screening mammogram showed that her breast density is in Category C, which means her breasts are heterogeneously dense. She has some areas of dense tissue in her breasts. Dense breast tissue can hide cancers on Not all cancers can be seen on a mammogram. It is also important to encourage your patients to know what is normal for their breasts and to notify you right away if they notice any unusual changes in their breasts before their next screening If there are symptoms suggestive of breast cancer, then further investigation is warranted even if the most recent screening mammogram was negative. Please fax a requisition to 902-473-3959 or 1-866-470-3959 for further assessment. If you have any questions about the breast screening program, your results, or would like information, please call the Nova Scotia Breast Screening Program at 902-473-3960 or 1-800-565-0548. MCDONALD, LORI Disclaimer: Density was assessed by the Densitas densityai(tm) automated sofiware. Confidentiality notice. This document may contain privileged and/or confidential information and js intended only for the individual named. If you have received this document in error, please the sender immediately by phone and do not use, copy or disseminate this please destroy this page and any associated pages. END OF DOCUMENT Printed on: 2024-08-14 08:02 PROTEGE B Printed by: Jeyagowry Nadarajah    CFHS/SSFC Page: 39", "patient_history": "Not Available", "patient_name": "Deidentified", "recommendation": "Not Available", "testing_provider": "Not Available", "ultrasound_results": "Not Available", "additional_information": "", "is_deidentified": true, "confidence_scores": {"ocr": 0.0, "nlp": 0.0}}
+2025-02-27 22:49:05,160 - INFO - Saved report to database: Example 9.pdf
+2025-02-27 22:49:05,633 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:50:01,681 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:50:02,916 - INFO - Using cached results for Example 10.pdf
+2025-02-27 22:50:02,921 - INFO - Using cached results for FR Example 1.pdf
+2025-02-27 22:50:02,927 - INFO - Using cached results for FR Example 2.pdf
+2025-02-27 22:50:02,934 - INFO - Using cached results for Example 9.pdf
+2025-02-27 22:50:02,938 - INFO - Using cached results for Example 1.pdf
+2025-02-27 22:50:03,426 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:50:05,914 - INFO - Extracted text from page 1 using OCR fallback
+2025-02-27 22:50:05,914 - INFO - Combined text length: 1889 characters
+2025-02-27 22:50:05,914 - INFO - Text sample: PROTECTED B Patient: Scan-Mammo Bilateral Document Date: 2018-12-12 TOH Fax Server 12/18/2018 10:27:28 PM PAGE 1/001 Fax Server Confidential Facsimile for use of recipient only. Tf received by error P...
+2025-02-27 22:50:05,914 - INFO - Document is deidentified, using standard patient name
+2025-02-27 22:50:05,919 - INFO - Missing fields: ['birads_score'], trying fallback extraction
+2025-02-27 22:50:05,919 - INFO - Updated birads_score from fallback: BIRADS 4-5
+2025-02-27 22:50:05,919 - INFO - Provider and signature fields match, increasing confidence
+2025-02-27 22:50:05,919 - INFO - Extraction results: {"birads_score": "BIRADS 4", "document_date": "2018-12-12", "document_type": "Mammo", "electronically_signed_by": "Not Available", "exam_date": "2018-12-18", "impression_result": "Right breast focal asymmetry indeterminate, in the absence any previous imaging. Additional mammographic and sonographic assessment | will be arranged. BI-RADS (Further imaging work up recommended. The patient will be contacted for this appointment. If the patient has not been contacted | within 7 days, please call the Breast Imaging booking office, 613-761-4831 option #5.)   For report clarification: rads@toh.ca TRANSCRIBED BY: PS7132 REPORTED BY: N/A 18/22/18 16:40 FOR: R VERMA DICTATED: **VERIFIED BY PHYSICIAN** 18/12/18 16:10 FORM#: 283763 PAGE 1 OF 1 2019-11-28 12:50 PROTEGE B Karen McEvoy-Perrault / Fac-simil\u00e9 Confidentiel a destinataire Si par erreur SVP DETRUIRE et aviser CAMPUS 501 Smyth Rd Ottawa 8L6 / CFHS/SSFC   Page: 1", "mammogram_results": "There are scattered areas of fibroglandular density. There is focal asymmetry within the right upper inner breast, middle third, | presumably corresponding to the asymmetry for which the patient was initially recalled in Victoria. No dominant mass, architectural distortion or suspicious micrecalcifications in the left breast. IMPRESSION: Right breast focal asymmetry indeterminate, in the absence any previous imaging. Additional mammographic and sonographic assessment | will be arranged. BI-RADS (Further imaging work up recommended. The patient will be contacted for this appointment. If the patient has not been contacted | within 7 days, please call the Breast Imaging booking office, 613-761-4831 option #5.)   For report clarification: rads@toh.ca TRANSCRIBED BY: PS7132 REPORTED BY: N/A 18/22/18 16:40 FOR: R VERMA DICTATED: **VERIFIED BY PHYSICIAN** 18/12/18 16:10 FORM#: 283763 PAGE 1 OF 1 2019-11-28 12:50 PROTEGE B Karen McEvoy-Perrault / Fac-simil\u00e9 Confidentiel a destinataire Si par erreur SVP DETRUIRE et aviser CAMPUS 501 Smyth Rd Ottawa 8L6 / CFHS/SSFC   Page: 1", "patient_history": "Not Available", "patient_name": "Deidentified", "recommendation": "mammogram, previous in Victoria, No new complaints. COMPARISON: No previous available, Attempted retrieval of outside images was not successful, FINDINGS: There are scattered areas of fibroglandular density. There is focal asymmetry within the right upper inner breast, middle third, | presumably corresponding to the asymmetry for which the patient was initially recalled in Victoria. No dominant mass, architectural distortion or suspicious micrecalcifications in the left breast. IMPRESSION: Right breast focal asymmetry indeterminate, in the absence any previous imaging. Additional mammographic and sonographic assessment | will be arranged. BI-RADS (Further imaging work up recommended. The patient will be contacted for this appointment. If the patient has not been contacted | within 7 days, please call the Breast Imaging booking office, 613-761-4831 option #5.)   For report clarification: rads@toh.ca TRANSCRIBED BY: PS7132 REPORTED BY: N/A 18/22/18 16:40 FOR: R VERMA DICTATED: **VERIFIED BY PHYSICIAN** 18/12/18 16:10 FORM#: 283763 PAGE 1 OF 1 2019-11-28 12:50 PROTEGE B Karen McEvoy-Perrault / Fac-simil\u00e9 Confidentiel a destinataire Si par erreur SVP DETRUIRE et aviser CAMPUS 501 Smyth Rd Ottawa 8L6 / CFHS/SSFC   Page: 1", "testing_provider": "Not Available", "ultrasound_results": "Not Available", "additional_information": "", "is_deidentified": true, "confidence_scores": {"ocr": 0.0, "nlp": 0.0}}
+2025-02-27 22:50:05,924 - INFO - Saved report to database: Example 2.pdf
+2025-02-27 22:50:05,933 - INFO - Using cached results for Eng Example 5.pdf
+2025-02-27 22:50:05,933 - INFO - Using cached results for Eng Example 6.pdf
+2025-02-27 22:50:06,124 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:54:27,918 - INFO - RadBERT loaded successfully with pipeline
+2025-02-27 22:54:27,918 - INFO - Medical chatbot loaded successfully
+2025-02-27 22:54:27,953 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:56:27,777 - INFO - Tesseract version: 5.5.0.20241111
+2025-02-27 22:56:28,785 - INFO - Using cached results for Eng Example 6.pdf
+2025-02-27 22:56:28,791 - INFO - Using cached results for Example 1.pdf
+2025-02-27 22:56:28,796 - INFO - Using cached results for Example 2.pdf
+2025-02-27 22:56:28,796 - INFO - Using cached results for Eng Example 5.pdf
+2025-02-27 22:56:29,191 - INFO - Tesseract version: 5.5.0.20241111

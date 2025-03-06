@@ -13,6 +13,17 @@ import requests
 # Setup logger
 logger = logging.getLogger(__name__)
 
+# Check if LLM integration is available
+try:
+    # Try to get API key to check if environment is set up
+    api_key = os.environ.get("GROQ_API_KEY")
+    LLM_AVAILABLE = api_key is not None
+    if not LLM_AVAILABLE:
+        logger.warning("GROQ_API_KEY environment variable not set. LLM extraction will not be available.")
+except Exception as e:
+    logger.warning(f"Error checking LLM availability: {str(e)}")
+    LLM_AVAILABLE = False
+
 # Default model
 DEFAULT_MODEL = "deepseek-llm/deepseek-llama-70b-chat"
 

@@ -16,7 +16,30 @@ from .pdf_processor import (
     extract_date_from_text, extract_exam_type
 )
 
+# Import new modules
+try:
+    from .extraction_pipeline import (
+        ExtractionPipeline, extract_all_fields_from_text, ALL_MODULES_AVAILABLE
+    )
+    from .multilingual_extraction import (
+        detect_language, extract_with_language_specific_patterns
+    )
+    from .report_validation import (
+        validate_report_data, extract_and_validate_report,
+        validate_and_enhance_extraction, cross_validate_extractions
+    )
+    from .llm_extraction import (
+        extract_with_llm, enhance_extraction_with_llm, LLM_AVAILABLE
+    )
+    
+    ENHANCED_PIPELINE_AVAILABLE = True
+except ImportError as e:
+    import logging
+    logging.warning(f"Enhanced extraction pipeline not fully available: {str(e)}")
+    ENHANCED_PIPELINE_AVAILABLE = False
+
 __all__ = [
+    # Core OCR and processing
     'process_pdf',
     'process_pdf_batch',
     'debug_ocr_process',
@@ -31,7 +54,22 @@ __all__ = [
     'extract_exam_type',
     'PYMUPDF_AVAILABLE',
     'PADDLE_AVAILABLE',
-    'PDF2IMAGE_AVAILABLE'
+    'PDF2IMAGE_AVAILABLE',
+    
+    # Enhanced extraction pipeline
+    'ExtractionPipeline',
+    'extract_all_fields_from_text',
+    'detect_language',
+    'extract_with_language_specific_patterns',
+    'validate_report_data',
+    'extract_and_validate_report',
+    'validate_and_enhance_extraction',
+    'cross_validate_extractions',
+    'extract_with_llm',
+    'enhance_extraction_with_llm',
+    'LLM_AVAILABLE',
+    'ENHANCED_PIPELINE_AVAILABLE',
+    'ALL_MODULES_AVAILABLE'
 ]
 
 # Initialize document_processing package 

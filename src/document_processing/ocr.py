@@ -232,7 +232,7 @@ def process_pdf(uploaded_file):
     Process a PDF file to extract text, images, and structured data
     
     Args:
-        uploaded_file: Streamlit uploaded file object
+        uploaded_file: Streamlit uploaded file object or path to a PDF file
         
     Returns:
         dict: Extracted data including text, images, and structured information
@@ -241,15 +241,61 @@ def process_pdf(uploaded_file):
         return None
     
     try:
-        # Read file content
-        file_content = uploaded_file.read()
-        filename = uploaded_file.name
+        # Create a file-like object for both string paths and uploaded files
+        file_wrapper = None
+        
+        # Handle different input types
+        if isinstance(uploaded_file, str):
+            # Input is a file path
+            if not os.path.exists(uploaded_file):
+                raise FileNotFoundError(f"File not found: {uploaded_file}")
+                
+            # Create a file-like object
+            class FileWrapper:
+                def __init__(self, path):
+                    self.path = path
+                    self.name = os.path.basename(path)
+                    self._file = open(path, 'rb')
+                    self._content = None
+                    
+                def read(self):
+                    self._file.seek(0)
+                    if self._content is None:
+                        self._content = self._file.read()
+                    return self._content
+                    
+                def seek(self, pos):
+                    self._file.seek(pos)
+                    
+                def getvalue(self):
+                    if self._content is None:
+                        self._content = self.read()
+                    return self._content
+                    
+                def close(self):
+                    self._file.close()
+                    
+                def __enter__(self):
+                    return self
+                    
+                def __exit__(self, exc_type, exc_val, exc_tb):
+                    self.close()
+            
+            # Create our wrapper
+            file_wrapper = FileWrapper(uploaded_file)
+            file_content = file_wrapper.read()
+            filename = file_wrapper.name
+        else:
+            # Input is a Streamlit UploadedFile
+            file_wrapper = uploaded_file
+            file_content = file_wrapper.read()
+            filename = file_wrapper.name
         
         # Generate MD5 hash
         md5_hash = hashlib.md5(file_content).hexdigest()
         
         # Reset file pointer
-        uploaded_file.seek(0)
+        file_wrapper.seek(0)
         
         # Initialize result dictionary
         result = {
@@ -266,7 +312,7 @@ def process_pdf(uploaded_file):
         # First attempt: Use pdfplumber (preferred for text extraction)
         if PDFPLUMBER_AVAILABLE:
             try:
-                with pdfplumber.open(uploaded_file) as pdf:
+                with pdfplumber.open(file_wrapper) as pdf:
                     # Get basic document info
                     result['page_count'] = len(pdf.pages)
                     
@@ -310,7 +356,7 @@ def process_pdf(uploaded_file):
         if not result.get('success', False) and PYMUPDF_AVAILABLE:
             try:
                 # Reset file pointer
-                uploaded_file.seek(0)
+                file_wrapper.seek(0)
                 
                 with fitz.open(stream=file_content, filetype="pdf") as pdf_document:
                     # Get basic document info
@@ -358,7 +404,7 @@ def process_pdf(uploaded_file):
         if not result.get('success', False) and PDF2IMAGE_AVAILABLE:
             try:
                 # Reset file pointer
-                uploaded_file.seek(0)
+                file_wrapper.seek(0)
                 
                 # Use pdf2image to convert pages
                 images = convert_from_bytes(file_content)
@@ -508,65 +554,72 @@ def process_pdf(uploaded_file):
         return result.get('structured_data', {}), result.get('metadata', {})
     
     except Exception as e:
-        logger.exception(f"Unhandled error in process_pdf: {e}")
-        return {
-            'patient_name': "Not Available",
-            'exam_date': "Not Available",
-            'exam_type': "Not Available",
-            'birads_score': "Not Available",
-            'raw_ocr_text': f"Error during processing: {str(e)}"
-        }, {
-            'filename': uploaded_file.name,
-            'success': False,
-            'error': str(e)
-        }
+        logging.getLogger(__name__).error(f"Unhandled error in process_pdf: {str(e)}", exc_info=True)
+        return {"error": str(e)}, {"error": str(e)}
+        
+    # Close the file wrapper if needed
+    if isinstance(uploaded_file, str) and file_wrapper:
+        try:
+            file_wrapper.close()
+        except:
+            pass
 
 def process_pdf_batch(batch):
     """
-    Process a batch of PDF files
+    Process a batch of PDF files in parallel
     
     Args:
-        batch: List of uploaded file objects
+        batch: List of Streamlit uploaded file objects or file paths
         
     Returns:
-        generator: Results from each file
+        list: List of results for each PDF
     """
     if not batch:
         return []
     
-    # Create a list to store results
-    results = []
+    batch_results = []
     
-    # Process in parallel with concurrent futures
-    with ProcessPoolExecutor(max_workers=min(len(batch), 4)) as executor:
-        # Submit all jobs
-        future_to_file = {executor.submit(process_pdf, pdf): pdf for pdf in batch}
-        
-        # Collect results as they complete
-        for future in concurrent.futures.as_completed(future_to_file):
-            uploaded_file = future_to_file[future]
-            try:
-                structured_data, metadata = future.result()
-                results.append({
-                    'filename': uploaded_file.name,
-                    'structured_data': structured_data,
-                    'metadata': metadata,
-                    'success': True
-                })
-                logger.info(f"Successfully processed {uploaded_file.name} in batch")
-            except Exception as e:
-                # Handle errors but continue processing
-                logger.error(f"Error processing {uploaded_file.name} in batch: {e}")
-                results.append({
-                    'filename': uploaded_file.name,
-                    'error': str(e),
-                    'success': False
-                })
+    try:
+        # Process with ThreadPoolExecutor for performance
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            # Submit all PDF processing tasks
+            future_to_file = {executor.submit(process_pdf, file): file for file in batch}
+            
+            # Process results as they complete
+            for future in concurrent.futures.as_completed(future_to_file):
+                file = future_to_file[future]
+                
+                try:
+                    # Get results
+                    result, metadata = future.result()
+                    
+                    # Add file info
+                    if isinstance(file, str):
+                        filename = os.path.basename(file)
+                    else:
+                        filename = file.name
+                        
+                    metadata['filename'] = filename
+                    
+                    # Combine results
+                    combined_result = {**result, **metadata}
+                    batch_results.append(combined_result)
+                    
+                    # Log success
+                    logging.getLogger(__name__).info(f"Successfully processed {filename} in batch")
+                except Exception as e:
+                    # Handle errors
+                    logging.getLogger(__name__).error(f"Error processing {filename} in batch: {str(e)}")
+                    batch_results.append({
+                        'filename': filename,
+                        'processing_status': 'error',
+                        'error_message': str(e)
+                    })
     
-    # Sort results by filename for consistency
-    results.sort(key=lambda x: x.get('filename', ''))
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Batch processing error: {str(e)}")
     
-    return results
+    return batch_results
 
 def process_page(page):
     """
@@ -617,7 +670,7 @@ def debug_ocr_process(uploaded_file, debug_info=None):
     Process PDF with detailed debugging information
     
     Args:
-        uploaded_file: Streamlit uploaded file object
+        uploaded_file: Streamlit uploaded file object or path to a PDF file
         debug_info: Optional dict to store debug information
         
     Returns:
@@ -629,109 +682,150 @@ def debug_ocr_process(uploaded_file, debug_info=None):
     debug_info['stages'] = []
     
     try:
+        # Create a file-like object for both string paths and uploaded files
+        file_wrapper = None
+        
+        # Handle different input types
+        if isinstance(uploaded_file, str):
+            # Input is a file path
+            if not os.path.exists(uploaded_file):
+                raise FileNotFoundError(f"File not found: {uploaded_file}")
+                
+            # Create a file-like object
+            class FileWrapper:
+                def __init__(self, path):
+                    self.path = path
+                    self.name = os.path.basename(path)
+                    self._file = open(path, 'rb')
+                    self._content = None
+                    
+                def read(self):
+                    self._file.seek(0)
+                    if self._content is None:
+                        self._content = self._file.read()
+                    return self._content
+                    
+                def seek(self, pos):
+                    self._file.seek(pos)
+                    
+                def getvalue(self):
+                    if self._content is None:
+                        self._content = self.read()
+                    return self._content
+                    
+                def close(self):
+                    self._file.close()
+                    
+                def __enter__(self):
+                    return self
+                    
+                def __exit__(self, exc_type, exc_val, exc_tb):
+                    self.close()
+            
+            file_wrapper = FileWrapper(uploaded_file)
+        else:
+            # Input is a Streamlit UploadedFile
+            file_wrapper = uploaded_file
+        
         # Extract text with multiple methods for comparison
         methods = []
         
         # Try pdfplumber
         if PDFPLUMBER_AVAILABLE:
             try:
-                uploaded_file.seek(0)
-                with pdfplumber.open(uploaded_file) as pdf:
-                    pdfplumber_text = "\n\n".join([p.extract_text() or "" for p in pdf.pages])
+                file_wrapper.seek(0)
+                with pdfplumber.open(file_wrapper) as pdf:
+                    pdfplumber_text = ""
+                    for page in pdf.pages:
+                        pdfplumber_text += page.extract_text() or ""
+                    
                     methods.append({
-                        "method": "pdfplumber",
-                        "text_length": len(pdfplumber_text),
-                        "text_sample": pdfplumber_text[:500] + "..." if len(pdfplumber_text) > 500 else pdfplumber_text
+                        'name': 'pdfplumber',
+                        'text': pdfplumber_text,
+                        'page_count': len(pdf.pages)
                     })
-                    debug_info['stages'].append("Extracted text with pdfplumber")
             except Exception as e:
-                methods.append({"method": "pdfplumber", "error": str(e)})
-                debug_info['stages'].append(f"pdfplumber failed: {e}")
+                methods.append({
+                    'name': 'pdfplumber',
+                    'error': str(e)
+                })
         
-        # Try PyMuPDF
+        # Try PyMuPDF (fitz)
         if PYMUPDF_AVAILABLE:
             try:
-                uploaded_file.seek(0)
-                with fitz.open(stream=uploaded_file.getvalue(), filetype="pdf") as pdf:
-                    pymupdf_text = "\n\n".join([p.get_text() for p in pdf])
+                file_wrapper.seek(0)
+                with fitz.open(stream=file_wrapper.getvalue(), filetype="pdf") as pdf:
+                    fitz_text = ""
+                    for page in pdf:
+                        fitz_text += page.get_text() or ""
+                    
                     methods.append({
-                        "method": "PyMuPDF",
-                        "text_length": len(pymupdf_text),
-                        "text_sample": pymupdf_text[:500] + "..." if len(pymupdf_text) > 500 else pymupdf_text
+                        'name': 'pymupdf',
+                        'text': fitz_text,
+                        'page_count': len(pdf)
                     })
-                    debug_info['stages'].append("Extracted text with PyMuPDF")
             except Exception as e:
-                methods.append({"method": "PyMuPDF", "error": str(e)})
-                debug_info['stages'].append(f"PyMuPDF failed: {e}")
+                methods.append({
+                    'name': 'pymupdf',
+                    'error': str(e)
+                })
         
-        # Use OCR with both engines
-        if PDF2IMAGE_AVAILABLE:
+        # Try pdf2image + OCR
+        if PDF2IMAGE_AVAILABLE and PADDLE_AVAILABLE:
             try:
-                uploaded_file.seek(0)
-                images = convert_from_bytes(uploaded_file.getvalue())
+                file_wrapper.seek(0)
+                images = convert_from_bytes(file_wrapper.getvalue())
+                ocr_text = ""
                 
-                # PaddleOCR
-                paddle_ocr = init_paddle()
-                if paddle_ocr:
-                    paddle_text = ""
-                    for img in images:
-                        img_np = np.array(img)
-                        result = paddle_ocr.ocr(img_np, cls=True)
-                        page_text = ""
-                        
-                        if isinstance(result, list):
-                            for page_result in result:
-                                if page_result and isinstance(page_result, list):
-                                    for line in page_result:
-                                        if line and isinstance(line, list) and len(line) == 2:
-                                            text, confidence = line[1]
-                                            page_text += text + " "
-                        
-                        paddle_text += page_text + "\n\n"
+                # Initialize PaddleOCR if needed
+                ocr = init_paddle()
+                
+                for img in images:
+                    # Convert PIL image to numpy array
+                    img_array = np.array(img)
                     
-                    methods.append({
-                        "method": "PaddleOCR",
-                        "text_length": len(paddle_text),
-                        "text_sample": paddle_text[:500] + "..." if len(paddle_text) > 500 else paddle_text
-                    })
-                    debug_info['stages'].append("Extracted text with PaddleOCR")
-                
-                # Tesseract
-                if TESSERACT_AVAILABLE:
-                    tesseract_text = ""
-                    for img in images:
-                        img_np = np.array(img)
-                        page_text = simple_ocr(img_np)
-                        tesseract_text += page_text + "\n\n"
+                    # Run OCR
+                    result = ocr.ocr(img_array, cls=True)
                     
-                    methods.append({
-                        "method": "Tesseract",
-                        "text_length": len(tesseract_text),
-                        "text_sample": tesseract_text[:500] + "..." if len(tesseract_text) > 500 else tesseract_text
-                    })
-                    debug_info['stages'].append("Extracted text with Tesseract")
+                    # Extract text
+                    page_text = ""
+                    for line in result[0]:
+                        if line[1][0]:  # Check if there is text
+                            page_text += line[1][0] + " "
+                    
+                    ocr_text += page_text + "\n\n"
                 
+                methods.append({
+                    'name': 'pdf2image+paddleocr',
+                    'text': ocr_text,
+                    'page_count': len(images)
+                })
             except Exception as e:
-                methods.append({"method": "OCR", "error": str(e)})
-                debug_info['stages'].append(f"OCR failed: {e}")
+                methods.append({
+                    'name': 'pdf2image+paddleocr',
+                    'error': str(e)
+                })
+                
+        # Process with main function to get final results
+        result, metadata = process_pdf(file_wrapper)
         
-        debug_info['extraction_methods'] = methods
-        
-        # Process document normally
-        result, metadata = process_pdf(uploaded_file)
-        
+        # Close the file wrapper if needed
+        if isinstance(uploaded_file, str) and file_wrapper:
+            try:
+                file_wrapper.close()
+            except:
+                pass
+                
         return {
-            "result": result,
-            "metadata": metadata,
-            "debug_info": debug_info
+            'methods': methods,
+            'final_result': result,
+            'metadata': metadata
         }
         
     except Exception as e:
-        debug_info['error'] = str(e)
-        debug_info['stages'].append(f"Debug processing failed: {e}")
         return {
-            "error": str(e),
-            "debug_info": debug_info
+            'error': str(e),
+            'methods': methods if 'methods' in locals() else []
         }
 
 def extract_structured_data_from_text(text):
@@ -754,7 +848,21 @@ def extract_structured_data_from_text(text):
         }
     
     try:
-        # Import text analysis functions
+        # First try to use the enhanced extraction pipeline if available
+        try:
+            from document_processing.extraction_pipeline import extract_all_fields_from_text, PIPELINE_AVAILABLE
+            
+            if PIPELINE_AVAILABLE:
+                logger.info("Using enhanced extraction pipeline")
+                structured_data = extract_all_fields_from_text(text)
+                structured_data['raw_ocr_text'] = text
+                return structured_data
+            else:
+                logger.info("Enhanced pipeline not available, using standard extraction")
+        except ImportError:
+            logger.info("Enhanced extraction pipeline not available, using standard extraction")
+        
+        # Fallback to standard extraction if enhanced pipeline is not available
         from document_processing.text_analysis import process_document_text
         
         # Process text to extract structured data
@@ -788,7 +896,7 @@ def extract_structured_data_from_text(text):
         
         # Try basic extraction with regex
         patterns = {
-            'birads_score': r'(?:BIRADS|BI-RADS|Category)[\s:]+([0-6])',
+            'birads_score': r'(?:BIRADS|BI-RADS|BLRADS|BL-RADS|Category)[\s:]+([0-6][a-c]?)',
             'patient_name': r'(?:Patient|Name)[\s:]+([A-Z][a-z]+\s+[A-Z][a-z]+)',
             'exam_date': r'(?:Date|Exam date)[\s:]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})',
             'exam_type': r'(?:Examination|Procedure|Study)[\s:]+([A-Za-z\s]+(?:mammogram|mammography|ultrasound|breast))',

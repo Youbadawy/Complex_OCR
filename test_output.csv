@@ -1,0 +1,2 @@
+source_file,processing_status,error_message
+Eng Example 1.pdf,error,Error extracting text from PDF: No text extracted from test_data/Eng Example 1.pdf

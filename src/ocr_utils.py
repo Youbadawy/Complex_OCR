@@ -108,6 +108,67 @@ def simple_ocr(image: np.ndarray) -> str:
         logging.error(f"OCR failed: {str(e)}")
         return f"[OCR ERROR: {str(e)}]"
 
+def normalize_date(date_str: str) -> str:
+    """
+    Normalize date string to YYYY-MM-DD format.
+    
+    Args:
+        date_str: Date string in various formats
+        
+    Returns:
+        Normalized date string in YYYY-MM-DD format or original string if parsing fails
+    """
+    if not date_str or not isinstance(date_str, str):
+        return ""
+        
+    # Try to handle common date formats
+    date_patterns = [
+        # YYYY-MM-DD or YYYY/MM/DD
+        (r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', 
+         lambda m: f"{m.group(1)}-{m.group(2).zfill(2)}-{m.group(3).zfill(2)}"),
+        
+        # MM/DD/YYYY or MM-DD-YYYY
+        (r'(\d{1,2})[-/](\d{1,2})[-/](\d{4})', 
+         lambda m: f"{m.group(3)}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"),
+        
+        # DD MMM YYYY (e.g., 15 Jan 2023)
+        (r'(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})',
+         lambda m: _parse_text_date(f"{m.group(1)} {m.group(2)} {m.group(3)}")),
+        
+        # MMM DD, YYYY (e.g., Jan 15, 2023)
+        (r'([A-Za-z]{3,9})\s+(\d{1,2})(?:,|\s+)?\s*(\d{4})',
+         lambda m: _parse_text_date(f"{m.group(2)} {m.group(1)} {m.group(3)}")),
+    ]
+    
+    # Try each pattern
+    for pattern, formatter in date_patterns:
+        match = re.search(pattern, date_str, re.IGNORECASE)
+        if match:
+            try:
+                return formatter(match)
+            except Exception as e:
+                logging.warning(f"Date parsing error: {str(e)}")
+                continue
+    
+    # If all patterns fail, try dateutil parser as fallback
+    try:
+        from dateutil import parser
+        parsed_date = parser.parse(date_str, fuzzy=True)
+        return parsed_date.strftime('%Y-%m-%d')
+    except Exception as e:
+        logging.warning(f"Date parsing fallback error: {str(e)}")
+        return date_str
+
+def _parse_text_date(date_text: str) -> str:
+    """Helper function to parse text dates with month names"""
+    try:
+        from dateutil import parser
+        parsed_date = parser.parse(date_text, fuzzy=True)
+        return parsed_date.strftime('%Y-%m-%d')
+    except Exception as e:
+        logging.warning(f"Text date parsing error: {str(e)}")
+        return date_text
+
 def extract_medical_fields(text, use_llm=False, llm_api_key=None):
     """
     Extract medical fields from document text with enhanced extraction and validation
@@ -125,7 +186,7 @@ def extract_medical_fields(text, use_llm=False, llm_api_key=None):
             extract_patient_info, extract_exam_type, extract_date_from_text,
             extract_provider_info, extract_signature_block, extract_birads_score,
             extract_sections, is_redacted_document, validate_field_types,
-            enhance_extraction_with_llm, get_extraction_value
+            enhance_extraction_with_llm, get_extraction_value, extract_section
         )
         
         # Initialize result dictionary with empty fields
@@ -206,6 +267,29 @@ def extract_medical_fields(text, use_llm=False, llm_api_key=None):
                 structured_data['birads_score'] = birads_score
         except Exception as e:
             logging.error(f"Error extracting BIRADS score: {str(e)}")
+            
+        # Extract sections using the new extract_section function
+        try:
+            structured_data['findings'] = {'value': extract_section(text, 'findings'), 'confidence': 0.8}
+            structured_data['impression_result'] = {'value': extract_section(text, 'impression'), 'confidence': 0.8}
+            structured_data['recommendation'] = {'value': extract_section(text, 'recommendation'), 'confidence': 0.8}
+            
+            # Extract and merge clinical_history and patient_history
+            clinical_history = extract_section(text, 'clinical_history')
+            patient_history = extract_section(text, 'patient_history')
+            
+            if clinical_history and patient_history:
+                # Merge if both exist
+                structured_data['patient_history'] = {
+                    'value': f"{clinical_history}\n{patient_history}",
+                    'confidence': 0.8
+                }
+            elif clinical_history:
+                structured_data['patient_history'] = {'value': clinical_history, 'confidence': 0.8}
+            elif patient_history:
+                structured_data['patient_history'] = {'value': patient_history, 'confidence': 0.8}
+        except Exception as e:
+            logging.error(f"Error extracting sections: {str(e)}")
         
         # Apply field validations
         try:
@@ -269,7 +353,14 @@ def extract_medical_fields(text, use_llm=False, llm_api_key=None):
             result['dob'] = get_extraction_value(structured_data, 'dob')
             result['age'] = get_extraction_value(structured_data, 'age')
             result['gender'] = get_extraction_value(structured_data, 'gender')
-            result['exam_date'] = get_extraction_value(structured_data, 'exam_date')
+            
+            # Normalize dates
+            exam_date = get_extraction_value(structured_data, 'exam_date')
+            result['exam_date'] = normalize_date(exam_date) if exam_date else ''
+            
+            document_date = get_extraction_value(structured_data, 'document_date')
+            result['document_date'] = normalize_date(document_date) if document_date else ''
+            
             result['exam_type'] = get_extraction_value(structured_data, 'exam_type')
             result['document_type'] = get_extraction_value(structured_data, 'document_type')
             result['birads_score'] = get_extraction_value(structured_data, 'birads_score')
@@ -280,7 +371,6 @@ def extract_medical_fields(text, use_llm=False, llm_api_key=None):
             result['patient_history'] = get_extraction_value(structured_data, 'patient_history')
             result['electronically_signed_by'] = get_extraction_value(structured_data, 'electronically_signed_by')
             result['testing_provider'] = get_extraction_value(structured_data, 'testing_provider')
-            result['document_date'] = get_extraction_value(structured_data, 'document_date')
             result['referring_provider'] = get_extraction_value(structured_data, 'referring_provider')
             result['facility_name'] = get_extraction_value(structured_data, 'facility_name')
         except Exception as e:
@@ -300,7 +390,6 @@ def extract_medical_fields(text, use_llm=False, llm_api_key=None):
             'birads_score': '',
             'facility_name': ''
         }
-        
 
 # Preload medical dictionary for spell checking
 MEDICAL_DICT = SpellChecker(language=None)
