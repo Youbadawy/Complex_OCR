@@ -56,7 +56,8 @@ __all__ = [
     'extract_structured_data',
     'extract_section',
     'detect_report_language',
-    'clean_provider_name'
+    'clean_provider_name',
+    'extract_exam_date'
 ]
 
 class BiradsSpellingCorrector:
@@ -676,114 +677,338 @@ def extract_signed_by(text: str) -> str:
         logger.error(f"Unexpected error in extract_signed_by: {str(e)}")
         return ""
 
+def extract_exam_date(text: str) -> Dict[str, Any]:
+    """
+    Extract exam date from medical report text with enhanced bilingual support.
+    
+    This function identifies and extracts the examination date from medical reports
+    in both English and French, handling various date formats and linguistic patterns.
+    
+    Args:
+        text: Medical report text
+        
+    Returns:
+        Dictionary with 'value' (normalized date in YYYY-MM-DD format) and 'confidence' keys
+    """
+    if text is None or not text.strip():
+        return {"value": "", "confidence": 0.0}
+    
+    # Detect language to prioritize appropriate patterns
+    lang = detect_report_language(text)
+    
+    # Initialize result - will be updated if a date is found
+    result = {"value": "", "confidence": 0.0}
+    
+    # Preprocessed text for better matching
+    text_blocks = text.replace('\n', ' ').replace('\r', ' ')
+    
+    # ===== PRIMARY EXAM DATE PATTERNS =====
+    # These patterns specifically look for exam date markers
+    
+    # French patterns (higher priority for French documents)
+    fr_exam_patterns = [
+        # Standard French exam date patterns
+        (r"Date d['']exame[nr]\s*:?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})", 0.95),
+        (r"Date d['']exame[nr]\s*:?\s*(\d{1,2}[-/. ]\d{1,2}[-/. ]\d{4})", 0.95),
+        (r"Date d['']exame[nr]\s*:?\s*(\d{1,2}\s+\w+\s+\d{4})", 0.90),
+        (r"Date d['']examen\s*:\s*le\s+(\d{1,2}\s+\w+\s+\d{4})", 0.95),
+        
+        # Form field format (often in headers)
+        (r"DATE\s+EXAMEN\s*:?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})", 0.95),
+        (r"DATE\s+EXAMEN\s*:?\s*(\d{1,2}[-/. ]\d{1,2}[-/. ]\d{4})", 0.90),
+        (r"DATE\s+DE\s+L['']EXAMEN\s*:?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})", 0.95),
+        (r"DATE\s+DE\s+L['']EXAMEN\s*:?\s*(\d{1,2}[-/. ]\d{1,2}[-/. ]\d{4})", 0.90),
+        
+        # Visit date patterns (common in Quebec reports)
+        (r"N°\s+de\s+visite\s*:?\s*(\d{8})[-]", 0.80),  # Extract date from visit number format YYYYMMDD-XXX
+        (r"Date\s+de\s+l['']examen\s*:?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})", 0.95),
+        (r"Date\s+de\s+l['']examen\s*:?\s*(\d{1,2}[-/. ]\d{1,2}[-/. ]\d{4})", 0.90),
+    ]
+    
+    # English patterns (higher priority for English documents)
+    en_exam_patterns = [
+        # Explicit exam date patterns
+        (r"Exam\s*Date\s*:?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})", 0.95),
+        (r"Exam\s*Date\s*:?\s*(\d{1,2}[-/. ]\d{1,2}[-/. ]\d{4})", 0.90),
+        (r"Exam\s*Date\s*:?\s*(\d{1,2}(?:st|nd|rd|th)?\s+\w+\s+\d{4})", 0.90),
+        (r"Date\s+of\s+Exam(?:ination)?\s*:?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})", 0.95),
+        (r"Date\s+of\s+Exam(?:ination)?\s*:?\s*(\d{1,2}[-/. ]\d{1,2}[-/. ]\d{4})", 0.90),
+        (r"Date\s+of\s+Exam(?:ination)?\s*:?\s*(\d{1,2}(?:st|nd|rd|th)?\s+\w+\s+\d{4})", 0.90),
+        
+        # Form field format
+        (r"EXAMINATION\s+DATE\s*:?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})", 0.95),
+        (r"EXAMINATION\s+DATE\s*:?\s*(\d{1,2}[-/. ]\d{1,2}[-/. ]\d{4})", 0.90),
+        (r"EXAM\s+DATE\s*:?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})", 0.95),
+        (r"EXAM\s+DATE\s*:?\s*(\d{1,2}[-/. ]\d{1,2}[-/. ]\d{4})", 0.90),
+        
+        # Condensed formats
+        (r"ExamDate\s*:?\s*(\d{1,2}\w{3}\d{4})", 0.85),  # Like 19Jul2023
+    ]
+    
+    # Start with the right language as primary
+    primary_patterns = fr_exam_patterns if lang == 'fr' else en_exam_patterns
+    secondary_patterns = en_exam_patterns if lang == 'fr' else fr_exam_patterns
+    
+    # Try primary language patterns first
+    for pattern, confidence in primary_patterns:
+        match = re.search(pattern, text_blocks, re.IGNORECASE)
+        if match:
+            date_str = match.group(1).strip()
+            try:
+                from ocr_utils import normalize_date
+                normalized_date = normalize_date(date_str)
+                if normalized_date:
+                    return {"value": normalized_date, "confidence": confidence}
+            except:
+                # If import fails, use dateutil parser directly
+                try:
+                    from dateutil import parser
+                    parsed_date = parser.parse(date_str, fuzzy=True)
+                    return {"value": parsed_date.strftime('%Y-%m-%d'), "confidence": confidence}
+                except:
+                    # If parsing fails, return the raw date
+                    return {"value": date_str, "confidence": confidence * 0.8}
+    
+    # If primary language patterns don't match, try secondary language patterns
+    for pattern, confidence in secondary_patterns:
+        match = re.search(pattern, text_blocks, re.IGNORECASE)
+        if match:
+            date_str = match.group(1).strip()
+            try:
+                from ocr_utils import normalize_date
+                normalized_date = normalize_date(date_str)
+                if normalized_date:
+                    return {"value": normalized_date, "confidence": confidence * 0.9}  # Slightly lower confidence for secondary language
+            except:
+                # If import fails, use dateutil parser directly
+                try:
+                    from dateutil import parser
+                    parsed_date = parser.parse(date_str, fuzzy=True)
+                    return {"value": parsed_date.strftime('%Y-%m-%d'), "confidence": confidence * 0.9}
+                except:
+                    # If parsing fails, return the raw date
+                    return {"value": date_str, "confidence": confidence * 0.7}
+    
+    # ===== SECONDARY CONTEXTUAL PATTERNS =====
+    # These patterns look for dates near exam type descriptions
+    
+    # Combine exam type indicators with dates
+    exam_keywords = []
+    
+    if lang == 'fr':
+        exam_keywords = [
+            r'mammographie', r'échographie', r'examen', r'imagerie', 
+            r'dépistage', r'diagnostique', r'résultat', r'tomographie'
+        ]
+    else:
+        exam_keywords = [
+            r'mammogram', r'ultrasound', r'examination', r'imaging',
+            r'screening', r'diagnostic', r'result', r'tomosynthesis'
+        ]
+    
+    date_patterns = [
+        r'(\d{4}[-/. ]\d{1,2}[-/. ]\d{1,2})', 
+        r'(\d{1,2}[-/. ]\d{1,2}[-/. ]\d{4})',
+        r'(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})',
+        r'(\d{1,2}\s+(?:janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre|janv|févr|mars|avr|mai|juin|juil|août|sept|oct|nov|déc)\s+\d{4})'
+    ]
+    
+    # Look for dates within X characters of exam keywords
+    proximity_window = 100  # Look within 100 chars before/after exam keyword
+    
+    for keyword in exam_keywords:
+        # Find all instances of the keyword
+        for match in re.finditer(r'\b' + keyword + r'\b', text_blocks, re.IGNORECASE):
+            keyword_pos = match.start()
+            context_start = max(0, keyword_pos - proximity_window)
+            context_end = min(len(text_blocks), keyword_pos + proximity_window)
+            context = text_blocks[context_start:context_end]
+            
+            # Look for dates in this context
+            for date_pattern in date_patterns:
+                date_matches = list(re.finditer(date_pattern, context, re.IGNORECASE))
+                if date_matches:
+                    # Take the date closest to the keyword
+                    closest_match = min(date_matches, key=lambda m: min(abs(m.start() - proximity_window), abs(m.end() - proximity_window)))
+                    date_str = closest_match.group(1).strip()
+                    try:
+                        from ocr_utils import normalize_date
+                        normalized_date = normalize_date(date_str)
+                        if normalized_date:
+                            return {"value": normalized_date, "confidence": 0.8}  # Contextual match has lower confidence
+                    except:
+                        # Fallback to dateutil parser
+                        try:
+                            from dateutil import parser
+                            parsed_date = parser.parse(date_str, fuzzy=True)
+                            return {"value": parsed_date.strftime('%Y-%m-%d'), "confidence": 0.75}
+                        except:
+                            return {"value": date_str, "confidence": 0.7}
+    
+    # ===== FALLBACK STRATEGIES =====
+    
+    # Try looking for document date as fallback
+    document_date_patterns = []
+    
+    if lang == 'fr':
+        document_date_patterns = [
+            (r"Date\s+du\s+document\s*:?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})", 0.7),
+            (r"Date\s+du\s+document\s*:?\s*(\d{1,2}[-/. ]\d{1,2}[-/. ]\d{4})", 0.65),
+            (r"Date\s+du\s+rapport\s*:?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})", 0.7),
+            (r"Date\s+du\s+rapport\s*:?\s*(\d{1,2}[-/. ]\d{1,2}[-/. ]\d{4})", 0.65)
+        ]
+    else:
+        document_date_patterns = [
+            (r"Document\s+Date\s*:?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})", 0.7),
+            (r"Document\s+Date\s*:?\s*(\d{1,2}[-/. ]\d{1,2}[-/. ]\d{4})", 0.65),
+            (r"Report\s+Date\s*:?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})", 0.7),
+            (r"Report\s+Date\s*:?\s*(\d{1,2}[-/. ]\d{1,2}[-/. ]\d{4})", 0.65)
+        ]
+    
+    # Check document date patterns
+    for pattern, confidence in document_date_patterns:
+        match = re.search(pattern, text_blocks, re.IGNORECASE)
+        if match:
+            date_str = match.group(1).strip()
+            try:
+                from ocr_utils import normalize_date
+                normalized_date = normalize_date(date_str)
+                if normalized_date:
+                    return {"value": normalized_date, "confidence": confidence}
+            except:
+                # Fallback to dateutil parser
+                try:
+                    from dateutil import parser
+                    parsed_date = parser.parse(date_str, fuzzy=True)
+                    return {"value": parsed_date.strftime('%Y-%m-%d'), "confidence": confidence}
+                except:
+                    return {"value": date_str, "confidence": confidence * 0.9}
+    
+    # Last resort: use the first valid date found in the text
+    # This has very low confidence as it might not be the exam date
+    
+    # Look for any dates in the text
+    all_date_matches = []
+    for date_pattern in date_patterns:
+        all_date_matches.extend(list(re.finditer(date_pattern, text_blocks, re.IGNORECASE)))
+    
+    if all_date_matches:
+        # Sort by position in text (earlier dates more likely to be relevant)
+        all_date_matches.sort(key=lambda m: m.start())
+        
+        for match in all_date_matches:
+            date_str = match.group(1).strip()
+            try:
+                from ocr_utils import normalize_date
+                normalized_date = normalize_date(date_str)
+                if normalized_date:
+                    return {"value": normalized_date, "confidence": 0.5}  # Very low confidence
+            except:
+                # Fallback to dateutil parser
+                try:
+                    from dateutil import parser
+                    parsed_date = parser.parse(date_str, fuzzy=True)
+                    return {"value": parsed_date.strftime('%Y-%m-%d'), "confidence": 0.45}
+                except:
+                    pass
+    
+    # If we get here, we couldn't find any date
+    return {"value": "", "confidence": 0.0}
+
 def process_document_text(text: str) -> Dict[str, Any]:
     """
-    Process document text to extract structured data.
+    Process document text to extract structured information.
     
     Args:
         text: Document text to process
         
     Returns:
         Dictionary with extracted structured data
-    
-    Raises:
-        InvalidInputError: If text is None
-        ProcessingError: If processing fails unexpectedly
     """
-    structured_data = {
-        'patient_name': "Not Available",
-        'exam_date': "Not Available",
-        'exam_type': "Not Available",
-        'birads_score': "Not Available",
-        'findings': "",
-        'impression': "",
-        'recommendation': "",
-        'clinical_history': "",
-        'provider_info': {},
-        'signed_by': ""
-    }
-    
     try:
+        logger.debug("Processing document text")
+        
         if text is None:
-            logger.warning("process_document_text received None input")
             raise InvalidInputError("Input text cannot be None")
+            
+        if not text.strip():
+            logger.warning("Empty text provided to process_document_text")
+            return {}
         
-        if not text:
-            logger.debug("process_document_text received empty text")
-            return structured_data
+        # Preprocess text for better extraction
+        processed_text = preprocess_text_for_extraction(text)
         
-        logger.info("Processing document text")
+        # Initialize result with sections
+        result = {}
         
-        # Extract patient info
         try:
-            patient_info = extract_patient_info(text)
-            if patient_info.get('name'):
-                structured_data['patient_name'] = patient_info['name']
-                logger.debug(f"Extracted patient name: {patient_info['name']}")
-        except Exception as e:
-            logger.error(f"Error extracting patient info: {str(e)}")
-        
-        # Extract exam date
-        try:
-            exam_date = extract_date_from_text(text)
-            if exam_date:
-                structured_data['exam_date'] = exam_date
-                logger.debug(f"Extracted exam date: {exam_date}")
-        except Exception as e:
-            logger.error(f"Error extracting exam date: {str(e)}")
-        
-        # Extract exam type
-        try:
-            exam_type = extract_exam_type(text)
-            if exam_type:
-                structured_data['exam_type'] = exam_type
-                logger.debug(f"Extracted exam type: {exam_type}")
-        except Exception as e:
-            logger.error(f"Error extracting exam type: {str(e)}")
-        
-        # Extract BIRADS score
-        try:
-            birads_info = extract_birads_score(text)
-            if birads_info['value']:
-                structured_data['birads_score'] = birads_info['value']
-                logger.debug(f"Extracted BIRADS score: {birads_info['value']}")
-        except Exception as e:
-            logger.error(f"Error extracting BIRADS score: {str(e)}")
-        
-        # Extract sections
-        try:
-            sections = extract_sections(text)
-            for key in ['findings', 'impression', 'recommendation', 'clinical_history']:
-                if key in sections:
-                    structured_data[key] = sections[key]
-                    logger.debug(f"Extracted {key}: {sections[key][:50]}...")
+            sections = extract_sections(processed_text)
+            result.update(sections)
         except Exception as e:
             logger.error(f"Error extracting sections: {str(e)}")
         
-        # Extract provider info
+        # Extract patient information
         try:
-            structured_data['provider_info'] = extract_provider_info(text)
-            logger.debug(f"Extracted provider info")
+            patient_info = extract_patient_info(processed_text)
+            result.update(patient_info)
+        except Exception as e:
+            logger.error(f"Error extracting patient info: {str(e)}")
+        
+        # Extract exam type
+        try:
+            exam_type = extract_exam_type(processed_text)
+            if exam_type:
+                result['exam_type'] = exam_type
+        except Exception as e:
+            logger.error(f"Error extracting exam type: {str(e)}")
+        
+        # Extract dates with enhanced exam date extraction
+        try:
+            # Use the specialized exam date extraction
+            exam_date = extract_exam_date(processed_text)
+            if exam_date and exam_date.get('value'):
+                result['exam_date'] = exam_date
+            else:
+                # Fallback to general date extraction
+                date_result = extract_date_from_text(processed_text)
+                if date_result:
+                    result['exam_date'] = date_result
+        except Exception as e:
+            logger.error(f"Error extracting exam date: {str(e)}")
+        
+        # Extract BIRADS score
+        try:
+            birads_score = extract_birads_score(processed_text)
+            if birads_score:
+                result['birads_score'] = birads_score
+        except Exception as e:
+            logger.error(f"Error extracting BIRADS score: {str(e)}")
+        
+        # Extract provider information
+        try:
+            provider_info = extract_provider_info(processed_text)
+            result['provider_info'] = provider_info
         except Exception as e:
             logger.error(f"Error extracting provider info: {str(e)}")
         
-        # Extract signature
+        # Extract signed by information
         try:
-            structured_data['signed_by'] = extract_signed_by(text)
-            if structured_data['signed_by']:
-                logger.debug(f"Extracted signature: {structured_data['signed_by']}")
+            signed_by = extract_signed_by(processed_text)
+            if signed_by:
+                result['signed_by'] = signed_by
         except Exception as e:
-            logger.error(f"Error extracting signature: {str(e)}")
+            logger.error(f"Error extracting signed by info: {str(e)}")
         
-        logger.info("Document text processing complete")
-        return structured_data
+        # Validate and return
+        return result
     
     except InvalidInputError:
         # Re-raise InvalidInputError for specific handling
         raise
     except Exception as e:
         logger.error(f"Unexpected error in process_document_text: {str(e)}")
-        raise ProcessingError(f"Failed to process document: {str(e)}")
+        # Return empty result on error
+        return {}
 
 def extract_structured_data(text: str) -> Dict[str, Any]:
     """

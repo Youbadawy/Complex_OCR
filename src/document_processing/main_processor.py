@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 from .pdf_processor import process_pdf
 from .text_analysis import process_document_text
 from .report_validation import validate_report_data, extract_and_validate_report
+from document_processing.ocr import is_deidentified_document
 
 # Import our enhanced extraction pipeline
 try:
@@ -40,136 +41,65 @@ except ImportError:
     logger.warning("LLM extraction module not available")
     LLM_AVAILABLE = False
 
+# Import the new parser integration
+from document_processing.parser_integration import process_ocr_text, enhance_existing_dataframe
+
 class ProcessingError(Exception):
-    """Base exception for processing errors"""
+    """Base exception for document processing errors"""
     pass
 
 class PDFProcessingError(ProcessingError):
-    """Exception raised when PDF processing fails"""
+    """Exception raised for errors during PDF processing"""
     pass
 
 class TextProcessingError(ProcessingError):
-    """Exception raised when text processing fails"""
+    """Exception raised for errors during text extraction or processing"""
     pass
 
 class ValidationError(ProcessingError):
-    """Exception raised when validation fails"""
+    """Exception raised for validation errors"""
     pass
 
 def process_single_report(pdf_path: str, use_llm: bool = True) -> Dict[str, Any]:
     """
-    Process a single medical report from a PDF file.
+    Process a single medical report PDF and extract structured data.
     
     Args:
         pdf_path: Path to the PDF file
-        use_llm: Whether to use LLM enhancement if available
+        use_llm: Whether to use LLM for enhancing extraction
         
     Returns:
-        Dictionary with extracted and validated report data
-        
-    Raises:
-        ProcessingError: If processing fails
+        Dictionary with extracted structured data
     """
+    logger.info(f"Processing report: {pdf_path}")
+    
     try:
-        logger.info(f"Processing report: {pdf_path}")
+        # Extract text and perform OCR
+        ocr_result = process_pdf(pdf_path)
         
-        # Step 1: Extract text from PDF
-        try:
-            # Use process_pdf to get the extracted text
-            if os.path.exists(pdf_path):
-                with open(pdf_path, 'rb') as file:
-                    try:
-                        # Try to handle different return formats from process_pdf
-                        result = process_pdf(file)
-                        
-                        # Check if result is a tuple (result, metadata)
-                        if isinstance(result, tuple) and len(result) >= 1:
-                            raw_text = result[0].get('raw_text', '')
-                        # Check if result is a dictionary
-                        elif isinstance(result, dict):
-                            raw_text = result.get('raw_text', '')
-                        else:
-                            raw_text = str(result)
-                    except Exception as e:
-                        logger.error(f"Error processing PDF: {str(e)}")
-                        raise PDFProcessingError(f"Error processing PDF: {str(e)}")
-            else:
-                logger.warning(f"File not found: {pdf_path}")
-                raise PDFProcessingError(f"File not found: {pdf_path}")
-                
-            if not raw_text:
-                logger.warning(f"No text extracted from {pdf_path}")
-                raise PDFProcessingError(f"No text extracted from {pdf_path}")
-            logger.info(f"Extracted {len(raw_text)} characters from PDF")
-        except Exception as e:
-            logger.error(f"Error extracting text from PDF: {str(e)}")
-            raise PDFProcessingError(f"Error extracting text from PDF: {str(e)}")
+        if not ocr_result or not ocr_result.get('text'):
+            raise TextProcessingError(f"Failed to extract text from {pdf_path}")
         
-        # Step 2: Process the raw text using our extraction pipeline if available
-        try:
-            if PIPELINE_AVAILABLE:
-                logger.info("Using enhanced multilingual extraction pipeline")
-                # Detect language first for logging
-                language = detect_language(raw_text)
-                logger.info(f"Detected language: {language}")
-                
-                # Use our comprehensive extraction pipeline
-                extracted_data = extract_all_fields_from_text(raw_text)
-                logger.info("Enhanced extraction pipeline completed")
-            else:
-                # Fallback to legacy extraction
-                logger.info("Using legacy extraction method")
-                extracted_data = process_document_text(raw_text)
-                logger.info("Basic extraction completed")
-        except Exception as e:
-            logger.error(f"Error in text processing: {str(e)}")
-            raise TextProcessingError(f"Error in text processing: {str(e)}")
+        raw_text = ocr_result.get('text', '')
         
-        # Step 3: Validate the extracted data
-        try:
-            validated_data = validate_report_data(extracted_data, raw_text)
-            logger.info("Validation completed")
-        except Exception as e:
-            logger.error(f"Error in validation: {str(e)}")
-            raise ValidationError(f"Error in validation: {str(e)}")
+        # Check if the document appears to be de-identified
+        is_deidentified = is_deidentified_document(raw_text)
         
-        # Step 4: Use LLM for missing or low-confidence fields if available
-        if use_llm and LLM_AVAILABLE:
-            try:
-                # Check for critical missing fields or low confidence
-                critical_fields = ["birads_score", "impression", "exam_date", "exam_type"]
-                missing_fields = [field for field in critical_fields 
-                                if field not in validated_data or 
-                                validated_data[field] in ["", "Not Available"]]
-                
-                if missing_fields:
-                    logger.info(f"Using LLM to extract missing fields: {missing_fields}")
-                    llm_data = extract_with_llm(raw_text, "full")
-                    
-                    # Update missing fields from LLM data
-                    for field in missing_fields:
-                        if field in llm_data and llm_data[field]:
-                            validated_data[field] = llm_data[field]
-                            logger.info(f"Updated {field} with LLM data")
-                    
-                    # Re-validate with the new data
-                    validated_data = validate_report_data(validated_data, raw_text)
-            except Exception as e:
-                logger.warning(f"LLM enhancement failed, using conventional results: {str(e)}")
+        # Use the new parser to extract structured data
+        extracted_data = process_ocr_text(raw_text, use_llm=use_llm)
         
-        # Step 5: Add additional metadata
-        validated_data['source_file'] = os.path.basename(pdf_path)
-        validated_data['processing_status'] = 'success'
+        # Add metadata
+        extracted_data['file_path'] = pdf_path
+        extracted_data['file_name'] = os.path.basename(pdf_path)
+        extracted_data['is_deidentified'] = is_deidentified
         
-        return validated_data
+        return extracted_data
         
-    except ProcessingError:
-        # Re-raise ProcessingError for specific handling
-        raise
     except Exception as e:
-        logger.error(f"Unexpected error processing report: {str(e)}")
+        error_msg = f"Error processing {pdf_path}: {str(e)}"
+        logger.error(error_msg)
         logger.error(traceback.format_exc())
-        raise ProcessingError(f"Failed to process report: {str(e)}")
+        raise ProcessingError(error_msg) from e
 
 def process_directory(directory_path: str, output_file: str = None, use_llm: bool = True) -> pd.DataFrame:
     """
@@ -232,78 +162,93 @@ def process_directory(directory_path: str, output_file: str = None, use_llm: boo
 
 def fix_dataframe(df: pd.DataFrame, raw_texts: Dict[str, str] = None) -> pd.DataFrame:
     """
-    Fix and enhance a dataframe of report data.
+    Enhance and fix issues in the extracted dataframe.
     
     Args:
-        df: DataFrame with extracted report data
-        raw_texts: Optional dictionary mapping source_file to raw text
+        df: DataFrame with extracted structured data
+        raw_texts: Optional dictionary of raw OCR texts, keyed by file path
         
     Returns:
-        Enhanced DataFrame with fixed inconsistencies
+        Enhanced DataFrame with improved extractions
     """
-    logger.info("Fixing dataframe inconsistencies")
+    if df.empty:
+        return df
+        
+    # Make a copy to avoid modifying the original
+    enhanced_df = df.copy()
     
-    # Create a copy to avoid modifying the original
-    fixed_df = df.copy()
+    # Replace "Not Available" with "N/A" for consistency
+    enhanced_df = enhanced_df.applymap(
+        lambda x: "N/A" if x == "Not Available" or (isinstance(x, str) and x.strip() == "") else x
+    )
     
-    # Check for duplicate columns
-    duplicate_cols = fixed_df.columns[fixed_df.columns.duplicated()]
-    if len(duplicate_cols) > 0:
-        logger.warning(f"Found duplicate columns: {duplicate_cols}")
-        for col in duplicate_cols:
-            # Keep the first instance of the column and drop duplicates
-            fixed_df = fixed_df.loc[:,~fixed_df.columns.duplicated()]
+    # Use the new parser integration to enhance extraction
+    if 'raw_ocr_text' in enhanced_df.columns:
+        enhanced_df = enhance_existing_dataframe(enhanced_df)
+    elif raw_texts:
+        # If raw texts are provided separately, add them to the dataframe
+        for idx, row in enhanced_df.iterrows():
+            file_path = row.get('file_path', '')
+            if file_path in raw_texts:
+                enhanced_df.at[idx, 'raw_ocr_text'] = raw_texts[file_path]
+        
+        # Then enhance with the new parser
+        enhanced_df = enhance_existing_dataframe(enhanced_df)
     
-    # Fix inconsistencies in each row if we have raw text
-    if raw_texts:
-        for idx, row in fixed_df.iterrows():
-            if 'source_file' in row and row['source_file'] in raw_texts:
-                source_file = row['source_file']
-                raw_text = raw_texts[source_file]
-                
-                # Create a record from the row
-                record = row.to_dict()
-                
-                try:
-                    # Validate and enhance the record
-                    fixed_record = validate_report_data(record, raw_text)
-                    
-                    # Update the dataframe row
-                    for key, value in fixed_record.items():
-                        if key in fixed_df.columns:
-                            fixed_df.at[idx, key] = value
-                except Exception as e:
-                    logger.error(f"Error fixing row {idx}: {str(e)}")
+    # Standardize columns
+    required_columns = [
+        'patient_name', 'age', 'exam_date', 
+        'clinical_history', 'patient_history',
+        'findings', 'impression', 'recommendation', 
+        'mammograph_results', 'birads_score',
+        'facility', 'exam_type',
+        'referring_provider', 'interpreting_provider',
+        'raw_ocr_text'
+    ]
     
-    # Normalize column values
-    if 'birads_score' in fixed_df.columns:
-        try:
-            from .report_validation import normalize_birads
-            fixed_df['birads_score'] = fixed_df['birads_score'].apply(
-                lambda x: normalize_birads(x) if isinstance(x, str) else x
-            )
-        except Exception as e:
-            logger.error(f"Error normalizing BIRADS scores: {str(e)}")
+    # Ensure all required columns exist
+    for col in required_columns:
+        if col not in enhanced_df.columns:
+            enhanced_df[col] = "N/A"
     
-    if 'exam_date' in fixed_df.columns:
-        try:
-            from .report_validation import normalize_date
-            fixed_df['exam_date'] = fixed_df['exam_date'].apply(
-                lambda x: normalize_date(x) if isinstance(x, str) else x
-            )
-        except Exception as e:
-            logger.error(f"Error normalizing dates: {str(e)}")
+    # Fix redundant fields - if two fields contain the same information, keep just one
+    # Map patient_history to clinical_history or vice versa
+    enhanced_df = _handle_redundant_fields(enhanced_df, 'patient_history', 'clinical_history')
     
-    if 'exam_type' in fixed_df.columns:
-        try:
-            from .report_validation import normalize_exam_type
-            fixed_df['exam_type'] = fixed_df['exam_type'].apply(
-                lambda x: normalize_exam_type(x) if isinstance(x, str) else x
-            )
-        except Exception as e:
-            logger.error(f"Error normalizing exam types: {str(e)}")
+    # Map findings to mammograph_results or vice versa
+    enhanced_df = _handle_redundant_fields(enhanced_df, 'findings', 'mammograph_results')
     
-    return fixed_df
+    # Map impression to findings if findings is empty
+    enhanced_df = _handle_redundant_fields(enhanced_df, 'impression', 'findings')
+    
+    return enhanced_df
+
+def _handle_redundant_fields(df: pd.DataFrame, field1: str, field2: str) -> pd.DataFrame:
+    """
+    Handle redundant fields in the dataframe by consolidating their values.
+    
+    Args:
+        df: DataFrame to process
+        field1: First field name
+        field2: Second field name
+        
+    Returns:
+        DataFrame with consolidated fields
+    """
+    if field1 not in df.columns or field2 not in df.columns:
+        return df
+        
+    for idx, row in df.iterrows():
+        val1 = row[field1]
+        val2 = row[field2]
+        
+        # If one is N/A but the other isn't, fill the N/A one
+        if val1 == "N/A" and val2 != "N/A":
+            df.at[idx, field1] = val2
+        elif val2 == "N/A" and val1 != "N/A":
+            df.at[idx, field2] = val1
+            
+    return df
 
 def main():
     """Main function to demonstrate the module's usage."""

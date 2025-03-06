@@ -830,83 +830,69 @@ def debug_ocr_process(uploaded_file, debug_info=None):
 
 def extract_structured_data_from_text(text):
     """
-    Extract structured data from OCR text
+    Extract structured data from OCR text.
     
     Args:
-        text: OCR text to process
+        text: OCR text extracted from a document
         
     Returns:
-        dict: Structured data fields
+        Dictionary with structured data fields
     """
-    if not text:
+    if not text or not isinstance(text, str):
+        logger.warning("Empty or invalid text provided for extraction")
         return {
-            'patient_name': "Not Available",
-            'exam_date': "Not Available",
-            'exam_type': "Not Available",
-            'birads_score': "Not Available",
-            'raw_ocr_text': ""
+            'patient_name': "N/A",
+            'age': "N/A",
+            'exam_date': "N/A",
+            'clinical_history': "N/A",
+            'patient_history': "N/A",
+            'findings': "N/A",
+            'impression': "N/A",
+            'recommendation': "N/A",
+            'mammograph_results': "N/A",
+            'birads_score': "N/A",
+            'facility': "N/A",
+            'exam_type': "N/A",
+            'referring_provider': "N/A",
+            'interpreting_provider': "N/A",
+            'raw_ocr_text': text or ""
         }
-    
+        
     try:
-        # First try to use the enhanced extraction pipeline if available
-        try:
-            from document_processing.extraction_pipeline import extract_all_fields_from_text, PIPELINE_AVAILABLE
-            
-            if PIPELINE_AVAILABLE:
-                logger.info("Using enhanced extraction pipeline")
-                structured_data = extract_all_fields_from_text(text)
-                structured_data['raw_ocr_text'] = text
-                return structured_data
-            else:
-                logger.info("Enhanced pipeline not available, using standard extraction")
-        except ImportError:
-            logger.info("Enhanced extraction pipeline not available, using standard extraction")
+        # Use our new parser integration
+        from document_processing.parser_integration import process_ocr_text
         
-        # Fallback to standard extraction if enhanced pipeline is not available
-        from document_processing.text_analysis import process_document_text
-        
-        # Process text to extract structured data
-        structured_data = process_document_text(text)
-        
-        # Ensure raw OCR text is preserved
-        structured_data['raw_ocr_text'] = text
-        
-        # Process the extracted text to get structured data
-        try:
-            # Import text analysis functions
-            from document_processing.text_analysis import validate_field_types
-            structured_data = validate_field_types(structured_data)
-        except Exception as e:
-            logger.error(f"Field validation error: {str(e)}")
+        # Extract structured data using the new parser
+        structured_data = process_ocr_text(text)
+        logger.info("Extracted structured data using the new parser")
         
         return structured_data
         
+    except ImportError:
+        # Fallback to the old extraction method if the new parser is not available
+        logger.warning("New parser not available, falling back to legacy extraction")
+        try:
+            # Import locally to avoid circular imports
+            from document_processing.text_analysis import process_document_text
+            
+            result = process_document_text(text)
+            # Make sure raw_ocr_text is included
+            result['raw_ocr_text'] = text
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in legacy text extraction: {str(e)}")
+            return {
+                'patient_name': "N/A",
+                'exam_date': "N/A",
+                'birads_score': "N/A",
+                'raw_ocr_text': text
+            }
     except Exception as e:
-        logger.error(f"Error in structured data extraction: {e}")
-        
-        # Create fallback structured data
-        fallback_data = {
-            'patient_name': "Not Available",
-            'exam_date': "Not Available",
-            'exam_type': "Not Available",
-            'birads_score': "Not Available",
-            'testing_provider': "Not Available",
+        logger.error(f"Error extracting structured data: {str(e)}")
+        return {
+            'patient_name': "N/A",
+            'exam_date': "N/A",
+            'birads_score': "N/A",
             'raw_ocr_text': text
-        }
-        
-        # Try basic extraction with regex
-        patterns = {
-            'birads_score': r'(?:BIRADS|BI-RADS|BLRADS|BL-RADS|Category)[\s:]+([0-6][a-c]?)',
-            'patient_name': r'(?:Patient|Name)[\s:]+([A-Z][a-z]+\s+[A-Z][a-z]+)',
-            'exam_date': r'(?:Date|Exam date)[\s:]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})',
-            'exam_type': r'(?:Examination|Procedure|Study)[\s:]+([A-Za-z\s]+(?:mammogram|mammography|ultrasound|breast))',
-            'testing_provider': r'(?:Provider|Physician|Doctor|Radiologist)[\s:]+([A-Za-z\s.,]+(?:MD|DO|M\.D\.|D\.O\.))'
-        }
-        
-        # Try to extract each field with regex as a fallback
-        for field, pattern in patterns.items():
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                fallback_data[field] = match.group(1).strip()
-        
-        return fallback_data 
+        } 
