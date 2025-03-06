@@ -385,70 +385,46 @@ def process_page(page):
         return f"OCR failed: {str(e)}"
 
 def extract_date_from_text(text):
-    """
-    Extract date from text using various patterns
-    
-    Args:
-        text: Text that might contain date information
-        
-    Returns:
-        Extracted date string or None if not found
-    """
+    """Extract date from text"""
     if not text:
-        return None
+        return ""
     
-    # Common date formats
-    date_patterns = [
-        r'(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{2,4})',  # DD/MM/YYYY or MM/DD/YYYY
-        r'(\d{4})[/\-\.](\d{1,2})[/\-\.](\d{1,2})',    # YYYY/MM/DD
-        r'(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([A-Za-z]+)[,\s]+(\d{2,4})',  # DD Month YYYY
-        r'([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?\s*,?\s*(\d{2,4})'  # Month DD, YYYY
-    ]
+    # Try to find an exam date
+    date_pattern = r'(?:EXAM DATE|DATE OF EXAM|EXAMINATION DATE)[:\s]+([^\n]+)'
+    date_match = re.search(date_pattern, text, re.IGNORECASE)
+    if date_match:
+        date_text = date_match.group(1).strip()
+        
+        # Try to parse various date formats
+        try:
+            # Try ISO format (2023-01-15)
+            if re.search(r'\d{4}-\d{2}-\d{2}', date_text):
+                return re.search(r'\d{4}-\d{2}-\d{2}', date_text).group(0)
+            
+            # Try MM/DD/YYYY format
+            elif re.search(r'\d{1,2}/\d{1,2}/\d{4}', date_text):
+                mm_dd_yyyy = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', date_text)
+                month, day, year = mm_dd_yyyy.groups()
+                return f"{year}-{int(month):02d}-{int(day):02d}"
+            
+            # Try Month DD, YYYY format
+            elif re.search(r'[A-Za-z]{3,9}\s+\d{1,2},\s+\d{4}', date_text):
+                month_names = {
+                    'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 
+                    'may': '05', 'jun': '06', 'jul': '07', 'aug': '08', 
+                    'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
+                }
+                match = re.search(r'([A-Za-z]{3,9})\s+(\d{1,2}),\s+(\d{4})', date_text)
+                month, day, year = match.groups()
+                month_num = month_names.get(month.lower()[:3], '01')
+                return f"{year}-{month_num}-{int(day):02d}"
+            
+            # Just return the original date text if we can't parse it
+            return date_text
+        except:
+            return date_text
     
-    for pattern in date_patterns:
-        matches = re.finditer(pattern, text, re.IGNORECASE)
-        for match in matches:
-            try:
-                if len(match.groups()) == 3:
-                    # Try to parse this date format
-                    if len(match.group(3)) == 2:  # If year is 2 digits
-                        year = int(match.group(3))
-                        if year < 50:  # Assume years less than 50 are in the 2000s
-                            year += 2000
-                        else:
-                            year += 1900
-                    else:
-                        year = int(match.group(3))
-                    
-                    # Handle different formats
-                    if re.match(r'\d{4}', match.group(1)):  # YYYY/MM/DD
-                        year = int(match.group(1))
-                        month = int(match.group(2))
-                        day = int(match.group(3))
-                    elif re.match(r'[A-Za-z]+', match.group(1)):  # Month DD, YYYY
-                        month_str = match.group(1)
-                        month_map = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6, 
-                                     "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12}
-                        month = month_map.get(month_str.lower()[:3], 1)
-                        day = int(match.group(2))
-                    elif re.match(r'[A-Za-z]+', match.group(2)):  # DD Month YYYY
-                        day = int(match.group(1))
-                        month_str = match.group(2)
-                        month_map = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6, 
-                                     "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12}
-                        month = month_map.get(month_str.lower()[:3], 1)
-                    else:  # Default MM/DD/YYYY or DD/MM/YYYY (assume MM/DD/YYYY for simplicity)
-                        month = int(match.group(1))
-                        day = int(match.group(2))
-                    
-                    # Create a valid date string
-                    if 1 <= month <= 12 and 1 <= day <= 31 and 1900 <= year <= 2100:
-                        return f"{year}-{month:02d}-{day:02d}"
-            except (ValueError, IndexError) as e:
-                # Skip this match if it doesn't parse correctly
-                continue
-    
-    return None
+    return ""
 
 def extract_birads_number(value):
     """Extract the BIRADS score from text that might contain it"""
@@ -553,27 +529,29 @@ def extract_patient_info(text):
     
     patient_info = {}
     
-    # Common patient information patterns
-    patterns = {
-        "name": r'(?:PATIENT NAME|NAME):\s*([A-Za-z\s,.-]+)',
-        "id": r'(?:PATIENT ID|MRN|MEDICAL RECORD NUMBER):\s*([A-Za-z0-9\-]+)',
-        "age": r'(?:AGE):\s*(\d+)',
-        "gender": r'(?:GENDER|SEX):\s*(MALE|FEMALE|M|F)',
-        "dob": r'(?:DOB|DATE OF BIRTH):\s*([A-Za-z0-9,.\-/\s]+)'
-    }
+    # Extract patient name
+    name_pattern = r'(?:PATIENT NAME|NAME)[:\s]+([^\n]+)'
+    name_match = re.search(name_pattern, text, re.IGNORECASE)
+    if name_match:
+        patient_info['name'] = name_match.group(1).strip()
     
-    for field, pattern in patterns.items():
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            patient_info[field] = match.group(1).strip()
+    # Extract patient ID
+    id_pattern = r'(?:PATIENT ID|MRN|MEDICAL RECORD NUMBER)[:\s]+([^\n]+)'
+    id_match = re.search(id_pattern, text, re.IGNORECASE)
+    if id_match:
+        patient_info['id'] = id_match.group(1).strip()
     
-    # Standardize gender
-    if 'gender' in patient_info:
-        gender = patient_info['gender'].upper()
-        if gender in ['M', 'MALE']:
-            patient_info['gender'] = 'Male'
-        elif gender in ['F', 'FEMALE']:
-            patient_info['gender'] = 'Female'
+    # Extract patient age
+    age_pattern = r'(?:PATIENT AGE|AGE)[:\s]+([^\n]+)'
+    age_match = re.search(age_pattern, text, re.IGNORECASE)
+    if age_match:
+        patient_info['age'] = age_match.group(1).strip()
+    
+    # Extract patient gender
+    gender_pattern = r'(?:PATIENT GENDER|GENDER|SEX)[:\s]+([^\n]+)'
+    gender_match = re.search(gender_pattern, text, re.IGNORECASE)
+    if gender_match:
+        patient_info['gender'] = gender_match.group(1).strip()
     
     return patient_info
 
