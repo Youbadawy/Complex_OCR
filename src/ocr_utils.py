@@ -20,17 +20,43 @@ IMAGE_CACHE = {}
 OCR_CACHE = {}  # Added OCR cache
 LLM_CACHE = {}  # Added LLM cache
 PRE_COMPILED_PATTERNS = {
-    'impression': re.compile(r'\b(?:IMPRESSION|IMPRESSIONS|ASSESSMENT|CONCLUSION|INTERPRETATION)[:.\s]*([^\n]+(?:\n[^\n]+)*)', re.IGNORECASE),
-    'findings': re.compile(r'\b(?:FINDINGS|FINDING|OBSERVATION|REPORT|RESULTS)[:.\s]*([^\n]+(?:\n[^\n]+)*)', re.IGNORECASE),
-    'recommendation': re.compile(r'\b(?:RECOMMENDATION|RECOMMENDATIONS|FOLLOW[\s-]*UP)[:.\s]*([^\n]+(?:\n[^\n]+)*)', re.IGNORECASE),
-    'birads': re.compile(r'(?i)(bi-rads|birads|category|assessment|classification)[\s:-]*(\d|[0-6]|negative|benign|suspicious|malignant)', re.IGNORECASE),
-    'date': re.compile(r'\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b|\b\d{1,2}[-/]\d{1,2}[-/]\d{4}\b|\b\d{1,2}[-/]\d{1,2}[-/]\d{2}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{2}\b', re.IGNORECASE),
-    'medical_terms': re.compile(r'\b(birads|impression|mammogram|ultrasound)\b', re.IGNORECASE),
-    'provider': re.compile(r'(?:electronically\s+signed\s+by|dictated\s+by|physician|provider|radiologist|reported\s+by)[:\s]+([A-Za-z\s.,]+(?:MD|M\.D\.|FRCPC)?)', re.IGNORECASE),
-    'patient_name': re.compile(r'(?:patient|name|patient name)[:\s]+([A-Za-z\s.-]+)', re.IGNORECASE),
-    'exam_date': re.compile(r'(?:exam date|date of exam|study date|document date)[:\s]+(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4})', re.IGNORECASE),
-    'document_type': re.compile(r'\b(mammogram|mammography|ultrasound|breast imaging|screening|diagnostic|MAMMO|breast exam|breast study)\b', re.IGNORECASE),
-    'deidentified': re.compile(r'\b(PROTECTED\s+[A-Z]|REDACTED|\[REDACTED\]|CONFIDENTIAL)\b', re.IGNORECASE),
+    # Enhanced patterns with more format variations
+    'impression': re.compile(r'\b(?:IMPRESSION|IMPRESSIONS|ASSESSMENT|CONCLUSION|INTERPRETATION|SUMMARY)[:.\s]*([^\n]+(?:\n[^\n]+)*)', re.IGNORECASE),
+    'findings': re.compile(r'\b(?:FINDINGS|FINDING|OBSERVATION|REPORT|RESULTS|INTERPRETATION|RADIOLOGIC\s+FINDINGS)[:.\s]*([^\n]+(?:\n[^\n]+)*)', re.IGNORECASE),
+    'recommendation': re.compile(r'\b(?:RECOMMENDATION|RECOMMENDATIONS|FOLLOW[\s-]*UP|ADVISED|SUGGEST(?:ED|ION)|PLAN)[:.\s]*([^\n]+(?:\n[^\n]+)*)', re.IGNORECASE),
+    
+    # Enhanced BIRADS pattern with subcategories and variations
+    'birads': re.compile(r'(?i)(?:bi-rads|birads|category|assessment|classification)[\s:-]*(\d|[0-6][abc]?|zero|one|two|three|four|five|six|negative|benign|suspicious|malignant)', re.IGNORECASE),
+    
+    # Enhanced date patterns
+    'date': re.compile(r'\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b|\b\d{1,2}[-/]\d{1,2}[-/]\d{4}\b|\b\d{1,2}[-/]\d{1,2}[-/]\d{2}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{2}\b|\b\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}\b', re.IGNORECASE),
+    
+    # Enhanced medical terms
+    'medical_terms': re.compile(r'\b(birads|bi-rads|impression|mammogram|ultrasound|density|fibroglandular|microcalcification|mass|nodule|cyst|asymmetry|lesion)\b', re.IGNORECASE),
+    
+    # Enhanced provider patterns
+    'provider': re.compile(r'(?:electronically\s+signed\s+by|digitally\s+signed\s+by|dictated\s+by|physician|provider|radiologist|reported\s+by|interpreted\s+by|reading\s+radiologist)[:\s]+([A-Za-z\s.,]+(?:MD|M\.D\.|FRCPC|DO|PhD)?)', re.IGNORECASE),
+    
+    # Enhanced patient name pattern
+    'patient_name': re.compile(r'(?:patient|name|patient name|patient information)[:\s]+([A-Za-z\s.-]+)(?:\s*\d|$)', re.IGNORECASE),
+    
+    # Enhanced exam date pattern
+    'exam_date': re.compile(r'(?:exam date|date of exam|study date|document date|examination date)[:\s]+(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4})', re.IGNORECASE),
+    
+    # Enhanced document type pattern
+    'document_type': re.compile(r'\b(mammogram|mammography|ultrasound|breast imaging|screening|diagnostic|MAMMO|breast exam|breast study|MRI|magnetic resonance|breast ultrasound|sonogram|sonography)\b', re.IGNORECASE),
+    
+    # Enhanced deidentified information pattern
+    'deidentified': re.compile(r'\b(PROTECTED\s+[A-Z]|REDACTED|\[REDACTED\]|CONFIDENTIAL|\[\*+\]|\*{3,}|\[(?:NAME|DOB|MRN|DATE|ID|PATIENT|ADDRESS)\]|DE-IDENTIFIED)\b', re.IGNORECASE),
+    
+    # Added patterns for signature blocks
+    'signature_block': re.compile(r'(?:Electronically|Digitally)\s+(?:Signed|Approved|Verified)(?:\s+by)?[:\s]*.+?(?:MD|M\.D\.|PhD|FRCPC).+?(?:\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4}|\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2})', re.IGNORECASE | re.DOTALL),
+    
+    # Added patterns for disclaimers
+    'disclaimer': re.compile(r'(?:DISCLAIMER|LEGAL\s+NOTICE|PRIVACY\s+NOTICE|Confidentiality\s+Notice|This\s+(?:document|report|information)\s+(?:may\s+contain|is)\s+(?:confidential|private|privileged)|CONFIDENTIAL.*?NOT\s+FOR\s+DISTRIBUTION|Density\s+was\s+assessed\s+by.*?(?:software|algorithm|system))', re.IGNORECASE | re.DOTALL),
+    
+    # Added patterns for patient history
+    'patient_history': re.compile(r'\b(?:HISTORY|CLINICAL\s+HISTORY|INDICATION|CLINICAL\s+INDICATION|REASON\s+FOR\s+(?:EXAM|STUDY|IMAGING)|PRESENTING\s+COMPLAINT)[:.\s]*([^\n]+(?:\n[^\n]+)*)', re.IGNORECASE),
 }
 
 def _cache_key(image: np.ndarray) -> str:
@@ -48,7 +74,6 @@ def check_tesseract_installation():
     except Exception as e:
         logging.error(f"Tesseract check failed: {str(e)}")
         return False
-
 def simple_ocr(image: np.ndarray) -> str:
     """Reliable OCR pipeline with basic preprocessing"""
     try:
@@ -83,146 +108,199 @@ def simple_ocr(image: np.ndarray) -> str:
         logging.error(f"OCR failed: {str(e)}")
         return f"[OCR ERROR: {str(e)}]"
 
-def extract_medical_fields(text: str) -> dict:
-    """Extract all medical fields from document text with improved role identification"""
-    # Create a comprehensive result dictionary with all required fields
-    result = default_structured_output()
+def extract_medical_fields(text, use_llm=False, llm_api_key=None):
+    """
+    Extract medical fields from document text with enhanced extraction and validation
     
-    # Store raw OCR text
-    result['raw_ocr_text'] = text
-    
-    # Check if document is deidentified
-    result['is_deidentified'] = is_deidentified_document(text)
-    
-    # For deidentified documents, use a standard patient name
-    if result['is_deidentified']:
-        result['patient_name'] = "Deidentified Patient"
-        logging.info("Document is deidentified, using standard patient name")
-    else:
-        # Only try to extract patient name for non-deidentified documents
-        # Extract roles with more precise patterns
+    Args:
+        text: Document text
+        use_llm: Whether to use LLM for enhancing extraction
+        llm_api_key: Optional API key for LLM service
         
-        # 1. Extract the radiologist/reporting doctor (the one who signs the report)
-        radiologist_patterns = [
-            re.compile(r'(?:Reported By|electronically signed by|dictated by|read by)[:\s]+([A-Za-z\s.,]+(?:MD|M\.D\.|FRCPC))', re.IGNORECASE),
-            re.compile(r'([A-Za-z]+\s+[A-Za-z]+)(?:,\s*(?:MD|M\.D\.|FRCPC))', re.IGNORECASE),
-            re.compile(r'impression:.*?([A-Za-z]+\s+[A-Za-z]+)(?:,\s*(?:MD|M\.D\.|FRCPC))', re.IGNORECASE)
-        ]
+    Returns:
+        Dictionary with extracted fields
+    """
+    try:
+        from document_processing.text_analysis import (
+            extract_patient_info, extract_exam_type, extract_date_from_text,
+            extract_provider_info, extract_signature_block, extract_birads_score,
+            extract_sections, is_redacted_document, validate_field_types,
+            enhance_extraction_with_llm, get_extraction_value
+        )
         
-        for pattern in radiologist_patterns:
-            match = pattern.search(text)
-            if match:
-                result['electronically_signed_by'] = match.group(1).strip()
-                break
+        # Initialize result dictionary with empty fields
+        result = {
+            'patient_name': '',
+            'mrn': '',
+            'dob': '',
+            'age': '',
+            'gender': '',
+            'exam_date': '',
+            'exam_type': '',
+            'document_type': '',
+            'birads_score': '',
+            'impression_result': '',
+            'mammogram_results': '',
+            'ultrasound_results': '',
+            'recommendation': '',
+            'patient_history': '',
+            'electronically_signed_by': '',
+            'testing_provider': '',
+            'document_date': '',
+            'referring_provider': '',
+            'facility_name': '',  # Added facility name field
+            'is_redacted': False
+        }
         
-        # 2. Extract the requesting doctor
-        requesting_patterns = [
-            re.compile(r'(?:Requesting|Referring)[:\s]+(?:Dr\.?\s*)?([A-Za-z\s.,]+)', re.IGNORECASE),
-            re.compile(r'(?:Family|Referring)\s+(?:Doctor|Physician|MD)[:\s]+([A-Za-z\s.,]+)', re.IGNORECASE)
-        ]
+        # First check if document is redacted
+        try:
+            is_redacted = is_redacted_document(text)
+            result['is_redacted'] = is_redacted
+        except Exception as e:
+            logging.error(f"Error checking if document is redacted: {str(e)}")
+            result['is_redacted'] = False
         
-        for pattern in requesting_patterns:
-            match = pattern.search(text)
-            if match:
-                result['requesting_doctor'] = match.group(1).strip()
-                break
+        # Extract structured data
+        structured_data = {}
         
-        # 3. Now extract the actual patient - avoid confusing with doctors
-        # First check if we've identified doctors
-        doctors = []
-        if 'electronically_signed_by' in result and result['electronically_signed_by'] != "Not Available":
-            doctors.append(result['electronically_signed_by'].lower())
-        if 'requesting_doctor' in result and result['requesting_doctor'] != "Not Available":
-            doctors.append(result['requesting_doctor'].lower())
+        # Patient information with structured extraction
+        try:
+            patient_info = extract_patient_info(text)
+            structured_data.update(patient_info)
+        except Exception as e:
+            logging.error(f"Error extracting patient info: {str(e)}")
         
-        # Look for patient identifiers
-        patient_patterns = [
-            re.compile(r'Patient[:\s]+(?!Scan-Mammo|Document|DIAGNOSTIC)([A-Za-z\s.-]+)', re.IGNORECASE),
-            re.compile(r'Name[:\s]+(?!Scan-Mammo|Document|DIAGNOSTIC)([A-Za-z\s.-]+)', re.IGNORECASE),
-            re.compile(r'Medicare[:\s]+\d+\s+([A-Za-z\s.-]+)', re.IGNORECASE)
-        ]
+        # Exam type and date with structured extraction
+        try:
+            structured_data['exam_type'] = extract_exam_type(text)
+        except Exception as e:
+            logging.error(f"Error extracting exam type: {str(e)}")
         
-        for pattern in patient_patterns:
-            match = pattern.search(text)
-            if match:
-                potential_name = match.group(1).strip()
-                # Make sure it's not one of the doctors we already identified
-                if not any(doctor in potential_name.lower() for doctor in doctors):
-                    result['patient_name'] = potential_name
-                    break
-    
-    # Special case for this document - if we see "Higgs" in a context that suggests it's a doctor
-    if "Higgs" in text and ("Requesting" in text or "ND" in text or "Doctor" in text):
-        # Higgs is likely the requesting doctor, not the patient
-        if "Higgs Riggs, Jillian" in text or "Higgs, Jillian" in text:
-            result['requesting_doctor'] = "Higgs Riggs, Jillian"
-            # Clear patient name if we mistakenly set it to Higgs
-            if result.get('patient_name') and "Higgs" in result['patient_name']:
-                result['patient_name'] = "Not Available"
-    
-    # Extract dates
-    exam_date_match = PRE_COMPILED_PATTERNS['exam_date'].search(text)
-    if exam_date_match:
-        result['exam_date'] = standardize_date(exam_date_match.group(1))
-    
-    # Extract any date as document date if exam date not found
-    date_matches = PRE_COMPILED_PATTERNS['date'].findall(text)
-    if date_matches:
-        # Use first date as document date if exam date not already set
-        if result['exam_date'] == "Not Available" and date_matches:
-            result['document_date'] = standardize_date(date_matches[0])
-        # If exam date is set, use next date as document date
-        elif date_matches and len(date_matches) > 1:
-            result['document_date'] = standardize_date(date_matches[1])
-    
-    # Extract document type
-    doc_type_match = PRE_COMPILED_PATTERNS['document_type'].search(text)
-    if doc_type_match:
-        result['document_type'] = doc_type_match.group(1).strip()
-    
-    # Extract BIRADS score
-    birads_match = PRE_COMPILED_PATTERNS['birads'].search(text)
-    if birads_match:
-        birads_value = birads_match.group(2).strip()
-        result['birads_score'] = birads_classifier(birads_value)
-    else:
-        # Try to infer from impression
-        impression_match = PRE_COMPILED_PATTERNS['impression'].search(text)
-        if impression_match:
-            impression_text = impression_match.group(1).strip()
-            if "negative for malignancy" in impression_text.lower():
-                result['birads_score'] = "BIRADS 1-2"
-    
-    # Extract impression section
-    impression_match = PRE_COMPILED_PATTERNS['impression'].search(text)
-    if impression_match:
-        result['impression_result'] = impression_match.group(1).strip()
-    
-    # Extract findings section
-    findings_match = PRE_COMPILED_PATTERNS['findings'].search(text)
-    if findings_match:
-        findings_text = findings_match.group(1).strip()
-        # Categorize findings based on keywords
-        if 'mammogram' in findings_text.lower():
-            result['mammogram_results'] = findings_text
-        elif 'ultrasound' in findings_text.lower():
-            result['ultrasound_results'] = findings_text
-        else:
-            # Default to mammogram results if not specified
-            result['mammogram_results'] = findings_text
-    
-    # Extract recommendation section
-    recommendation_match = PRE_COMPILED_PATTERNS['recommendation'].search(text)
-    if recommendation_match:
-        result['recommendation'] = recommendation_match.group(1).strip()
-    
-    # Extract patient history
-    history_pattern = re.compile(r'(?:history|clinical history|indication)[:.\s]+([^\n]+(?:\n[^\n]+)*)', re.IGNORECASE)
-    history_match = history_pattern.search(text)
-    if history_match:
-        result['patient_history'] = history_match.group(1).strip()
-    
-    return result
+        try:
+            if 'exam_date' not in structured_data or not structured_data.get('exam_date', {}).get('value'):
+                date_extraction = extract_date_from_text(text)
+                if date_extraction and 'value' in date_extraction:
+                    structured_data['exam_date'] = date_extraction
+        except Exception as e:
+            logging.error(f"Error extracting exam date: {str(e)}")
+        
+        # Extract provider information with enhanced function
+        try:
+            provider_info = extract_provider_info(text)
+            structured_data.update(provider_info)
+        except Exception as e:
+            logging.error(f"Error extracting provider info: {str(e)}")
+        
+        # Extract signature block
+        try:
+            signature_block = extract_signature_block(text)
+            if signature_block and 'value' in signature_block:
+                structured_data['signature_block'] = signature_block
+        except Exception as e:
+            logging.error(f"Error extracting signature block: {str(e)}")
+        
+        # Extract BIRADS score
+        try:
+            birads_score = extract_birads_score(text)
+            if birads_score and 'value' in birads_score:
+                structured_data['birads_score'] = birads_score
+        except Exception as e:
+            logging.error(f"Error extracting BIRADS score: {str(e)}")
+        
+        # Apply field validations
+        try:
+            structured_data = validate_field_types(structured_data)
+        except Exception as e:
+            logging.error(f"Error validating field types: {str(e)}")
+        
+        # Use LLM to enhance extraction if specified or if critical fields are missing/low confidence
+        should_use_llm = use_llm
+
+        # Auto-trigger LLM if critical fields are missing or have very low confidence
+        try:
+            critical_fields = ['patient_name', 'exam_date', 'document_date', 'exam_type']
+            missing_critical = any(field not in structured_data for field in critical_fields)
+            low_confidence_critical = any(
+                field in structured_data and 
+                isinstance(structured_data[field], dict) and 
+                structured_data[field].get('confidence', 1.0) < 0.4
+                for field in critical_fields
+            )
+            
+            if missing_critical or low_confidence_critical:
+                should_use_llm = True
+                
+            if should_use_llm:
+                structured_data = enhance_extraction_with_llm(structured_data, text, llm_api_key)
+        except Exception as e:
+            logging.error(f"Error enhancing extraction with LLM: {str(e)}")
+            
+        # Always perform a final validation with LLM to check if results make sense
+        logging.info("Validating extraction results with LLM")
+        try:
+            from document_processing.text_analysis import extract_with_llm
+            # Get LLM view of the document
+            llm_view = extract_with_llm(text, llm_api_key)
+            
+            # Check for any major discrepancies
+            for field in critical_fields:
+                if field in structured_data and field in llm_view:
+                    structured_value = structured_data[field].get('value', '') if isinstance(structured_data[field], dict) else ''
+                    llm_value = llm_view[field].get('value', '') if isinstance(llm_view[field], dict) else ''
+                    
+                    # If values are very different, log warning
+                    if structured_value and llm_value and structured_value != llm_value:
+                        logging.warning(f"Discrepancy in {field}: Regex extracted '{structured_value}' but LLM suggests '{llm_value}'")
+                        
+                        # If LLM has high confidence and regex has low confidence, prefer LLM
+                        regex_confidence = structured_data[field].get('confidence', 0) if isinstance(structured_data[field], dict) else 0
+                        llm_confidence = llm_view[field].get('confidence', 0) if isinstance(llm_view[field], dict) else 0
+                        
+                        if regex_confidence < 0.6 and llm_confidence > 0.7:
+                            logging.info(f"Using LLM value for {field} due to higher confidence")
+                            structured_data[field] = llm_view[field]
+        except Exception as e:
+            logging.error(f"Error during final LLM validation: {str(e)}")
+        
+        # Map structured data to simple format for UI
+        try:
+            result['patient_name'] = get_extraction_value(structured_data, 'patient_name')
+            result['mrn'] = get_extraction_value(structured_data, 'mrn')
+            result['dob'] = get_extraction_value(structured_data, 'dob')
+            result['age'] = get_extraction_value(structured_data, 'age')
+            result['gender'] = get_extraction_value(structured_data, 'gender')
+            result['exam_date'] = get_extraction_value(structured_data, 'exam_date')
+            result['exam_type'] = get_extraction_value(structured_data, 'exam_type')
+            result['document_type'] = get_extraction_value(structured_data, 'document_type')
+            result['birads_score'] = get_extraction_value(structured_data, 'birads_score')
+            result['impression_result'] = get_extraction_value(structured_data, 'impression_result')
+            result['mammogram_results'] = get_extraction_value(structured_data, 'mammogram_results', text)
+            result['ultrasound_results'] = get_extraction_value(structured_data, 'ultrasound_results')
+            result['recommendation'] = get_extraction_value(structured_data, 'recommendation')
+            result['patient_history'] = get_extraction_value(structured_data, 'patient_history')
+            result['electronically_signed_by'] = get_extraction_value(structured_data, 'electronically_signed_by')
+            result['testing_provider'] = get_extraction_value(structured_data, 'testing_provider')
+            result['document_date'] = get_extraction_value(structured_data, 'document_date')
+            result['referring_provider'] = get_extraction_value(structured_data, 'referring_provider')
+            result['facility_name'] = get_extraction_value(structured_data, 'facility_name')
+        except Exception as e:
+            logging.error(f"Error mapping structured data to UI format: {str(e)}")
+        
+        return result
+        
+    except Exception as e:
+        logging.error(f"Error in extract_medical_fields: {str(e)}")
+        # Return a basic result with redacted flag set
+        return {
+            'patient_name': 'REDACTED',
+            'is_redacted': True,
+            'exam_date': '',
+            'exam_type': '',
+            'document_type': '',
+            'birads_score': '',
+            'facility_name': ''
+        }
+        
 
 # Preload medical dictionary for spell checking
 MEDICAL_DICT = SpellChecker(language=None)
@@ -996,393 +1074,6 @@ def extract_with_template_matching(image):
                 cv2.rectangle(mask, (x, y), 
                              (x + int(orig_w * scale), y + int(orig_h * scale)),
                              (255,255,255), -1)
-
-            # Process remaining text
-            masked_image = cv2.bitwise_and(gray_image, cv2.bitwise_not(mask))
-            remaining_text = pytesseract.image_to_string(masked_image)
-            results['additional_information'] = clean_additional_text(remaining_text)
-
     except Exception as e:
-        error_msg = f"Template matching failed: {str(e)}"
-        logging.error(error_msg, exc_info=True)
-        warnings.append(error_msg)
-    
-    return results, warnings
-
-@lru_cache(maxsize=100)
-def process_template_scale(image_hash: str, template_key: str, scale: float):
-    """Process a single template at specific scale"""
-    try:
-        # Get template from global TEMPLATES dict
-        template = TEMPLATES.get(template_key)
-        if template is None:
-            return template_key, "Unknown", 0.0, scale, (0,0)
-            
-        # Get image from cache
-        image = IMAGE_CACHE.get(image_hash)
-        if image is None:
-            return template_key, "Unknown", 0.0, scale, (0,0)
-            
-        # Scale the template
-        scaled_template = cv2.resize(
-            template, 
-            None,
-            fx=scale,
-            fy=scale,
-            interpolation=cv2.INTER_AREA
-        )
-        t_h, t_w = scaled_template.shape
-        
-        # Skip if template larger than image
-        if t_h > image.shape[0] or t_w > image.shape[1]:
-            return template_key, "Unknown", 0.0, scale, (0,0)
-
-        # Match template
-        res = cv2.matchTemplate(image, scaled_template, cv2.TM_CCOEFF_NORMED)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-        
-        return template_key, "Unknown", max_val, scale, max_loc
-    
-    except Exception as e:
-        logging.warning(f"Scale {scale} failed for {template_key}: {str(e)}")
-        return template_key, "Unknown", 0.0, scale, (0,0)
-
-def clean_additional_text(text):
-    """Clean and format remaining OCR text"""
-    # Remove known fields and noise
-    patterns_to_remove = [
-        r'Document Date:.*?\n',
-        r'BIRADS Score:.*?\n',
-        r'Patient Name:.*?\n',
-        r'[\x00-\x1F\x7F-\x9F]'  # Remove control characters
-    ]
-    
-    for pattern in patterns_to_remove:
-        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
-        
-    return ' '.join(text.split())
-
-def apply_regex_validation(results):
-    """Validate and format extracted fields using regex"""
-    # Date validation
-    date_pattern = r'\b\d{4}-\d{2}-\d{2}\b'
-    for field in ['document_date', 'exam_date']:
-        match = re.search(date_pattern, results[field])
-        if match:
-            results[field] = match.group()
-            
-    # BIRADS score validation
-    birads_pattern = r'BIRADS[\s-]*([0-6])'
-    if 'birads_score' in results:
-        match = re.search(birads_pattern, results['birads_score'], re.IGNORECASE)
-        if match:
-            results['birads_score'] = f"BIRADS {match.group(1)}"
-            
-    # Name validation
-    name_pattern = r'^[A-Z][a-z]+ [A-Z][a-z]+$'
-    if not re.match(name_pattern, results['patient_name']):
-        results['patient_name'] = "Unknown"
-        
-    return results
-
-def extract_findings_text(findings):
-    """Convert structured findings data to plain text with robust error handling"""
-    try:
-        # Handle null/empty case first
-        if not findings:
-            return ""
-        
-        # Attempt JSON parsing if string
-        if isinstance(findings, str):
-            try:
-                findings = json.loads(findings)
-            except json.JSONDecodeError as e:
-                logging.warning(f"Failed to parse findings JSON: {e}")
-                return findings  # Return raw string as fallback
-
-        # Process list of finding dictionaries with index tracking
-        if isinstance(findings, list):
-            descriptions = []
-            for idx, item in enumerate(findings):
-                try:
-                    if isinstance(item, dict):
-                        # Extract multiple possible fields
-                        desc = item.get('description', '')
-                        loc = item.get('location', '')
-                        meas = item.get('measurements', '')
-                        
-                        # Clean and combine fields
-                        parts = [loc, meas, desc]
-                        clean_desc = ' - '.join(filter(None, parts)).strip()
-                        if clean_desc:
-                            descriptions.append(f"{idx+1}. {clean_desc}")
-                    elif item:  # Handle string/numeric entries
-                        descriptions.append(str(item).strip())
-                except Exception as e:
-                    logging.warning(f"Error processing item {idx}: {str(e)}")
-                    continue
-            
-            return '\n'.join(descriptions) if descriptions else ''
-
-        # Process single finding dictionary
-        if isinstance(findings, dict):
-            return '\n'.join(
-                f"{k}: {v}" 
-                for k, v in findings.items() 
-                if k != 'confidence' and v
-            )
-
-        # Fallback for unexpected types
-        return str(findings).strip()
-    
-    except Exception as e:
-        logging.error(f"Findings extraction failed: {str(e)}", exc_info=True)
-        return ""
-
-def default_structured_output():
-    """Fallback structure for failed extractions"""
-    return {
-        'birads_score': "Not Available",
-        'document_date': "Not Available",
-        'document_type': "Not Available",
-        'electronically_signed_by': "Not Available",
-        'exam_date': "Not Available",
-        'impression_result': "Not Available",
-        'mammogram_results': "Not Available",
-        'patient_history': "Not Available", 
-        'patient_name': "Not Available",
-        'recommendation': "Not Available",
-        'testing_provider': "Not Available",
-        'ultrasound_results': "Not Available",
-        'additional_information': "",
-        'raw_ocr_text': "",  # Keep raw OCR text
-        'is_deidentified': False,
-        'confidence_scores': {'ocr': 0.0, 'nlp': 0.0}
-    }
-
-# Add missing dependency installation
-def install_dependencies():
-    """Ensure required NLP dependencies exist"""
-    try:
-        import sentencepiece  # Required for translation models
-    except ImportError:
-        import sys, subprocess
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "sentencepiece"])
-
-def standardize_date(date_str):
-    """Standardize various date formats to YYYY-MM-DD"""
-    if not date_str:
-        return None
-        
-    try:
-        return pd.to_datetime(date_str).strftime('%Y-%m-%d')
-    except:
-        # Try various date formats
-        date_formats = [
-            '%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y',
-            '%b %d, %Y', '%B %d, %Y', '%d %b %Y', '%d %B %Y'
-        ]
-        
-        for fmt in date_formats:
-            try:
-                return pd.to_datetime(date_str, format=fmt).strftime('%Y-%m-%d')
-            except:
-                continue
-                
-        return date_str  # Return original if parsing fails
-
-def init_paddle():
-    """Initialize PaddleOCR with default settings"""
-    from paddleocr import PaddleOCR
-    return PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False)
-
-def extract_with_regex(pattern: str, text: str) -> Optional[str]:
-    """Helper function for safe regex extraction"""
-    match = re.search(pattern, text)
-    return match.group(1) if match else None
-
-def validate_llm_results(data: Dict[str, Any]) -> bool:
-    """Validate required fields exist in LLM response"""
-    required_fields = [
-        'patient_name', 'exam_date', 'birads_score',
-        'impression_result', 'recommendation'
-    ]
-    return all(field in data for field in required_fields)
-
-def process_document_text(text: str) -> Dict[str, Any]:
-    """Process complete document text and extract all required fields"""
-    # Always preserve raw OCR text
-    fields = {'raw_ocr_text': text}
-    
-    # First try regex extraction
-    regex_fields = extract_medical_fields(text)
-    fields.update(regex_fields)
-    
-    # Extract dates with improved function
-    date_fields = extract_dates(text)
-    fields.update(date_fields)
-    
-    # Special handling for this specific document type
-    if "PROTECTED B" in text and "DIAGNOSTIC" in text and "MAMMO" in text:
-        # This is a protected diagnostic mammogram
-        
-        # Cynthia Theriault is the radiologist who signed the report
-        if "Cynthia Theriault" in text:
-            fields['electronically_signed_by'] = "Cynthia Theriault"
-            if "FRCPC" in text:
-                fields['electronically_signed_by'] = "Cynthia Theriault, FRCPC"
-        
-        # Higgs Riggs is the requesting doctor, not the patient
-        if "Higgs Riggs, Jillian" in text or "Higgs, Jillian" in text:
-            fields['requesting_doctor'] = "Higgs Riggs, Jillian"
-            # Clear patient name if we mistakenly set it to Higgs
-            if fields.get('patient_name') and "Higgs" in fields['patient_name']:
-                fields['patient_name'] = "Not Available"  # We don't have the actual patient name
-    
-    # Check if we have all required fields
-    required_fields = ['patient_name', 'exam_date', 'birads_score']
-    missing_fields = [f for f in required_fields if not fields.get(f) or fields[f] == "Not Available"]
-    
-    # If missing critical fields, try fallback extraction
-    if missing_fields:
-        logging.info(f"Missing fields: {missing_fields}, trying fallback extraction")
-        fallback_fields = simple_fallback_extraction(text)
-        
-        # Only update missing fields
-        for field in missing_fields:
-            if fallback_fields.get(field) and fallback_fields[field] != "Not Available":
-                fields[field] = fallback_fields[field]
-                logging.info(f"Updated {field} from fallback: {fields[field]}")
-    
-    # Ensure all fields have values
-    for field in default_structured_output().keys():
-        if field not in fields or fields[field] is None:
-            fields[field] = "Not Available"
-    
-    # Special handling for this specific document
-    if "HIGGS" in text and "DIAGNOSTIC" in text and "MAMMO" in text:
-        fields['patient_name'] = "Higgs"
-        if "Riggs, Jillian" in text:
-            fields['patient_name'] = "Higgs Riggs, Jillian"
-    
-    return fields
-
-# Add a function to detect deidentified documents
-def is_deidentified_document(text):
-    """Check if document contains deidentification markers"""
-    deidentified_markers = PRE_COMPILED_PATTERNS['deidentified'].findall(text)
-    redacted_patterns = re.findall(r'X{3,}|\[.*?\]|\*{3,}', text)
-    return bool(deidentified_markers or redacted_patterns)
-
-# Add a BIRADS classifier function
-def birads_classifier(text):
-    """Convert textual descriptions to standard BIRADS categories"""
-    text = text.lower()
-    
-    if not text or text == "unknown" or text == "not available":
-        return "Not Available"
-        
-    # Extract numeric BIRADS if present
-    birads_match = re.search(r'bi-?rads\s*(\d)', text, re.IGNORECASE)
-    if birads_match:
-        return f"BIRADS {birads_match.group(1)}"
-    
-    # Classify based on descriptions
-    if any(term in text for term in ["negative", "normal"]):
-        return "BIRADS 1-2"
-    elif any(term in text for term in ["benign", "probably benign"]):
-        return "BIRADS 3"
-    elif any(term in text for term in ["suspicious", "abnormal"]):
-        return "BIRADS 4"
-    elif any(term in text for term in ["highly suggestive", "malignancy", "malignant"]):
-        return "BIRADS 5"
-    
-    # Check for negative statements
-    if "negative for malignancy" in text:
-        return "BIRADS 1-2"
-    
-    return "Not Available"
-
-def simple_fallback_extraction(text: str) -> dict:
-    """Simple fallback extraction that just looks for key terms"""
-    result = default_structured_output()
-    result['raw_ocr_text'] = text
-    
-    # Look for any dates - more aggressive pattern
-    dates = re.findall(r'\b\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4}\b|\b\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s,]+\d{1,2}(?:st|nd|rd|th)?[\s,]+\d{2,4}\b', text, re.IGNORECASE)
-    if dates:
-        result['exam_date'] = dates[0]
-        if len(dates) > 1:
-            result['document_date'] = dates[1]
-    
-    # Look for BIRADS mentions - more patterns
-    if re.search(r'negative for malignancy|no evidence of malignancy|normal|benign', text, re.IGNORECASE):
-        result['birads_score'] = "BIRADS 1-2"
-    elif re.search(r'bi-?rads\s*[123]|category\s*[123]|probably benign', text, re.IGNORECASE):
-        result['birads_score'] = "BIRADS 1-3"
-    elif re.search(r'bi-?rads\s*[45]|category\s*[45]|suspicious|abnormal', text, re.IGNORECASE):
-        result['birads_score'] = "BIRADS 4-5"
-    elif re.search(r'bi-?rads|category|assessment', text, re.IGNORECASE):
-        result['birads_score'] = "BIRADS mentioned"
-    
-    # Look for document type - more patterns
-    if re.search(r'mammo|breast imaging|screening|diagnostic', text, re.IGNORECASE):
-        result['document_type'] = "Mammogram"
-    elif re.search(r'ultrasound|sonograph|echograph', text, re.IGNORECASE):
-        result['document_type'] = "Ultrasound"
-    elif re.search(r'MRI|magnetic resonance', text, re.IGNORECASE):
-        result['document_type'] = "MRI"
-    
-    # Look for any doctor names - more patterns
-    doctor_match = re.search(r'(?:Dr|MD|Doctor|Physician|Radiologist)[.\s:]+([A-Za-z\s.,]+)', text, re.IGNORECASE)
-    if doctor_match:
-        result['electronically_signed_by'] = doctor_match.group(1).strip()
-    
-    # Look for patient name - very generic pattern
-    name_match = re.search(r'(?:patient|name|patient name|patient:|name:)[:\s]+([A-Za-z\s.-]+)', text, re.IGNORECASE)
-    if name_match:
-        result['patient_name'] = name_match.group(1).strip()
-    
-    # Extract any impression or findings
-    impression_match = re.search(r'(?:impression|assessment|conclusion|interpretation)[:\s]+([^\n]+(?:\n[^\n]+)*)', text, re.IGNORECASE)
-    if impression_match:
-        result['impression_result'] = impression_match.group(1).strip()
-    
-    return result
-
-# Improve date extraction to better distinguish document date vs exam date
-def extract_dates(text: str) -> dict:
-    """Extract and categorize dates from text"""
-    dates = {}
-    
-    # Find all dates in the text
-    date_matches = re.findall(
-        r'\b\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2}\b|\b\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s,]+\d{1,2}(?:st|nd|rd|th)?[\s,]+\d{2,4}\b',
-        text,
-        re.IGNORECASE
-    )
-    
-    if not date_matches:
-        return {"document_date": "Not Available", "exam_date": "Not Available"}
-    
-    # Look for specific date contexts
-    doc_date_match = re.search(r'Document Date[:\s]+([0-9/-]+)', text, re.IGNORECASE)
-    exam_date_match = re.search(r'(?:Exam|Study) Date[:\s]+([0-9/-]+)', text, re.IGNORECASE)
-    
-    # If we have explicit matches, use them
-    if doc_date_match:
-        dates["document_date"] = standardize_date(doc_date_match.group(1))
-    elif len(date_matches) > 0:
-        # Otherwise use the first date as document date
-        dates["document_date"] = standardize_date(date_matches[0])
-    
-    if exam_date_match:
-        dates["exam_date"] = standardize_date(exam_date_match.group(1))
-    elif len(date_matches) > 1:
-        # Use the second date as exam date if available
-        dates["exam_date"] = standardize_date(date_matches[1])
-    elif "document_date" not in dates and len(date_matches) > 0:
-        # If no document date was set, use the first date as exam date
-        dates["exam_date"] = standardize_date(date_matches[0])
-    
-    return dates
+        logging.error(f"Error processing templates: {str(e)}")
+        warnings.append(f"Template processing error: {str(e)}")
