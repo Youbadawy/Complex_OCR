@@ -110,7 +110,7 @@ def simple_ocr(image: np.ndarray) -> str:
 
 def normalize_date(date_str: str) -> str:
     """
-    Normalize date string to YYYY-MM-DD format.
+    Normalize date string to YYYY-MM-DD format with French support.
     
     Args:
         date_str: Date string in various formats
@@ -120,24 +120,36 @@ def normalize_date(date_str: str) -> str:
     """
     if not date_str or not isinstance(date_str, str):
         return ""
-        
-    # Try to handle common date formats
+    
+    # Add French date patterns
     date_patterns = [
         # YYYY-MM-DD or YYYY/MM/DD
         (r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', 
          lambda m: f"{m.group(1)}-{m.group(2).zfill(2)}-{m.group(3).zfill(2)}"),
         
-        # MM/DD/YYYY or MM-DD-YYYY
+        # DD/MM/YYYY (French format) or MM/DD/YYYY (US format)
         (r'(\d{1,2})[-/](\d{1,2})[-/](\d{4})', 
-         lambda m: f"{m.group(3)}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"),
+         lambda m: _parse_date_with_locale(m.group(1), m.group(2), m.group(3))),
         
-        # DD MMM YYYY (e.g., 15 Jan 2023)
-        (r'(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})',
-         lambda m: _parse_text_date(f"{m.group(1)} {m.group(2)} {m.group(3)}")),
+        # French date format: DD month YYYY
+        (r'(\d{1,2})\s+(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+(\d{4})',
+         lambda m: _parse_french_text_date(m.group(1), m.group(2), m.group(3))),
         
-        # MMM DD, YYYY (e.g., Jan 15, 2023)
-        (r'([A-Za-z]{3,9})\s+(\d{1,2})(?:,|\s+)?\s*(\d{4})',
-         lambda m: _parse_text_date(f"{m.group(2)} {m.group(1)} {m.group(3)}")),
+        # French date with month abbreviations
+        (r'(\d{1,2})\s+(janv|févr|mars|avr|mai|juin|juil|août|sept|oct|nov|déc)\.?\s+(\d{4})',
+         lambda m: _parse_french_text_date(m.group(1), m.group(2), m.group(3))),
+        
+        # French date with "le" prefix
+        (r'le\s+(\d{1,2})\s+(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+(\d{4})',
+         lambda m: _parse_french_text_date(m.group(1), m.group(2), m.group(3))),
+        
+        # English date format: Month DD, YYYY
+        (r'(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:,|\s+)?\s*(\d{4})',
+         lambda m: _parse_english_text_date(m.group(2), m.group(1), m.group(3))),
+        
+        # With month abbreviations: MMM DD, YYYY
+        (r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+(\d{1,2})(?:,|\s+)?\s*(\d{4})',
+         lambda m: _parse_english_text_date(m.group(2), m.group(1), m.group(3))),
     ]
     
     # Try each pattern
@@ -150,24 +162,129 @@ def normalize_date(date_str: str) -> str:
                 logging.warning(f"Date parsing error: {str(e)}")
                 continue
     
-    # If all patterns fail, try dateutil parser as fallback
+    # If standard patterns fail, try dateutil parser with locale
     try:
         from dateutil import parser
-        parsed_date = parser.parse(date_str, fuzzy=True)
-        return parsed_date.strftime('%Y-%m-%d')
+        # Try to detect if it's a French date for locale setting
+        has_french = bool(re.search(r'janv|févr|mars|avr|juin|juil|août|sept|oct|nov|déc|le \d{1,2}', 
+                                    date_str, re.IGNORECASE))
+        
+        if has_french:
+            import locale
+            old_locale = locale.setlocale(locale.LC_TIME)
+            try:
+                locale.setlocale(locale.LC_TIME, 'fr_FR.UTF-8')  # Set French locale
+                parsed_date = parser.parse(date_str, fuzzy=True)
+                return parsed_date.strftime('%Y-%m-%d')
+            except Exception:
+                # If fr_FR.UTF-8 fails, try fr_FR
+                try:
+                    locale.setlocale(locale.LC_TIME, 'fr_FR')
+                    parsed_date = parser.parse(date_str, fuzzy=True)
+                    return parsed_date.strftime('%Y-%m-%d')
+                except Exception:
+                    # If still fails, try without locale
+                    parsed_date = parser.parse(date_str, fuzzy=True)
+                    return parsed_date.strftime('%Y-%m-%d')
+            finally:
+                try:
+                    locale.setlocale(locale.LC_TIME, old_locale)  # Restore original locale
+                except Exception:
+                    pass  # Ignore if we can't restore locale
+        else:
+            parsed_date = parser.parse(date_str, fuzzy=True)
+            return parsed_date.strftime('%Y-%m-%d')
     except Exception as e:
         logging.warning(f"Date parsing fallback error: {str(e)}")
         return date_str
 
-def _parse_text_date(date_text: str) -> str:
-    """Helper function to parse text dates with month names"""
-    try:
-        from dateutil import parser
-        parsed_date = parser.parse(date_text, fuzzy=True)
-        return parsed_date.strftime('%Y-%m-%d')
-    except Exception as e:
-        logging.warning(f"Text date parsing error: {str(e)}")
-        return date_text
+def _parse_french_text_date(day, month, year):
+    """
+    Parse a French text date into YYYY-MM-DD format
+    
+    Args:
+        day: Day as string
+        month: Month name in French
+        year: Year as string
+        
+    Returns:
+        Date in YYYY-MM-DD format
+    """
+    # Map French month names to numbers
+    month_map = {
+        'janvier': '01', 'janv': '01',
+        'février': '02', 'févr': '02',
+        'mars': '03',
+        'avril': '04', 'avr': '04',
+        'mai': '05',
+        'juin': '06',
+        'juillet': '07', 'juil': '07',
+        'août': '08',
+        'septembre': '09', 'sept': '09',
+        'octobre': '10', 'oct': '10',
+        'novembre': '11', 'nov': '11',
+        'décembre': '12', 'déc': '12'
+    }
+    
+    month_num = month_map.get(month.lower(), '01')  # Default to 01 if not found
+    return f"{year}-{month_num}-{day.zfill(2)}"
+
+def _parse_english_text_date(day, month, year):
+    """
+    Parse an English text date into YYYY-MM-DD format
+    
+    Args:
+        day: Day as string
+        month: Month name in English
+        year: Year as string
+        
+    Returns:
+        Date in YYYY-MM-DD format
+    """
+    # Map English month names to numbers
+    month_map = {
+        'january': '01', 'jan': '01',
+        'february': '02', 'feb': '02',
+        'march': '03', 'mar': '03',
+        'april': '04', 'apr': '04',
+        'may': '05',
+        'june': '06', 'jun': '06',
+        'july': '07', 'jul': '07',
+        'august': '08', 'aug': '08',
+        'september': '09', 'sep': '09',
+        'october': '10', 'oct': '10',
+        'november': '11', 'nov': '11',
+        'december': '12', 'dec': '12'
+    }
+    
+    month_num = month_map.get(month.lower(), '01')  # Default to 01 if not found
+    return f"{year}-{month_num}-{day.zfill(2)}"
+
+def _parse_date_with_locale(num1, num2, year):
+    """
+    Parse a date with ambiguous MM/DD or DD/MM format based on value logic.
+    Assumes DD/MM/YYYY format (French) when both numbers could be valid.
+    
+    Args:
+        num1: First number in the date string
+        num2: Second number in the date string
+        year: Year as string
+        
+    Returns:
+        Date in YYYY-MM-DD format
+    """
+    n1, n2 = int(num1), int(num2)
+    
+    # If first number is > 12, it must be a day
+    if n1 > 12:
+        return f"{year}-{str(n2).zfill(2)}-{str(n1).zfill(2)}"
+    
+    # If second number is > 12, it must be a day
+    if n2 > 12:
+        return f"{year}-{str(n1).zfill(2)}-{str(n2).zfill(2)}"
+    
+    # If both could be months, assume DD/MM format (French)
+    return f"{year}-{str(n2).zfill(2)}-{str(n1).zfill(2)}"
 
 def extract_medical_fields(text, use_llm=False, llm_api_key=None):
     """

@@ -54,190 +54,242 @@ __all__ = [
     'extract_signed_by',
     'process_document_text',
     'extract_structured_data',
-    'extract_section'
+    'extract_section',
+    'detect_report_language',
+    'clean_provider_name'
 ]
 
 class BiradsSpellingCorrector:
     """
-    Specialized spelling corrector for BIRADS and related medical terms.
+    Class for correcting common misspellings of BIRADS and related terminology.
     
-    This class provides targeted correction for common OCR errors and typos
-    in BIRADS terminology in medical reports.
+    This class provides methods to detect and correct misspellings of BIRADS
+    terminology in medical texts, improving detection of BIRADS scores in OCR output.
+    Now supports both English and French medical terminology.
     """
     
     def __init__(self):
         # Dictionary of common misspellings and their corrections
-        self.corrections = {
+        self.en_corrections = {
             # BIRADS variations
+            'binds': 'birads',
+            'bi-rads': 'birads',
+            'birods': 'birads',
+            'bi rads': 'birads',
+            'birad': 'birads',
+            'birads': 'birads',
+            'brads': 'birads',
+            'btrads': 'birads',
+            'bi-rad': 'birads',
+            'braid': 'birads',
+            'baird': 'birads',
             'blrads': 'birads',
+            'bil-rads': 'birads',
+            'bird': 'birads',
+            'birdos': 'birads',
+            'bi-rad$': 'birads',
+            'brirads': 'birads',
+            'birats': 'birads',
+            'bi rad': 'birads',
+            'bira ds': 'birads',
+            'bi-r ads': 'birads',
+            'b irads': 'birads',
+            'br-irads': 'birads',
+            
+            # ACR variations
+            'acr': 'acr',
+            'acn': 'acr',
+            'aci': 'acr',
+            'ocr': 'acr',
+            'acf': 'acr',
+            
+            # Category variations
+            'category': 'category',
+            'cat': 'category',
+            'cot': 'category',
+            'cotegory': 'category',
+            'catergoy': 'category',
+            'catagory': 'category',
+            'categorv': 'category',
+        }
+        
+        # French corrections for BIRADS terminology
+        self.fr_corrections = {
+            # French BIRADS variations 
+            'birads': 'birads',
             'bi-rads': 'birads',
             'bi rads': 'birads',
             'birad': 'birads',
-            'birads': 'birads',  # correct spelling as reference
-            'bi-rad': 'birads',
-            'brads': 'birads',
-            'bl-rads': 'birads',
-            'bl rads': 'birads',
-            'b1-rads': 'birads',
-            'bl-rad': 'birads',
-            'bidrads': 'birads',
+            'blrads': 'birads',
             'bil-rads': 'birads',
-            'bir-ads': 'birads',
-            'bi-ras': 'birads',
-            'bl-ras': 'birads',
+            'bi rad': 'birads',
+            'b-irads': 'birads',
             
-            # ACR variations
-            'acr': 'acr',  # correct spelling as reference
-            'arc': 'acr',
-            'aor': 'acr',
-            'acn': 'acr',
-            
-            # Category variations
-            'categor': 'category',
+            # French category variations
             'catégorie': 'category',
             'categorie': 'category',
-            'catagory': 'category',
-            'categ': 'category',
+            'classification': 'category',
+            'classe': 'category',
             'cat': 'category',
             
-            # Classification variations
-            'classif': 'classification',
-            'clasif': 'classification',
-            'class': 'classification',
-            'classe': 'classification',
+            # French ACR variations
+            'acr': 'acr',
+            'a.c.r': 'acr',
+            'a-c-r': 'acr',
+            'a c r': 'acr',
+            
+            # French context words
+            'sein': 'breast',
+            'mammographie': 'mammogram',
+            'échographie': 'ultrasound',
+            'résultat': 'result',
+            'conclusion': 'impression',
+            'interprétation': 'impression'
         }
         
-        # Dictionary to track common co-occurrence terms that help identify BIRADS context
-        self.context_terms = {
-            'mammogram': 2.0,
-            'mammography': 2.0,
-            'breast': 1.5,
-            'ultrasound': 1.5,
-            'assessment': 1.5,
-            'category': 2.0,
-            'score': 2.0,
-            'classification': 2.0,
-            'impression': 1.0,
-            'finding': 1.0,
-            'suspicious': 1.0,
-            'benign': 1.0,
-            'malignant': 1.0,
-            'biopsy': 1.0,
-            'radiologist': 0.5,
-            'follow-up': 0.5,
-            'screening': 0.5,
-        }
+        # Calculate edit distance threshold based on term length
+        self.threshold_func = lambda word: 1 if len(word) <= 4 else (2 if len(word) <= 8 else 3)
     
     def correct(self, word: str) -> str:
         """
-        Correct known misspellings of BIRADS and related terms.
+        Correct a potentially misspelled BIRADS-related term.
         
         Args:
             word: Word to correct
             
         Returns:
-            Corrected version of the word, or original if no correction needed
+            Corrected word or original if no correction found
         """
+        if not word:
+            return word
+            
+        # Lowercase for comparison
         word_lower = word.lower()
-        if word_lower in self.corrections:
-            return self.corrections[word_lower]
+        
+        # Check if it's an exact match in English corrections
+        if word_lower in self.en_corrections:
+            return self.en_corrections[word_lower]
+            
+        # Check if it's an exact match in French corrections
+        if word_lower in self.fr_corrections:
+            return self.fr_corrections[word_lower]
+        
+        # If not exact match, try to find closest match using edit distance
+        # First try English corrections
+        for correct_word, correction in self.en_corrections.items():
+            threshold = self.threshold_func(correct_word)
+            if edit_distance(word_lower, correct_word) <= threshold:
+                return correction
+                
+        # Then try French corrections
+        for correct_word, correction in self.fr_corrections.items():
+            threshold = self.threshold_func(correct_word)
+            if edit_distance(word_lower, correct_word) <= threshold:
+                return correction
+        
+        # No suitable correction found
         return word
     
     def calculate_context_score(self, text: str) -> float:
         """
-        Calculate context score for likelihood that text contains BIRADS information.
+        Calculate a context score indicating how likely the text contains BIRADS information.
+        Higher score means BIRADS information is more likely present.
         
         Args:
             text: Text to analyze
-        
-    Returns:
-            Score indicating confidence that text contains BIRADS information
-        """
-        text_lower = text.lower()
-        score = 0.0
-        
-        # Look for contextual terms that suggest BIRADS context
-        for term, term_weight in self.context_terms.items():
-            if term in text_lower:
-                score += term_weight
-        
-        # Look for score patterns (0-6 with optional a, b, c)
-        if re.search(r'\b[0-6][abc]?\b', text_lower):
-            score += 2.0
             
-        # Stronger boost if we find digit patterns near potential BIRADS terms
-        # Look for patterns like "... 4 ..." or "... 4a ..." within 10 chars of "rad" etc.
-        birads_digit_pattern = re.compile(r'(?:(?:bi|bl|b)(?:[-\s])?r?a?d|acr|cat).{1,10}?([0-6][abc]?)|([0-6][abc]?).{1,10}?(?:(?:bi|bl|b)(?:[-\s])?r?a?d|acr|cat)', re.IGNORECASE)
-        if birads_digit_pattern.search(text_lower):
-            score += 5.0
-            
-        return min(score, 10.0)  # Cap at 10.0
-    def find_and_correct_birads_term(self, text: str) -> tuple:
-        """
-        Find potential BIRADS terms in text and correct them.
-        
-        Args:
-            text: Text to analyze
-        
         Returns:
-            Tuple of (corrected_text, was_corrected, confidence)
+            Context score between 0.0 and 1.0
         """
-        # Skip empty text
         if not text:
-            return text, False, 0.0
-        
-        # Calculate context score first
-        context_score = self.calculate_context_score(text) / 10.0  # Normalize to 0-1
-        
-        # Early return if context score is very low
-        if context_score < 0.2:
-            return text, False, context_score
-        
-        # Words that could be misspelled BIRADS terms
-        potential_birads_patterns = [
-            # Look for common OCR errors for BIRADS
-            r'\b(?:BI|BL|B)(?:[-\s])?R?A?DS\b',
-            r'\b(?:BI|BL|B)(?:[-\s])?R?A?D\b',
-            # ACR patterns
-            r'\b(?:ACR|ARC|AOR|ACN)\b',
-            # BI-RADS categories directly
-            r'\bcate(?:gor)?(?:y|ie)?\s+([0-6][abc]?)\b',
-            r'\bclass(?:if|ificat)(?:ion|e)?\s+([0-6][abc]?)\b',
-            # Potentially misspelled with numbers
-            r'\b(?:81|B1|8I)-?(?:RADS|RAD)\b',
+            return 0.0
+            
+        # Keywords that suggest BIRADS context is present
+        # English keywords
+        en_keywords = [
+            'mammogram', 'breast', 'ultrasound', 'imaging', 'radiologist',
+            'finding', 'lesion', 'mass', 'calcification', 'density',
+            'assessment', 'follow-up', 'biopsy', 'screening', 'diagnostic'
         ]
         
-        corrected_text = text
-        was_corrected = False
-        highest_confidence = context_score  # Start with context score as baseline
+        # French keywords
+        fr_keywords = [
+            'mammographie', 'sein', 'échographie', 'imagerie', 'radiologue',
+            'résultat', 'lésion', 'masse', 'calcification', 'densité',
+            'évaluation', 'suivi', 'biopsie', 'dépistage', 'diagnostic'
+        ]
         
-        for pattern in potential_birads_patterns:
-            for match in re.finditer(pattern, text, re.IGNORECASE):
-                matched_text = match.group(0)
-                
-                # Tokenize the matched text
-                words = re.findall(r'\b[a-zA-Z]+\b', matched_text)
-                
-                # Correct each word
-                for word in words:
-                    corrected_word = self.correct(word)
-                    if corrected_word != word.lower():
-                        # Apply correction, preserving original case pattern if possible
-                        if word.isupper():
-                            corrected_word = corrected_word.upper()
-                        elif word[0].isupper():
-                            corrected_word = corrected_word.capitalize()
-                            
-                        # Replace only this instance (not all occurrences)
-                        corrected_text = corrected_text.replace(matched_text, 
-                                                              matched_text.replace(word, corrected_word), 1)
-                        was_corrected = True
-                        
-                        # Increase confidence when we make a correction
-                        correction_confidence = 0.85  # Base confidence in the correction
-                        highest_confidence = max(highest_confidence, correction_confidence)
+        # Count keyword occurrences
+        en_count = sum(1 for kw in en_keywords if re.search(r'\b' + kw + r'\b', text, re.IGNORECASE))
+        fr_count = sum(1 for kw in fr_keywords if re.search(r'\b' + kw + r'\b', text, re.IGNORECASE))
         
-        return corrected_text, was_corrected, highest_confidence
+        # Use the higher count (English or French)
+        keyword_count = max(en_count, fr_count)
+        
+        # Basic normalization - score between 0 and 1
+        context_score = min(1.0, keyword_count / 10.0)
+        
+        # Additional boost for specific strong indicators
+        if re.search(r'\b(?:(?:bi-?)?rads|acr)(?:\s+|:).{0,10}(?:[0-6][abc]?)\b', text, re.IGNORECASE):
+            context_score += 0.3
+            
+        # Cap at 1.0
+        return min(1.0, context_score)
+    
+    def find_and_correct_birads_term(self, text: str) -> tuple:
+        """
+        Finds and corrects BIRADS terms in the text.
+        
+        Args:
+            text: Text to process
+            
+        Returns:
+            Tuple of (corrected text, list of corrections made)
+        """
+        if not text:
+            return text, []
+            
+        # Get language of the text
+        lang = detect_report_language(text)
+        
+        # Detect both English and French BIRADS-related terms
+        # For BIRADS/ACR/category terms 
+        birads_pattern = r'\b(bi[ -]?r?a?ds?|blrads|brrads|birods|brads|braids|bi[ -]?rad)\b'
+        acr_pattern = r'\b(acr|a\.c\.r|a-c-r)\b'
+        category_pattern = r'\b(cat(?:egory|egorie)?|class(?:ification|e)?|catégorie)\b'
+        
+        corrections = []
+        
+        # Helper function to make replacements
+        def replace_match(match):
+            original = match.group(0)
+            term_type = match.lastgroup
+            
+            # Get appropriate dictionary based on language
+            corrections_dict = self.fr_corrections if lang == 'fr' else self.en_corrections
+            
+            if term_type == 'birads':
+                corrected = 'BIRADS'
+            elif term_type == 'acr':
+                corrected = 'ACR'
+            elif term_type == 'category':
+                corrected = 'Category' if lang == 'en' else 'Catégorie'
+            else:
+                # Use appropriate correction from dictionary
+                corrected = corrections_dict.get(original.lower(), original)
+                
+            if corrected.lower() != original.lower():
+                corrections.append((original, corrected))
+                
+            return corrected
+        
+        # Combined pattern with named groups
+        combined_pattern = f'(?P<birads>{birads_pattern})|(?P<acr>{acr_pattern})|(?P<category>{category_pattern})'
+        
+        # Make replacements
+        corrected_text = re.sub(combined_pattern, replace_match, text, flags=re.IGNORECASE)
+        
+        return corrected_text, corrections
 
 def preprocess_text_for_extraction(text: str) -> str:
     """
@@ -256,10 +308,10 @@ def preprocess_text_for_extraction(text: str) -> str:
     corrector = BiradsSpellingCorrector()
     
     # Correct common OCR errors in BIRADS terminology
-    corrected_text, was_corrected, confidence = corrector.find_and_correct_birads_term(text)
+    corrected_text, corrections = corrector.find_and_correct_birads_term(text)
     
-    if was_corrected:
-        logging.info(f"Corrected BIRADS terminology with confidence {confidence:.2f}")
+    if corrections:
+        logging.info(f"Corrected BIRADS terminology with {len(corrections)} corrections")
     
     # Normalize whitespace
     corrected_text = re.sub(r'\s+', ' ', corrected_text)
@@ -404,72 +456,177 @@ def extract_birads_score(text: str) -> Dict[str, Any]:
     logging.debug("No BIRADS score found in text")
     return {"value": "", "confidence": 0.0}
 
+def detect_report_language(text: str) -> str:
+    """
+    Detect if a medical report is in French or English based on medical terminology.
+    
+    Args:
+        text: The report text
+        
+    Returns:
+        'fr' for French, 'en' for English
+    """
+    if not text:
+        return "en"
+        
+    # Key French medical terms with accents
+    fr_terms = [
+        r'résultat', r'mammographie', r'échographie', r'sein', r'médecin', 
+        r'recommandation', r'suivi', r'catégorie', r'interprétation', 
+        r'clinique', r'antécédent', r'examen'
+    ]
+    
+    # Key English medical terms
+    en_terms = [
+        r'finding', r'mammogram', r'ultrasound', r'breast', r'physician',
+        r'recommendation', r'follow-up', r'category', r'interpretation',
+        r'clinical', r'history', r'examination'
+    ]
+    
+    # Count term occurrences
+    fr_count = sum(len(re.findall(term, text, re.IGNORECASE)) for term in fr_terms)
+    en_count = sum(len(re.findall(term, text, re.IGNORECASE)) for term in en_terms)
+    
+    # Add section header checks
+    fr_headers = sum(len(re.findall(h, text, re.IGNORECASE)) for h in 
+                    [r'RÉSULTATS', r'CONCLUSION', r'RECOMMANDATION'])
+    en_headers = sum(len(re.findall(h, text, re.IGNORECASE)) for h in 
+                    [r'FINDINGS', r'IMPRESSION', r'RECOMMENDATION'])
+    
+    fr_count += fr_headers * 2  # Weight headers more heavily
+    en_count += en_headers * 2
+    
+    # Return language with higher score, default to English
+    return 'fr' if fr_count > en_count else 'en'
+
 def extract_provider_info(text: str) -> Dict[str, Any]:
     """
-    Extract provider information from text.
+    Extract provider information from text with enhanced bilingual support.
+    
+    This function extracts referring provider, interpreting provider, and facility
+    with support for both English and French medical reports.
     
     Args:
         text: Text to extract provider information from
         
     Returns:
         Dictionary with provider information
-    
-    Raises:
-        InvalidInputError: If text is None
     """
-    provider_info = {
-        'referring_provider': '',
-        'interpreting_provider': '',
-        'facility': ''
+    if text is None:
+        raise ValueError("Input text cannot be None")
+        
+    if not text.strip():
+        logging.debug("Empty text provided to extract_provider_info")
+        return {"referring_provider": {"value": "", "confidence": 0.0},
+                "interpreting_provider": {"value": "", "confidence": 0.0},
+                "facility": {"value": "", "confidence": 0.0}}
+    
+    # Detect language
+    lang = detect_report_language(text)
+    
+    # Define bilingual patterns
+    referring_patterns = {
+        'en': [
+            (r'(?:REFERRING|ORDERED BY|REFERRING PHYSICIAN|REFERRING PROVIDER)[:\s]+([A-Za-z\s.,\-]+(?:MD|M\.D\.|DO|PhD)?)', 0.9),
+            (r'(?:ORDERING PHYSICIAN|PHYSICIAN OF RECORD)[:\s]+([A-Za-z\s.,\-]+(?:MD|M\.D\.|DO|PhD)?)', 0.85)
+        ],
+        'fr': [
+            (r'(?:MÉDECIN RÉFÉRENT|PRESCRIPTEUR|MÉDECIN TRAITANT|RÉFÉRÉ PAR)[:\s]+([A-Za-zÀ-ÿ\s.,\-]+(?:MD|M\.D\.|DO|PhD)?)', 0.9),
+            (r'(?:DEMANDÉ PAR|MÉDECIN DEMANDEUR)[:\s]+([A-Za-zÀ-ÿ\s.,\-]+(?:MD|M\.D\.|DO|PhD)?)', 0.85)
+        ]
     }
     
-    try:
-        if text is None:
-            logger.warning("extract_provider_info received None input")
-            raise InvalidInputError("Input text cannot be None")
-            
-        if not text:
-            logger.debug("extract_provider_info received empty text")
-            return provider_info
-        
-        # Extract referring provider
-        ref_pattern = r'(?:REFERRING|ORDERED BY|REFERRING PHYSICIAN|REFERRING PROVIDER)[:\s]+([^\n]+)'
-        try:
-            ref_match = re.search(ref_pattern, text, re.IGNORECASE)
-            if ref_match:
-                provider_info['referring_provider'] = ref_match.group(1).strip()
-                logger.debug(f"Extracted referring provider: {provider_info['referring_provider']}")
-        except Exception as e:
-            logger.error(f"Error extracting referring provider: {str(e)}")
-        
-        # Extract interpreting provider
-        int_pattern = r'(?:INTERPRETING|INTERPRETED BY|READING PHYSICIAN|RADIOLOGIST)[:\s]+([^\n]+)'
-        try:
-            int_match = re.search(int_pattern, text, re.IGNORECASE)
-            if int_match:
-                provider_info['interpreting_provider'] = int_match.group(1).strip()
-                logger.debug(f"Extracted interpreting provider: {provider_info['interpreting_provider']}")
-        except Exception as e:
-            logger.error(f"Error extracting interpreting provider: {str(e)}")
-        
-        # Extract facility
-        fac_pattern = r'(?:FACILITY|LOCATION|SITE|PERFORMED AT)[:\s]+([^\n]+)'
-        try:
-            fac_match = re.search(fac_pattern, text, re.IGNORECASE)
-            if fac_match:
-                provider_info['facility'] = fac_match.group(1).strip()
-                logger.debug(f"Extracted facility: {provider_info['facility']}")
-        except Exception as e:
-            logger.error(f"Error extracting facility: {str(e)}")
-        
-        return provider_info
+    interpreting_patterns = {
+        'en': [
+            (r'(?:INTERPRETING|INTERPRETED BY|READING PHYSICIAN|RADIOLOGIST)[:\s]+([A-Za-z\s.,\-]+(?:MD|M\.D\.|DO|PhD)?)', 0.9),
+            (r'(?:SIGNED BY|ELECTRONICALLY SIGNED BY)[:\s]+([A-Za-z\s.,\-]+(?:MD|M\.D\.|DO|PhD)?)', 0.9)
+        ],
+        'fr': [
+            (r'(?:INTERPRÉTÉ PAR|RADIOLOGUE|MÉDECIN INTERPRÉTANT)[:\s]+([A-Za-zÀ-ÿ\s.,\-]+(?:MD|M\.D\.|DO|PhD)?)', 0.9),
+            (r'(?:SIGNÉ PAR|SIGNATURE ÉLECTRONIQUE)[:\s]+([A-Za-zÀ-ÿ\s.,\-]+(?:MD|M\.D\.|DO|PhD)?)', 0.9)
+        ]
+    }
     
-    except InvalidInputError:
-        # Re-raise InvalidInputError for specific handling
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error in extract_provider_info: {str(e)}")
-        return provider_info
+    facility_patterns = {
+        'en': [
+            (r'(?:FACILITY|LOCATION|SITE|PERFORMED AT)[:\s]+([^\n]+)', 0.8)
+        ],
+        'fr': [
+            (r'(?:ÉTABLISSEMENT|LIEU|SITE|CLINIQUE|HÔPITAL)[:\s]+([^\n]+)', 0.8)
+        ]
+    }
+    
+    results = {
+        "referring_provider": {"value": "", "confidence": 0.0},
+        "interpreting_provider": {"value": "", "confidence": 0.0},
+        "facility": {"value": "", "confidence": 0.0}
+    }
+    
+    # Process each pattern type
+    pattern_mappings = [
+        ("referring_provider", referring_patterns),
+        ("interpreting_provider", interpreting_patterns),
+        ("facility", facility_patterns)
+    ]
+    
+    for field, patterns_dict in pattern_mappings:
+        # Try primary language first
+        for pattern, confidence in patterns_dict.get(lang, []):
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                value = clean_provider_name(match.group(1).strip(), lang)
+                results[field] = {"value": value, "confidence": confidence}
+                break
+                
+        # If not found, try secondary language
+        if not results[field]["value"]:
+            secondary_lang = 'en' if lang == 'fr' else 'fr'
+            for pattern, confidence in patterns_dict.get(secondary_lang, []):
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    value = clean_provider_name(match.group(1).strip(), secondary_lang)
+                    results[field] = {"value": value, "confidence": confidence * 0.9}  # Slightly lower confidence for secondary language
+                    break
+    
+    # Fall back to extract_signed_by for interpreting provider if not found
+    if not results["interpreting_provider"]["value"]:
+        signed_by = extract_signed_by(text)
+        if signed_by:
+            results["interpreting_provider"] = {"value": signed_by, "confidence": 0.7}
+    
+    return results
+
+def clean_provider_name(provider_name: str, lang: str) -> str:
+    """
+    Clean provider name by handling titles and formatting properly.
+    Addresses French hyphenated names and titles.
+    
+    Args:
+        provider_name: Raw provider name
+        lang: Language code ('en' or 'fr')
+        
+    Returns:
+        Cleaned provider name
+    """
+    # Remove common titles
+    titles = {
+        'en': [r'Dr\.?\s+', r'Professor\s+', r'MD\s+', r'M\.D\.\s+', r'PhD\s+'],
+        'fr': [r'Dr\.?\s+', r'Pr\.?\s+', r'Professeur\s+', r'MD\s+', r'M\.D\.\s+']
+    }
+    
+    name = provider_name
+    for title in titles[lang] + titles['en' if lang == 'fr' else 'fr']:
+        name = re.sub(title, '', name, flags=re.IGNORECASE)
+    
+    # Handle French hyphenated names - preserve hyphens in names like Jean-Marie
+    if lang == 'fr':
+        # Make sure hyphens between names are preserved
+        name = re.sub(r'(\w)\s*-\s*(\w)', r'\1-\2', name)
+    
+    # Remove trailing titles or credentials
+    name = re.sub(r',?\s*(?:MD|M\.D\.|DO|PhD|FRCPC)$', '', name, flags=re.IGNORECASE)
+    
+    return name.strip()
 
 def extract_signed_by(text: str) -> str:
     """
@@ -693,7 +850,7 @@ def validate_field_types(data):
 # Add a helper function for section extraction with dynamic end detection
 def extract_section(text: str, section_name: str) -> str:
     """
-    Extract a section from text with dynamic end detection.
+    Extract a section from text with bilingual support and dynamic end detection.
     
     Args:
         text: Text to extract section from
@@ -704,23 +861,43 @@ def extract_section(text: str, section_name: str) -> str:
     """
     if not text:
         return ""
-        
-    # Define section markers with variations
-    section_markers = {
-        'findings': [r'(?:FINDINGS|FINDING|OBSERVATIONS?|RESULTS?|REPORT)(?:\s*:|\s*\n)'],
-        'impression': [r'(?:IMPRESSIONS?|CONCLUSIONS?|INTERPRETATION|ASSESSMENT|SUMMARY)(?:\s*:|\s*\n)'],
-        'recommendation': [r'(?:RECOMMENDATIONS?|FOLLOW-?UP|ADVICE|PLAN)(?:\s*:|\s*\n)'],
-        'clinical_history': [r'(?:CLINICAL\s+HISTORY|PATIENT\s+HISTORY|HISTORY|INDICATION|CLINICAL\s+INDICATION)(?:\s*:|\s*\n)'],
-        'patient_history': [r'(?:PATIENT\s+HISTORY|HISTORY\s+OF\s+PRESENT\s+ILLNESS|CLINICAL\s+INFORMATION)(?:\s*:|\s*\n)']
+    
+    # Detect language
+    lang = detect_report_language(text)
+    
+    # Define bilingual section markers with variations and colons
+    bilingual_section_markers = {
+        'findings': {
+            'en': [r'(?:FINDINGS|FINDING|OBSERVATIONS?|RESULTS?|REPORT)(?:\s*:|\s*\n)'],
+            'fr': [r'(?:RÉSULTATS|CONSTATATIONS|OBSERVATIONS|DONNÉES|EXAMEN)(?:\s*:|\s*\n)'] 
+        },
+        'impression': {
+            'en': [r'(?:IMPRESSIONS?|CONCLUSIONS?|INTERPRETATION|ASSESSMENT|SUMMARY)(?:\s*:|\s*\n)'],
+            'fr': [r'(?:IMPRESSION|CONCLUSION|INTERPRÉTATION|ÉVALUATION|SYNTHÈSE)(?:\s*:|\s*\n)']
+        },
+        'recommendation': {
+            'en': [r'(?:RECOMMENDATIONS?|FOLLOW-?UP|ADVICE|PLAN)(?:\s*:|\s*\n)'],
+            'fr': [r'(?:RECOMMANDATIONS?|SUIVI|CONSEIL|CONDUITE À TENIR|PLAN)(?:\s*:|\s*\n)']
+        },
+        'clinical_history': {
+            'en': [r'(?:CLINICAL\s+HISTORY|PATIENT\s+HISTORY|HISTORY|INDICATION|CLINICAL\s+INDICATION)(?:\s*:|\s*\n)'],
+            'fr': [r'(?:ANTÉCÉDENTS|HISTOIRE\s+CLINIQUE|ANAMNÈSE|INDICATION|RENSEIGNEMENTS\s+CLINIQUES)(?:\s*:|\s*\n)']
+        },
+        'patient_history': {
+            'en': [r'(?:PATIENT\s+HISTORY|HISTORY\s+OF\s+PRESENT\s+ILLNESS|CLINICAL\s+INFORMATION)(?:\s*:|\s*\n)'],
+            'fr': [r'(?:ANTÉCÉDENTS\s+DU\s+PATIENT|HISTOIRE\s+DE\s+LA\s+MALADIE|INFORMATION\s+CLINIQUE)(?:\s*:|\s*\n)']
+        }
     }
     
-    # Get markers for the requested section
-    markers = section_markers.get(section_name.lower(), [])
-    if not markers:
-        return ""
+    # Get primary and fallback markers for the requested section
+    primary_markers = bilingual_section_markers.get(section_name.lower(), {}).get(lang, [])
+    fallback_markers = bilingual_section_markers.get(section_name.lower(), {}).get('en' if lang == 'fr' else 'fr', [])
+    
+    # Combine markers with primary language first
+    all_markers = primary_markers + fallback_markers
     
     # Try each marker pattern
-    for marker in markers:
+    for marker in all_markers:
         match = re.search(marker, text, re.IGNORECASE)
         if not match:
             continue
@@ -728,8 +905,13 @@ def extract_section(text: str, section_name: str) -> str:
         # Find the start position (end of the marker)
         start_pos = match.end()
         
-        # Find the next section header (if any)
-        next_section_pattern = r'\n(?:[A-Z][A-Z\s]{3,}:|\n\s*[A-Z][A-Z\s]{3,}:)'
+        # Define section patterns based on language
+        if lang == 'fr':
+            next_section_pattern = r'\n(?:[A-ZÀÁÂÄÆÇÈÉÊËÌÍÎÏÒÓÔÖÙÚÛÜÝŸ][A-ZÀÁÂÄÆÇÈÉÊËÌÍÎÏÒÓÔÖÙÚÛÜÝŸa-zàáâäæçèéêëìíîïòóôöùúûüýÿ\s]{3,}:|\n\s*[A-ZÀÁÂÄÆÇÈÉÊËÌÍÎÏÒÓÔÖÙÚÛÜÝŸ][A-ZÀÁÂÄÆÇÈÉÊËÌÍÎÏÒÓÔÖÙÚÛÜÝŸa-zàáâäæçèéêëìíîïòóôöùúûüýÿ\s]{3,}:)'
+        else:
+            next_section_pattern = r'\n(?:[A-Z][A-Z\s]{3,}:|\n\s*[A-Z][A-Z\s]{3,}:)'
+        
+        # Find the next section header
         next_match = re.search(next_section_pattern, text[start_pos:])
         
         # Extract the section content
