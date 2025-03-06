@@ -88,15 +88,46 @@ def extract_birads_score(text: str) -> Dict[str, Any]:
             # Assessment format
             (r'(?:Assessment|Impression)(?:\s*[:=]\s*|\s+)(?:BIRADS|BI-RADS|ACR)(?:\s+|\s*[:=]\s*)([0-6][a-c]?)', 0.95),
             # Mammogram shows Category X
-            (r'(?:shows|indicating|consistent with)(?:\s+)(?:Category|BIRADS|BI-RADS|ACR)(?:\s+|\s*[:=]\s*)([0-6][a-c]?)', 0.85)
+            (r'(?:shows|indicating|consistent with)(?:\s+)(?:Category|BIRADS|BI-RADS|ACR)(?:\s+|\s*[:=]\s*)([0-6][a-c]?)', 0.85),
+            # TYPO: BLRADS (common OCR error)
+            (r'(?:BLRADS|B[IL]-?R(?:AD|A(?:D|DS)))(?:\s+(?:SCORE|CATEGORY|CLASSIFICATION|ASSESSMENT))?(?:\s*[:=]\s*|\s+)([0-6][a-c]?)', 0.90),
+            # End of report formatting: BI-RADS: X
+            (r'BI-?RADS:?\s*([0-6][a-c]?)\.?$', 0.95),
+            # Plain number with BIRADS context
+            (r'(?:BIRADS|CATEGORY|ASSESSMENT)[^0-6\n]*?([0-6][a-c]?)(?:\s|$|\.)', 0.85),
+            # ACR Category letters (A-D for density)
+            (r'ACR\s+Category\s+([A-D])', 0.80),
+            # Infer from recommendation (less confident)
+            (r'(?:Routine|annual|screening)[^.]*?(?:in|every)\s+(\d{1,2})\s*(?:year|month)', 0.70),
         ]
         
         for pattern, confidence in patterns:
             try:
-                match = re.search(pattern, text, re.IGNORECASE)
-                if match:
+                matches = re.finditer(pattern, text, re.IGNORECASE)
+                for match in matches:
+                    # Handle special cases
+                    value = match.group(1)
+                    
+                    # Handle ACR Category letters for breast density
+                    if re.match(r'[A-D]', value, re.IGNORECASE) and 'density' in text.lower():
+                        # Skip density categories
+                        continue
+                        
+                    # Handle recommendation-based inference
+                    if pattern.startswith(r'(?:Routine|annual|screening)'):
+                        interval = int(value)
+                        if interval == 1:
+                            value = '1' if 'normal' in text.lower() else '2'
+                        elif interval == 2:
+                            value = '2'
+                        elif interval == 6:
+                            value = '3'
+                        else:
+                            # Skip if we can't infer a clear BIRADS
+                            continue
+                    
                     result = {
-                        'value': f'BIRADS {match.group(1)}',
+                        'value': f'BIRADS {value}',
                         'confidence': confidence
                     }
                     logger.debug(f"Extracted BIRADS score: {result['value']} with confidence {confidence}")
@@ -106,6 +137,35 @@ def extract_birads_score(text: str) -> Dict[str, Any]:
                 continue
             except Exception as e:
                 logger.error(f"Error during pattern matching: {str(e)}")
+                continue
+                
+        # Secondary patterns for implicit BIRADS references
+        secondary_patterns = [
+            # Negative or normal findings often indicate BIRADS 1
+            (r'(?:no evidence of malignancy|normal|negative)(?:[^.]*?mammogram|[^.]*?exam|[^.]*?study)', '1', 0.75),
+            # Benign findings often indicate BIRADS 2
+            (r'(?:benign|no suspicious)(?:[^.]*?finding)', '2', 0.75),
+            # Probably benign often indicates BIRADS 3
+            (r'(?:probably benign|likely benign)', '3', 0.75),
+            # Suspicious findings often indicate BIRADS 4
+            (r'(?:suspicious|suspicious for malignancy)', '4', 0.75),
+            # Highly suspicious often indicates BIRADS 5
+            (r'(?:highly suspicious|highly suggestive of malignancy)', '5', 0.75),
+            # Known malignancy often indicates BIRADS 6
+            (r'(?:known malignancy|biopsy-proven)', '6', 0.75),
+        ]
+        
+        for pattern, birads_value, confidence in secondary_patterns:
+            try:
+                if re.search(pattern, text, re.IGNORECASE):
+                    result = {
+                        'value': f'BIRADS {birads_value}',
+                        'confidence': confidence
+                    }
+                    logger.debug(f"Inferred BIRADS score from context: {result['value']} with confidence {confidence}")
+                    return result
+            except Exception as e:
+                logger.error(f"Error during secondary pattern matching: {str(e)}")
                 continue
         
         logger.debug("No BIRADS score found in text")

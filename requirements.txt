@@ -3,28 +3,28 @@ setuptools>=65.0.0
 wheel>=0.37.0
 
 # Core dependencies
-numpy==1.26.4
-pandas==2.2.1
-pillow==10.3.0
+numpy>=1.20.0
+pandas>=1.3.0
+pillow>=8.0.0
 python-dotenv>=0.19.0
 pdfplumber>=0.10.0
-nltk>=3.8.1
-wordcloud>=1.9.3
+nltk>=3.6.0
+wordcloud>=1.9.0
 
 # Image processing
-opencv-python-headless==4.9.0.80
+opencv-python>=4.5.0
 scikit-image>=0.18.0
 
 # OCR engines
-pytesseract==0.3.10
-paddlepaddle==2.6.2
-paddleocr>=2.7.0.3
-pdf2image==1.17.0
+pytesseract>=0.3.8
+paddlepaddle>=2.3.0
+paddleocr>=2.5.0
+pdf2image>=1.16.0
 
 # Machine learning
-torch==2.2.2
-torchvision>=0.10.0
-transformers==4.40.0
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.30.0
 sentencepiece==0.2.0
 huggingface_hub>=0.25.1
 
@@ -36,12 +36,14 @@ langdetect>=1.0.9
 groq>=0.4.0
 
 # Visualization
-streamlit==1.32.0
-plotly>=5.3.0
+streamlit>=1.10.0
+streamlit-aggrid>=0.2.3
+plotly>=5.5.0
 matplotlib>=3.4.0
+seaborn>=0.11.0
 
 # Utility
-pyyaml>=5.4.0
+pyyaml>=6.0
 python-dateutil>=2.8.2
 tqdm>=4.62.0
 tenacity>=8.2.0
@@ -64,3 +66,26 @@ transformers[sentencepiece]==4.40.0
 
 # Database
 sqlalchemy>=2.0.0  # SQL toolkit and ORM
+
+# Install SpaCy model (after installing spaCy)
+# python -m spacy download en_core_web_sm
+
+# New dependencies from the code block
+PyMuPDF>=1.19.0
+anthropic>=0.5.0
+scikit-learn>=1.0.0
+Werkzeug>=2.0.0
+python-doctr>=0.6.0
+
+# Optional dependencies
+# torch>=1.10.0  # Uncomment if using PyTorch-based models
+# transformers>=4.16.0  # Uncomment if using Hugging Face transformers
+# langchain>=0.0.1  # Uncomment if using LangChain for LLM orchestration
+
+# Added from the code block
+PyPDF2>=2.10.0
+requests>=2.27.1
+fuzzywuzzy>=0.18.0
+python-Levenshtein>=0.12.2
+spacy>=3.2.0
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.2.0/en_core_web_sm-3.2.0-py3-none-any.whl
